@@ -1,3 +1,4 @@
+/* Fleet Dashboard - dados do Supabase */
 import { useMemo, useState } from "react";
 import { useSituacaoAtual, SituacaoRow } from "@/hooks/useFleetData";
 import { MaintenanceModal } from "@/components/MaintenanceModal";
