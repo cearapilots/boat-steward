@@ -1,5 +1,6 @@
-import { StatusLevel } from "@/types/fleet";
 import { cn } from "@/lib/utils";
+
+export type StatusLevel = "ok" | "warn" | "danger";
 
 const statusConfig: Record<StatusLevel, { bg: string; dot: string; label: string }> = {
   ok: { bg: "bg-status-ok-bg", dot: "bg-status-ok", label: "OK" },

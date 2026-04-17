@@ -9,11 +9,20 @@ import { RefreshCw, Clock, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const boatBorder: Record<string, string> = {
-  Flexeiras: "border-t-boat-flexeiras",
-  Fortim: "border-t-boat-fortim",
-  "Taíba": "border-t-boat-taiba",
-};
+// Cor dinâmica derivada do nome da lancha (HSL via design system)
+const borderPalette = [
+  "border-t-boat-flexeiras",
+  "border-t-boat-fortim",
+  "border-t-boat-taiba",
+  "border-t-boat-reserva",
+  "border-t-primary",
+  "border-t-accent",
+];
+function borderForBoat(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return borderPalette[h % borderPalette.length];
+}
 
 function statusFromSemaforo(s: string): "ok" | "warn" | "danger" {
   if (s === "vermelho") return "danger";
@@ -77,7 +86,7 @@ export default function Dashboard() {
             }, "ok");
 
             return (
-              <Card key={b.lanchaId} className={cn("border-t-4 shadow-sm hover:shadow-md transition-shadow", boatBorder[b.nome])}>
+              <Card key={b.lanchaId} className={cn("border-t-4 shadow-sm hover:shadow-md transition-shadow", borderForBoat(b.nome))}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{b.nome}</CardTitle>
