@@ -107,6 +107,8 @@ export default function Dashboard() {
                     {b.itens.map((eq) => {
                       const status = statusFromSemaforo(eq.status_semaforo);
                       const slot = eq.posicao ? `${eq.posicao}` : "—";
+                      const horasEq = eq.horas_equipamento_calculadas == null ? null : Number(eq.horas_equipamento_calculadas);
+                      const restantes = eq.horas_restantes_troca == null ? null : Number(eq.horas_restantes_troca);
                       return (
                         <div key={eq.ativo_id} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
                           <div className="flex items-center gap-1.5 min-w-0">
@@ -114,16 +116,18 @@ export default function Dashboard() {
                             <span className="font-medium truncate">{eq.ativo_nome}</span>
                             <span className="text-muted-foreground text-xs">{slot}</span>
                           </div>
-                          <span className="text-right font-mono text-xs">{Number(eq.horas_equipamento_calculadas).toLocaleString("pt-BR")}h</span>
+                          <span className="text-right font-mono text-xs">{horasEq != null ? `${horasEq.toLocaleString("pt-BR")}h` : "—"}</span>
                           <span className={cn(
                             "text-right font-mono text-xs font-semibold",
                             status === "danger" && "text-status-danger",
                             status === "warn" && "text-status-warn",
                             status === "ok" && "text-status-ok",
                           )}>
-                            {Number(eq.horas_restantes_troca) >= 0
-                              ? `${Number(eq.horas_restantes_troca).toLocaleString("pt-BR")}h`
-                              : `${Math.abs(Number(eq.horas_restantes_troca)).toLocaleString("pt-BR")}h atrás`}
+                            {restantes == null
+                              ? "—"
+                              : restantes >= 0
+                                ? `${restantes.toLocaleString("pt-BR")}h`
+                                : `${Math.abs(restantes).toLocaleString("pt-BR")}h atrás`}
                           </span>
                           <Button variant="ghost" size="icon" className="h-7 w-7" title="Registrar manutenção"
                             onClick={() => setModal({ open: true, row: eq })}>
