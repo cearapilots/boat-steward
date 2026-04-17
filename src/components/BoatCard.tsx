@@ -11,8 +11,10 @@ const boatColors: Record<string, string> = {
   "Taíba": "border-t-boat-taiba",
 };
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+function formatDate(iso: string | null) {
+  return iso
+    ? new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "—";
 }
 
 export function BoatCard({ boat, onMaintenance }: { boat: Boat; onMaintenance: (boatId: string, slot: string, assetId: string) => void }) {

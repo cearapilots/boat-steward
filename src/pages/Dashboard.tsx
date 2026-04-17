@@ -21,8 +21,10 @@ function statusFromSemaforo(s: string): "ok" | "warn" | "danger" {
   return "ok";
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+function fmtDate(iso: string | null) {
+  return iso
+    ? new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+    : "—";
 }
 
 export default function Dashboard() {
@@ -107,7 +109,7 @@ export default function Dashboard() {
                     </div>
                     {b.itens.map((eq) => {
                       const status = statusFromSemaforo(eq.status_semaforo);
-                      const slot = eq.posicao ? `${eq.posicao}` : "—";
+                      const slot = eq.posicao ?? "—";
                       const horasEq = eq.horas_equipamento_calculadas == null ? null : Number(eq.horas_equipamento_calculadas);
                       const restantes = eq.horas_restantes_troca == null ? null : Number(eq.horas_restantes_troca);
                       return (
@@ -117,7 +119,7 @@ export default function Dashboard() {
                             <span className="font-medium truncate">{eq.ativo_nome}</span>
                             <span className="text-muted-foreground text-xs">{slot}</span>
                           </div>
-                          <span className="text-right font-mono text-xs">{horasEq != null ? `${horasEq.toLocaleString("pt-BR")}h` : "—"}</span>
+                          <span className="text-right font-mono text-xs">{(horasEq ?? 0).toLocaleString("pt-BR")}h</span>
                           <span className={cn(
                             "text-right font-mono text-xs font-semibold",
                             status === "danger" && "text-status-danger",
