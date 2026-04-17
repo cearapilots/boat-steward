@@ -110,6 +110,22 @@ export function useCreateManutencao() {
         origem: "manual",
       }).select().single();
       if (error) throw error;
+
+      // Espelha em historico (fonte unificada de eventos)
+      const { error: histErr } = await supabase.from("historico").insert({
+        tipo_evento: payload.tipo,
+        descricao: payload.observacao ?? `Manutenção: ${payload.tipo}`,
+        ativo_id: payload.ativo_id,
+        lancha_id: payload.lancha_id,
+        data_evento: payload.data_manutencao,
+        origem: "manual",
+        dados_extras: {
+          horimetro_lancha: payload.horimetro_lancha ?? null,
+          horimetro_equipamento: payload.horimetro_equipamento ?? null,
+        },
+      });
+      if (histErr) throw histErr;
+
       return data;
     },
     onSuccess: () => {
