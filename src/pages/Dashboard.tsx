@@ -89,11 +89,11 @@ export default function Dashboard() {
                 <CardContent>
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     <div className="text-center py-2 rounded-lg bg-secondary">
-                      <p className="text-2xl font-bold">{b.horimetro.toLocaleString("pt-BR")}h</p>
+                      <p className="text-2xl font-bold">{(b.horimetro ?? 0).toLocaleString("pt-BR")}h</p>
                       <p className="text-xs text-muted-foreground">Lancha</p>
                     </div>
                     <div className="text-center py-2 rounded-lg bg-secondary">
-                      <p className="text-2xl font-bold">{b.horimetroGerador.toLocaleString("pt-BR")}h</p>
+                      <p className="text-2xl font-bold">{(b.horimetroGerador ?? 0).toLocaleString("pt-BR")}h</p>
                       <p className="text-xs text-muted-foreground">Gerador</p>
                     </div>
                   </div>
@@ -127,8 +127,8 @@ export default function Dashboard() {
                             {restantes == null
                               ? "—"
                               : restantes >= 0
-                                ? `${restantes.toLocaleString("pt-BR")}h`
-                                : `${Math.abs(restantes).toLocaleString("pt-BR")}h atrás`}
+                                ? `${(restantes ?? 0).toLocaleString("pt-BR")}h`
+                                : `${Math.abs(restantes ?? 0).toLocaleString("pt-BR")}h atrás`}
                           </span>
                           <Button variant="ghost" size="icon" className="h-7 w-7" title="Registrar manutenção"
                             onClick={() => setModal({ open: true, row: eq })}>

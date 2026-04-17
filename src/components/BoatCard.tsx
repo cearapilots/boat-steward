@@ -38,7 +38,7 @@ export function BoatCard({ boat, onMaintenance }: { boat: Boat; onMaintenance: (
       </CardHeader>
       <CardContent>
         <div className="text-center mb-4 py-3 rounded-lg bg-secondary">
-          <p className="text-3xl font-bold text-foreground">{boat.currentHours.toLocaleString("pt-BR")}h</p>
+          <p className="text-3xl font-bold text-foreground">{(boat.currentHours ?? 0).toLocaleString("pt-BR")}h</p>
           <p className="text-xs text-muted-foreground">Horímetro da Lancha</p>
         </div>
 
@@ -57,14 +57,14 @@ export function BoatCard({ boat, onMaintenance }: { boat: Boat; onMaintenance: (
                 <span className="font-medium">{eq.slot}</span>
               </div>
               <span className="text-muted-foreground text-xs">{eq.activeAsset}</span>
-              <span className="text-right font-mono text-xs">{eq.equipmentHours.toLocaleString("pt-BR")}h</span>
+              <span className="text-right font-mono text-xs">{(eq.equipmentHours ?? 0).toLocaleString("pt-BR")}h</span>
               <span className={cn(
                 "text-right font-mono text-xs font-semibold",
                 eq.status === "danger" && "text-status-danger",
                 eq.status === "warn" && "text-status-warn",
                 eq.status === "ok" && "text-status-ok",
               )}>
-                {eq.hoursRemaining > 0 ? `${eq.hoursRemaining}h` : `${Math.abs(eq.hoursRemaining)}h atrás`}
+                {eq.hoursRemaining > 0 ? `${(eq.hoursRemaining ?? 0).toLocaleString("pt-BR")}h` : `${Math.abs(eq.hoursRemaining ?? 0).toLocaleString("pt-BR")}h atrás`}
               </span>
               <Button
                 variant="ghost"
