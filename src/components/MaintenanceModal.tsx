@@ -17,7 +17,8 @@ import { SituacaoRow, useCreateManutencao } from "@/hooks/useFleetData";
 const typeLabels: Record<string, string> = {
   troca_oleo: "Troca de óleo",
   overhaul: "Overhaul",
-  revisao_rolamento: "Revisão de rolamentos",
+  revisao_rolamentos: "Revisão de rolamentos",
+  revisao_geral: "Revisão geral",
   outro: "Outro",
 };
 

@@ -65,12 +65,12 @@ export function usePosicoes() {
 
 export function useManutencoes() {
   return useQuery({
-    queryKey: ["manutencoes"],
+    queryKey: ["historico"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("manutencoes")
+        .from("historico")
         .select("*, ativo:ativos(id,nome,tipo,posicao), lancha:lanchas(id,nome)")
-        .order("data_manutencao", { ascending: false })
+        .order("data_evento", { ascending: false })
         .limit(500);
       if (error) throw error;
       return data ?? [];
@@ -98,7 +98,7 @@ export function useCreateManutencao() {
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["manutencoes"] });
+      qc.invalidateQueries({ queryKey: ["historico"] });
       qc.invalidateQueries({ queryKey: ["situacao_atual"] });
     },
   });
