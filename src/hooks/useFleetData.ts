@@ -49,6 +49,21 @@ export function useLanchas() {
   });
 }
 
+export function useAtivos() {
+  return useQuery({
+    queryKey: ["ativos"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ativos")
+        .select("*, lancha:lanchas(id,nome)")
+        .eq("ativo", true)
+        .order("nome");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
 export function usePosicoes() {
   return useQuery({
     queryKey: ["posicoes"],
