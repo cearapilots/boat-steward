@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { usePosicoes } from "@/hooks/useFleetData";
+import { usePosicoes, useAtivos } from "@/hooks/useFleetData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,11 +21,18 @@ const boatTextClass: Record<string, string> = {
 
 export default function Motors() {
   const { data: posicoes, isLoading } = usePosicoes();
+  const { data: ativos, isLoading: loadingAtivos } = useAtivos();
   const [filterMotor, setFilterMotor] = useState("all");
 
   const motorPositions = useMemo(() => (posicoes ?? []).filter((p: any) => p.ativo?.tipo === "motor"), [posicoes]);
+  const motorAtivos = useMemo(() => (ativos ?? []).filter((a: any) => a.tipo === "motor"), [ativos]);
 
-  const current = useMemo(() => motorPositions.filter((p: any) => !p.data_remocao), [motorPositions]);
+  const currentByAtivo = useMemo(() => {
+    const map = new Map<string, any>();
+    motorPositions.filter((p: any) => !p.data_remocao).forEach((p: any) => map.set(p.ativo_id, p));
+    return map;
+  }, [motorPositions]);
+
   const history = useMemo(
     () => filterMotor === "all" ? motorPositions : motorPositions.filter((p: any) => p.ativo_id === filterMotor),
     [motorPositions, filterMotor]
@@ -33,11 +40,12 @@ export default function Motors() {
 
   const uniqueMotors = useMemo(() => {
     const map = new Map<string, string>();
-    motorPositions.forEach((p: any) => map.set(p.ativo_id, p.ativo?.nome ?? p.ativo_id));
+    motorAtivos.forEach((a: any) => map.set(a.id, a.nome));
+    motorPositions.forEach((p: any) => { if (!map.has(p.ativo_id)) map.set(p.ativo_id, p.ativo?.nome ?? p.ativo_id); });
     return Array.from(map.entries());
-  }, [motorPositions]);
+  }, [motorAtivos, motorPositions]);
 
-  const boatLabel = (p: any) => p.lancha?.nome ?? "Reserva";
+  const boatLabel = (p: any) => p?.lancha?.nome ?? "Reserva";
 
   return (
     <div className="space-y-6">
@@ -46,7 +54,7 @@ export default function Motors() {
         <p className="text-sm text-muted-foreground">Posição e histórico dos motores da frota</p>
       </div>
 
-      {isLoading ? (
+      {(isLoading || loadingAtivos) ? (
         <p className="text-muted-foreground">Carregando...</p>
       ) : (
         <>
@@ -65,18 +73,22 @@ export default function Motors() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {current.map((p: any) => {
-                      const boat = boatLabel(p);
+                    {motorAtivos.map((a: any) => {
+                      const p = currentByAtivo.get(a.id);
+                      const boat = p ? boatLabel(p) : (a.lancha?.nome ?? "Reserva");
                       return (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-medium">{p.ativo?.nome}</TableCell>
-                          <TableCell>{p.posicao ?? "—"}</TableCell>
+                        <TableRow key={a.id}>
+                          <TableCell className="font-medium">{a.nome}</TableCell>
+                          <TableCell>{p?.posicao ?? a.posicao ?? "—"}</TableCell>
                           <TableCell><span className={cn("font-medium", boatTextClass[boat])}>{boat}</span></TableCell>
-                          <TableCell>{new Date(p.data_instalacao).toLocaleDateString("pt-BR")}</TableCell>
-                          <TableCell className="text-right font-mono">{Number(p.horas_operadas ?? 0).toLocaleString("pt-BR")}h</TableCell>
+                          <TableCell>{p?.data_instalacao ? new Date(p.data_instalacao).toLocaleDateString("pt-BR") : "—"}</TableCell>
+                          <TableCell className="text-right font-mono">{Number(p?.horas_operadas ?? 0).toLocaleString("pt-BR")}h</TableCell>
                         </TableRow>
                       );
                     })}
+                    {motorAtivos.length === 0 && (
+                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Nenhum motor cadastrado</TableCell></TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </div>
