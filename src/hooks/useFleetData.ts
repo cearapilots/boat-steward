@@ -156,3 +156,162 @@ export function useCreateManutencao() {
     },
   });
 }
+
+export type MotorSwapPayload = {
+  data_troca: string; // ISO date YYYY-MM-DD
+  lancha_destino_id: string | null; // null = Reserva
+  posicao_destino: "BB" | "BE" | null; // null se Reserva
+  horimetro_lancha_destino: number | null; // null se Reserva
+  motor_sai_id: string | null; // null se posição estava vazia
+  motor_sai_nome: string | null;
+  motor_entra_id: string | null; // null se não houver motor disponível
+  motor_entra_nome: string | null;
+  horimetro_motor_entra: number | null;
+};
+
+export function useCreateMotorPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: MotorSwapPayload) => {
+      const dataTroca = p.data_troca;
+
+      // ---- (a) MOTOR QUE SAI ----
+      if (p.motor_sai_id) {
+        // posição aberta atual do motor que sai
+        const { data: posSai, error: errPosSai } = await supabase
+          .from("posicoes")
+          .select("*")
+          .eq("ativo_id", p.motor_sai_id)
+          .is("data_remocao", null)
+          .order("data_instalacao", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (errPosSai) { console.error("[swap] erro buscando posicao do motor que sai:", errPosSai); throw errPosSai; }
+
+        if (posSai) {
+          const horimetroLanchaInst = Number(posSai.horimetro_lancha_instalacao ?? 0);
+          const horasOperadas = (p.horimetro_lancha_destino ?? horimetroLanchaInst) - horimetroLanchaInst;
+
+          const { error: errUpdSai } = await supabase
+            .from("posicoes")
+            .update({
+              data_remocao: dataTroca,
+              horas_operadas: Math.max(horasOperadas, 0),
+            })
+            .eq("id", posSai.id);
+          if (errUpdSai) { console.error("[swap] erro fechando posicao motor que sai:", errUpdSai); throw errUpdSai; }
+
+          // horímetro atual do motor que sai = horímetro da lancha destino - offset_calculado da posição fechada
+          const offsetSai = Number(posSai.offset_calculado ?? 0);
+          const horimetroMotorSai = (p.horimetro_lancha_destino ?? horimetroLanchaInst) - offsetSai;
+
+          const { error: errInsReservaSai } = await supabase.from("posicoes").insert({
+            ativo_id: p.motor_sai_id,
+            lancha_id: null,
+            posicao: null,
+            data_instalacao: dataTroca,
+            horimetro_lancha_instalacao: 0,
+            horimetro_equipamento_instalacao: horimetroMotorSai,
+            offset_calculado: 0,
+          });
+          if (errInsReservaSai) { console.error("[swap] erro abrindo reserva motor que sai:", errInsReservaSai); throw errInsReservaSai; }
+        }
+
+        const { error: errUpdAtivoSai } = await supabase
+          .from("ativos")
+          .update({ lancha_id: null, posicao: null })
+          .eq("id", p.motor_sai_id);
+        if (errUpdAtivoSai) { console.error("[swap] erro atualizando ativo motor que sai:", errUpdAtivoSai); throw errUpdAtivoSai; }
+      }
+
+      // ---- (b) MOTOR QUE ENTRA ----
+      let offsetCalculado = 0;
+      if (p.motor_entra_id) {
+        // fechar posição em reserva
+        const { data: posEntra, error: errPosEntra } = await supabase
+          .from("posicoes")
+          .select("*")
+          .eq("ativo_id", p.motor_entra_id)
+          .is("data_remocao", null)
+          .order("data_instalacao", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (errPosEntra) { console.error("[swap] erro buscando posicao motor que entra:", errPosEntra); throw errPosEntra; }
+
+        if (posEntra) {
+          const { error: errUpdEntra } = await supabase
+            .from("posicoes")
+            .update({ data_remocao: dataTroca, horas_operadas: 0 })
+            .eq("id", posEntra.id);
+          if (errUpdEntra) { console.error("[swap] erro fechando reserva motor que entra:", errUpdEntra); throw errUpdEntra; }
+        }
+
+        if (p.lancha_destino_id && p.posicao_destino && p.horimetro_lancha_destino != null && p.horimetro_motor_entra != null) {
+          offsetCalculado = p.horimetro_lancha_destino - p.horimetro_motor_entra;
+
+          const { error: errInsEntra } = await supabase.from("posicoes").insert({
+            ativo_id: p.motor_entra_id,
+            lancha_id: p.lancha_destino_id,
+            posicao: p.posicao_destino,
+            data_instalacao: dataTroca,
+            horimetro_lancha_instalacao: p.horimetro_lancha_destino,
+            horimetro_equipamento_instalacao: p.horimetro_motor_entra,
+            offset_calculado: offsetCalculado,
+          });
+          if (errInsEntra) { console.error("[swap] erro inserindo nova posicao motor que entra:", errInsEntra); throw errInsEntra; }
+
+          const { error: errUpdAtivoEntra } = await supabase
+            .from("ativos")
+            .update({
+              lancha_id: p.lancha_destino_id,
+              posicao: p.posicao_destino,
+              offset_instalacao: offsetCalculado,
+            })
+            .eq("id", p.motor_entra_id);
+          if (errUpdAtivoEntra) { console.error("[swap] erro atualizando ativo motor que entra:", errUpdAtivoEntra); throw errUpdAtivoEntra; }
+        }
+      }
+
+      // ---- (c) HISTORICO ----
+      const descSai = p.motor_sai_nome
+        ? `no lugar do ${p.motor_sai_nome}, que foi para reserva`
+        : `em posição vazia`;
+      const descEntra = p.motor_entra_nome ?? "Motor (vazio)";
+      const localDestino = p.lancha_destino_id
+        ? `[lancha destino] ${p.posicao_destino ?? ""}`
+        : "Reserva";
+      const descricao = p.motor_entra_id
+        ? `${descEntra} instalado em ${localDestino} ${descSai}`
+        : `${p.motor_sai_nome ?? "Motor"} removido para reserva (posição ficou vazia)`;
+
+      const { error: errHist } = await supabase.from("historico").insert({
+        tipo_evento: "troca_posicao",
+        descricao,
+        ativo_id: p.motor_entra_id ?? p.motor_sai_id,
+        lancha_id: p.lancha_destino_id,
+        data_evento: dataTroca,
+        origem: "manual",
+        dados_extras: {
+          horimetro_lancha: p.horimetro_lancha_destino,
+          horimetro_equipamento: p.horimetro_motor_entra,
+          saldo_horimetro:
+            p.horimetro_lancha_destino != null && p.horimetro_motor_entra != null
+              ? p.horimetro_lancha_destino - p.horimetro_motor_entra
+              : null,
+          componente: "motor",
+          ativo_retirado: p.motor_sai_nome,
+          ativo_instalado: p.motor_entra_nome,
+        },
+      });
+      if (errHist) { console.error("[swap] erro inserindo historico:", errHist); throw errHist; }
+
+      return { ok: true };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["posicoes"] });
+      qc.invalidateQueries({ queryKey: ["ativos"] });
+      qc.invalidateQueries({ queryKey: ["situacao_atual"] });
+      qc.invalidateQueries({ queryKey: ["historico"] });
+    },
+  });
+}
