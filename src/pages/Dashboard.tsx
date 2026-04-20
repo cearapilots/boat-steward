@@ -42,7 +42,9 @@ export default function Dashboard() {
 
   const grouped = useMemo(() => {
     const map = new Map<string, { lanchaId: string; nome: string; horimetro: number; horimetroGerador: number; ultima: string; itens: SituacaoRow[] }>();
+    const isReserva = (nome: string) => /reserva|retifica|retífica/i.test(nome ?? "");
     (rows ?? []).forEach((r) => {
+      if (isReserva(r.lancha_nome)) return;
       if (!map.has(r.lancha_id)) {
         map.set(r.lancha_id, {
           lanchaId: r.lancha_id,
