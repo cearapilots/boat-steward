@@ -75,6 +75,14 @@ export function MotorPositionModal({ open, onClose, motorAtivos, posicoes, curre
     if (isReserva) { setPosDest(""); setHorLancha(""); }
   }, [isReserva]);
 
+  // auto-preencher horímetro da lancha de destino ao selecionar lancha
+  useEffect(() => {
+    if (!isReserva && lanchaDest) {
+      const l = (lanchas ?? []).find((x: any) => x.id === lanchaDest);
+      if (l) setHorLancha(String(l.horimetro ?? ""));
+    }
+  }, [lanchaDest, isReserva, lanchas]);
+
   const lanchaDestNome = isReserva ? "Reserva" : (lanchas ?? []).find((l: any) => l.id === lanchaDest)?.nome ?? "";
 
   const handleSubmit = async () => {
@@ -157,7 +165,9 @@ export function MotorPositionModal({ open, onClose, motorAtivos, posicoes, curre
 
           <div className="space-y-2">
             <Label>Motor que SAI</Label>
-            <Input readOnly value={motorSai ? `${motorSai.nome}` : (lanchaDest && posDest ? "Posição vazia" : "—")} />
+            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground cursor-not-allowed select-none">
+              {motorSai ? motorSai.nome : (lanchaDest && posDest && !isReserva ? "— posição vazia —" : "—")}
+            </div>
           </div>
 
           <div className="space-y-2">
