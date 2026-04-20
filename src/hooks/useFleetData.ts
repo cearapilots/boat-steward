@@ -105,13 +105,27 @@ export function useCreateManutencao() {
       horimetro_equipamento?: number | null;
       observacao?: string | null;
     }) => {
-      const { data, error } = await supabase.from("manutencoes").insert({
-        ...payload,
-        origem: "manual",
-      }).select().single();
-      if (error) throw error;
+      // 1) INSERT em manutencoes
+      const { data, error } = await supabase
+        .from("manutencoes")
+        .insert({
+          ativo_id: payload.ativo_id,
+          lancha_id: payload.lancha_id,
+          tipo: payload.tipo,
+          data_manutencao: payload.data_manutencao,
+          horimetro_lancha: payload.horimetro_lancha ?? null,
+          horimetro_equipamento: payload.horimetro_equipamento ?? null,
+          observacao: payload.observacao ?? null,
+          origem: "manual",
+        })
+        .select()
+        .single();
+      if (error) {
+        console.error("[useCreateManutencao] erro ao inserir em manutencoes:", error);
+        throw error;
+      }
 
-      // Espelha em historico (fonte unificada de eventos)
+      // 2) INSERT espelhado em historico — se falhar, faz rollback removendo o registro de manutencoes
       const { error: histErr } = await supabase.from("historico").insert({
         tipo_evento: payload.tipo,
         descricao: payload.observacao ?? `Manutenção: ${payload.tipo}`,
@@ -124,13 +138,21 @@ export function useCreateManutencao() {
           horimetro_equipamento: payload.horimetro_equipamento ?? null,
         },
       });
-      if (histErr) throw histErr;
+      if (histErr) {
+        console.error("[useCreateManutencao] erro ao inserir em historico — revertendo manutencao:", histErr);
+        const { error: rollbackErr } = await supabase.from("manutencoes").delete().eq("id", data.id);
+        if (rollbackErr) {
+          console.error("[useCreateManutencao] FALHA NO ROLLBACK — registro órfão em manutencoes id:", data.id, rollbackErr);
+        }
+        throw histErr;
+      }
 
       return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["historico"] });
       qc.invalidateQueries({ queryKey: ["situacao_atual"] });
+      qc.invalidateQueries({ queryKey: ["ativos"] });
     },
   });
 }
