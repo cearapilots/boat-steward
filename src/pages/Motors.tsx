@@ -211,6 +211,7 @@ export default function Motors() {
                       <TableHead>Posição</TableHead>
                       <TableHead>Início</TableHead>
                       <TableHead>Fim</TableHead>
+                      <TableHead className="text-right">Dias</TableHead>
                       <TableHead className="text-right">Horas</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -218,6 +219,7 @@ export default function Motors() {
                     {history.map((p: any) => {
                       const boat = boatLabel(p);
                       const horas = segHoras(p);
+                      const dias = daysBetween(p.data_instalacao, p.data_remocao);
                       return (
                         <TableRow key={p.id}>
                           <TableCell className="font-medium">{p.ativo?.nome}</TableCell>
@@ -225,6 +227,7 @@ export default function Motors() {
                           <TableCell>{p.posicao ?? "—"}</TableCell>
                           <TableCell>{new Date(p.data_instalacao).toLocaleDateString("pt-BR")}</TableCell>
                           <TableCell>{p.data_remocao ? new Date(p.data_remocao).toLocaleDateString("pt-BR") : "—"}</TableCell>
+                          <TableCell className="text-right font-mono">{dias != null ? `${dias.toLocaleString("pt-BR")}d` : "—"}</TableCell>
                           <TableCell className="text-right font-mono">{Math.round(horas).toLocaleString("pt-BR")}h</TableCell>
                         </TableRow>
                       );
