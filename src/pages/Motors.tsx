@@ -66,6 +66,14 @@ export default function Motors() {
 
   const boatLabel = (p: any) => p?.lancha?.nome ?? "Reserva";
 
+  const daysBetween = (start?: string | null, end?: string | null) => {
+    if (!start) return null;
+    const s = new Date(start).getTime();
+    const e = end ? new Date(end).getTime() : Date.now();
+    if (isNaN(s) || isNaN(e)) return null;
+    return Math.max(Math.floor((e - s) / 86400000), 0);
+  };
+
   // horas estimadas para um segmento (usa lancha atual se posição ainda aberta)
   const segHoras = (p: any) => {
     if (p.data_remocao) return Math.max(Number(p.horas_operadas ?? 0), 0);
