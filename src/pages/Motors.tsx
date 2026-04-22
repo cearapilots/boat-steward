@@ -113,6 +113,7 @@ export default function Motors() {
                       <TableHead>Posição</TableHead>
                       <TableHead>Lancha</TableHead>
                       <TableHead>Desde</TableHead>
+                      <TableHead className="text-right">Dias</TableHead>
                       <TableHead className="text-right">Horas operadas</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -121,18 +122,20 @@ export default function Motors() {
                       const p = currentByAtivo.get(a.id);
                       const boat = p ? boatLabel(p) : (a.lancha?.nome ?? "Reserva");
                       const horas = p ? segHoras(p) : 0;
+                      const dias = p ? daysBetween(p.data_instalacao, null) : null;
                       return (
                         <TableRow key={a.id}>
                           <TableCell className="font-medium">{a.nome}</TableCell>
                           <TableCell>{p?.posicao ?? a.posicao ?? "—"}</TableCell>
                           <TableCell><span className={cn("font-medium", boatTextClass[boat])}>{boat}</span></TableCell>
                           <TableCell>{p?.data_instalacao ? new Date(p.data_instalacao).toLocaleDateString("pt-BR") : "—"}</TableCell>
+                          <TableCell className="text-right font-mono">{dias != null ? `${dias.toLocaleString("pt-BR")}d` : "—"}</TableCell>
                           <TableCell className="text-right font-mono">{Math.round(horas).toLocaleString("pt-BR")}h</TableCell>
                         </TableRow>
                       );
                     })}
                     {motorAtivos.length === 0 && (
-                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Nenhum motor cadastrado</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Nenhum motor cadastrado</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
