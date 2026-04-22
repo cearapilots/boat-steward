@@ -66,6 +66,14 @@ export default function Motors() {
 
   const boatLabel = (p: any) => p?.lancha?.nome ?? "Reserva";
 
+  const daysBetween = (start?: string | null, end?: string | null) => {
+    if (!start) return null;
+    const s = new Date(start).getTime();
+    const e = end ? new Date(end).getTime() : Date.now();
+    if (isNaN(s) || isNaN(e)) return null;
+    return Math.max(Math.floor((e - s) / 86400000), 0);
+  };
+
   // horas estimadas para um segmento (usa lancha atual se posição ainda aberta)
   const segHoras = (p: any) => {
     if (p.data_remocao) return Math.max(Number(p.horas_operadas ?? 0), 0);
@@ -105,6 +113,7 @@ export default function Motors() {
                       <TableHead>Posição</TableHead>
                       <TableHead>Lancha</TableHead>
                       <TableHead>Desde</TableHead>
+                      <TableHead className="text-right">Dias</TableHead>
                       <TableHead className="text-right">Horas operadas</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -113,18 +122,20 @@ export default function Motors() {
                       const p = currentByAtivo.get(a.id);
                       const boat = p ? boatLabel(p) : (a.lancha?.nome ?? "Reserva");
                       const horas = p ? segHoras(p) : 0;
+                      const dias = p ? daysBetween(p.data_instalacao, null) : null;
                       return (
                         <TableRow key={a.id}>
                           <TableCell className="font-medium">{a.nome}</TableCell>
                           <TableCell>{p?.posicao ?? a.posicao ?? "—"}</TableCell>
                           <TableCell><span className={cn("font-medium", boatTextClass[boat])}>{boat}</span></TableCell>
                           <TableCell>{p?.data_instalacao ? new Date(p.data_instalacao).toLocaleDateString("pt-BR") : "—"}</TableCell>
+                          <TableCell className="text-right font-mono">{dias != null ? `${dias.toLocaleString("pt-BR")}d` : "—"}</TableCell>
                           <TableCell className="text-right font-mono">{Math.round(horas).toLocaleString("pt-BR")}h</TableCell>
                         </TableRow>
                       );
                     })}
                     {motorAtivos.length === 0 && (
-                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Nenhum motor cadastrado</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Nenhum motor cadastrado</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -200,6 +211,7 @@ export default function Motors() {
                       <TableHead>Posição</TableHead>
                       <TableHead>Início</TableHead>
                       <TableHead>Fim</TableHead>
+                      <TableHead className="text-right">Dias</TableHead>
                       <TableHead className="text-right">Horas</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -207,6 +219,7 @@ export default function Motors() {
                     {history.map((p: any) => {
                       const boat = boatLabel(p);
                       const horas = segHoras(p);
+                      const dias = daysBetween(p.data_instalacao, p.data_remocao);
                       return (
                         <TableRow key={p.id}>
                           <TableCell className="font-medium">{p.ativo?.nome}</TableCell>
@@ -214,6 +227,7 @@ export default function Motors() {
                           <TableCell>{p.posicao ?? "—"}</TableCell>
                           <TableCell>{new Date(p.data_instalacao).toLocaleDateString("pt-BR")}</TableCell>
                           <TableCell>{p.data_remocao ? new Date(p.data_remocao).toLocaleDateString("pt-BR") : "—"}</TableCell>
+                          <TableCell className="text-right font-mono">{dias != null ? `${dias.toLocaleString("pt-BR")}d` : "—"}</TableCell>
                           <TableCell className="text-right font-mono">{Math.round(horas).toLocaleString("pt-BR")}h</TableCell>
                         </TableRow>
                       );
