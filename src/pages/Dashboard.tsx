@@ -112,10 +112,11 @@ export default function Dashboard() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
+                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
                       <span>Equipamento</span>
-                      <span className="text-right">Horas</span>
-                      <span className="text-right">Faltam</span>
+                      <span className="text-right">Horímetro</span>
+                      <span className="text-right">Troca óleo</span>
+                      <span className="text-right">Overhaul</span>
                       <span></span>
                     </div>
                     {b.itens.map((eq) => {
@@ -123,8 +124,15 @@ export default function Dashboard() {
                       const slot = eq.posicao ?? "—";
                       const horasEq = eq.horas_equipamento_calculadas == null ? null : Number(eq.horas_equipamento_calculadas);
                       const restantes = eq.horas_restantes_troca == null ? null : Number(eq.horas_restantes_troca);
+                      const restantesOh = eq.horas_restantes_overhaul == null ? null : Number(eq.horas_restantes_overhaul);
+                      const fmtRestante = (v: number | null) =>
+                        v == null
+                          ? "—"
+                          : v >= 0
+                            ? `${v.toLocaleString("pt-BR")}h`
+                            : `${Math.abs(v).toLocaleString("pt-BR")}h atrás`;
                       return (
-                        <div key={eq.ativo_id} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
+                        <div key={eq.ativo_id} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <StatusIndicator status={status} />
                             <span className="font-medium truncate">{eq.ativo_nome}</span>
@@ -137,11 +145,10 @@ export default function Dashboard() {
                             status === "warn" && "text-status-warn",
                             status === "ok" && "text-status-ok",
                           )}>
-                            {restantes == null
-                              ? "—"
-                              : restantes >= 0
-                                ? `${(restantes ?? 0).toLocaleString("pt-BR")}h`
-                                : `${Math.abs(restantes ?? 0).toLocaleString("pt-BR")}h atrás`}
+                            {fmtRestante(restantes)}
+                          </span>
+                          <span className="text-right font-mono text-xs text-muted-foreground">
+                            {fmtRestante(restantesOh)}
                           </span>
                           <Button variant="ghost" size="icon" className="h-7 w-7" title="Registrar manutenção"
                             onClick={() => setModal({ open: true, row: eq })}>
