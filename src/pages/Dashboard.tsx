@@ -141,7 +141,14 @@ export default function Dashboard() {
                         <div key={eq.ativo_id} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <StatusIndicator status={status} />
-                            <span className="font-medium truncate">{eq.ativo_nome}</span>
+                            <button
+                              type="button"
+                              onClick={() => setDetalhesModal({ open: true, row: eq })}
+                              className="font-medium truncate cursor-pointer hover:underline text-left"
+                              title="Ver detalhes do ativo"
+                            >
+                              {eq.ativo_nome}
+                            </button>
                             <span className="text-muted-foreground text-xs">{slot}</span>
                           </div>
                           <span className="text-right font-mono text-xs">{(horasEq ?? 0).toLocaleString("pt-BR")}h</span>
