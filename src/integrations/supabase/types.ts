@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       ativos: {
         Row: {
+          ano_fabricacao: number | null
           ativo: boolean
           created_at: string | null
           data_overhaul: string | null
@@ -25,6 +26,8 @@ export type Database = {
           intervalo_manutencao: number
           intervalo_overhaul: number | null
           lancha_id: string | null
+          marca: string | null
+          modelo: string | null
           nome: string
           numero_serie: string | null
           offset_instalacao: number | null
@@ -35,6 +38,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          ano_fabricacao?: number | null
           ativo?: boolean
           created_at?: string | null
           data_overhaul?: string | null
@@ -44,6 +48,8 @@ export type Database = {
           intervalo_manutencao: number
           intervalo_overhaul?: number | null
           lancha_id?: string | null
+          marca?: string | null
+          modelo?: string | null
           nome: string
           numero_serie?: string | null
           offset_instalacao?: number | null
@@ -54,6 +60,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          ano_fabricacao?: number | null
           ativo?: boolean
           created_at?: string | null
           data_overhaul?: string | null
@@ -63,6 +70,8 @@ export type Database = {
           intervalo_manutencao?: number
           intervalo_overhaul?: number | null
           lancha_id?: string | null
+          marca?: string | null
+          modelo?: string | null
           nome?: string
           numero_serie?: string | null
           offset_instalacao?: number | null
