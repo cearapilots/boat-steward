@@ -169,11 +169,158 @@ export default function Dashboard() {
         </div>
       )}
 
+
+      {/* ====== MANUTENÇÕES PERIÓDICAS ====== */}
+      <div className="mt-10">
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-xl font-bold text-foreground whitespace-nowrap">Manutenções Periódicas</h2>
+          <Separator className="flex-1" />
+        </div>
+        <PeriodicSection periodicas={periodicas ?? []} onRegister={(row) => setPeriodicModal({ open: true, row })} />
+      </div>
+
       <MaintenanceModal
         open={modal.open}
         onClose={() => setModal({ open: false, row: null })}
         row={modal.row}
       />
+      <PeriodicMaintenanceModal
+        open={periodicModal.open}
+        onClose={() => setPeriodicModal({ open: false, row: null })}
+        row={periodicModal.row}
+      />
+    </div>
+  );
+}
+
+function periodicStatusLevel(s: ManutencaoPeriodicaStatus["status_semaforo"]) {
+  if (s === "vencido" || s === "critico") return "danger" as const;
+  if (s === "atencao") return "warn" as const;
+  if (s === "ok") return "ok" as const;
+  return null; // sem_registro
+}
+
+function fmtDateBR(iso: string | null) {
+  return iso ? new Date(iso + "T00:00:00").toLocaleDateString("pt-BR") : "—";
+}
+
+function PeriodicSection({
+  periodicas,
+  onRegister,
+}: {
+  periodicas: ManutencaoPeriodicaStatus[];
+  onRegister: (row: ManutencaoPeriodicaStatus) => void;
+}) {
+  const ordemLanchas = ["Flexeiras", "Fortim", "Taíba"];
+  const grouped = useMemo(() => {
+    const map = new Map<string, { lancha_id: string; nome: string; itens: ManutencaoPeriodicaStatus[] }>();
+    periodicas.forEach((p) => {
+      if (!map.has(p.lancha_id)) map.set(p.lancha_id, { lancha_id: p.lancha_id, nome: p.lancha_nome, itens: [] });
+      map.get(p.lancha_id)!.itens.push(p);
+    });
+    return Array.from(map.values()).sort(
+      (a, b) => ordemLanchas.indexOf(a.nome) - ordemLanchas.indexOf(b.nome),
+    );
+  }, [periodicas]);
+
+  if (grouped.length === 0) {
+    return <p className="text-muted-foreground text-sm">Sem dados de manutenções periódicas.</p>;
+  }
+
+  return (
+    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      {grouped.map((b) => {
+        const worst = b.itens.reduce<"ok" | "warn" | "danger" | null>((w, i) => {
+          const lvl = periodicStatusLevel(i.status_semaforo);
+          if (lvl === "danger") return "danger";
+          if (lvl === "warn" && w !== "danger") return "warn";
+          if (lvl === "ok" && w == null) return "ok";
+          return w;
+        }, null);
+
+        return (
+          <Card key={b.lancha_id} className="shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">{b.nome}</CardTitle>
+                {worst && <StatusIndicator status={worst} showLabel />}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
+                <span>Manutenção</span>
+                <span className="text-right">Última</span>
+                <span className="text-right">Próxima</span>
+                <span className="text-right">Dias</span>
+                <span></span>
+              </div>
+              {b.itens.map((it) => {
+                const lvl = periodicStatusLevel(it.status_semaforo);
+                const dias = it.dias_restantes;
+                let diasNode: React.ReactNode;
+                if (it.ultima_data == null) {
+                  diasNode = <span className="text-muted-foreground">—</span>;
+                } else if (dias == null) {
+                  diasNode = <span className="text-muted-foreground">—</span>;
+                } else if (dias < 0) {
+                  diasNode = <span className="text-status-danger font-semibold">{Math.abs(dias)} dias atrás</span>;
+                } else if (dias === 0) {
+                  diasNode = <span className="text-status-danger font-semibold">Hoje!</span>;
+                } else {
+                  diasNode = (
+                    <span
+                      className={cn(
+                        "font-mono",
+                        lvl === "warn" && "text-status-warn font-semibold",
+                        lvl === "ok" && "text-status-ok",
+                      )}
+                    >
+                      {dias}d
+                    </span>
+                  );
+                }
+
+                const ultimaNode =
+                  it.ultima_data == null ? (
+                    <span className="text-muted-foreground italic">Nunca registrado</span>
+                  ) : (
+                    <span className="font-mono text-xs">{fmtDateBR(it.ultima_data)}</span>
+                  );
+
+                return (
+                  <div
+                    key={it.tipo_id}
+                    className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {lvl ? (
+                        <StatusIndicator status={lvl} />
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs bg-muted">
+                          <span className="h-2 w-2 rounded-full bg-muted-foreground" />
+                        </span>
+                      )}
+                      <span className="font-medium truncate" title={it.tipo_nome}>{it.tipo_nome}</span>
+                    </div>
+                    <span className="text-right text-xs">{ultimaNode}</span>
+                    <span className="text-right font-mono text-xs">{fmtDateBR(it.proxima_data)}</span>
+                    <span className="text-right text-xs">{diasNode}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="Registrar manutenção periódica"
+                      onClick={() => onRegister(it)}
+                    >
+                      <CalendarCheck className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
