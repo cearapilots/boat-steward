@@ -1,11 +1,13 @@
 /* Fleet Dashboard - dados do Supabase */
 import { useMemo, useState } from "react";
-import { useSituacaoAtual, SituacaoRow } from "@/hooks/useFleetData";
+import { useSituacaoAtual, SituacaoRow, useManutencoesPeriodicas, ManutencaoPeriodicaStatus } from "@/hooks/useFleetData";
 import { MaintenanceModal } from "@/components/MaintenanceModal";
+import { PeriodicMaintenanceModal } from "@/components/PeriodicMaintenanceModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusIndicator } from "@/components/StatusIndicator";
-import { RefreshCw, Clock, Wrench } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { RefreshCw, Clock, Wrench, CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
