@@ -40,7 +40,9 @@ function fmtDate(iso: string | null) {
 
 export default function Dashboard() {
   const { data: rows, isLoading, refetch, isFetching } = useSituacaoAtual();
+  const { data: periodicas } = useManutencoesPeriodicas();
   const [modal, setModal] = useState<{ open: boolean; row: SituacaoRow | null }>({ open: false, row: null });
+  const [periodicModal, setPeriodicModal] = useState<{ open: boolean; row: ManutencaoPeriodicaStatus | null }>({ open: false, row: null });
 
   const grouped = useMemo(() => {
     const map = new Map<string, { lanchaId: string; nome: string; horimetro: number; horimetroGerador: number; ultima: string; itens: SituacaoRow[] }>();
