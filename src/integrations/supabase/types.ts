@@ -80,6 +80,13 @@ export type Database = {
             referencedRelation: "lanchas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ativos_lancha_id_fkey"
+            columns: ["lancha_id"]
+            isOneToOne: false
+            referencedRelation: "v_manutencoes_periodicas_status"
+            referencedColumns: ["lancha_id"]
+          },
         ]
       }
       historico: {
@@ -130,6 +137,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "lanchas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "historico_lancha_id_fkey"
+            columns: ["lancha_id"]
+            isOneToOne: false
+            referencedRelation: "v_manutencoes_periodicas_status"
+            referencedColumns: ["lancha_id"]
           },
         ]
       }
@@ -215,7 +229,97 @@ export type Database = {
             referencedRelation: "lanchas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "manutencoes_lancha_id_fkey"
+            columns: ["lancha_id"]
+            isOneToOne: false
+            referencedRelation: "v_manutencoes_periodicas_status"
+            referencedColumns: ["lancha_id"]
+          },
         ]
+      }
+      manutencoes_periodicas: {
+        Row: {
+          created_at: string | null
+          data_realizada: string
+          id: string
+          lancha_id: string
+          observacao: string | null
+          origem: string | null
+          tipo_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          data_realizada: string
+          id?: string
+          lancha_id: string
+          observacao?: string | null
+          origem?: string | null
+          tipo_id: string
+        }
+        Update: {
+          created_at?: string | null
+          data_realizada?: string
+          id?: string
+          lancha_id?: string
+          observacao?: string | null
+          origem?: string | null
+          tipo_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manutencoes_periodicas_lancha_id_fkey"
+            columns: ["lancha_id"]
+            isOneToOne: false
+            referencedRelation: "lanchas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manutencoes_periodicas_lancha_id_fkey"
+            columns: ["lancha_id"]
+            isOneToOne: false
+            referencedRelation: "v_manutencoes_periodicas_status"
+            referencedColumns: ["lancha_id"]
+          },
+          {
+            foreignKeyName: "manutencoes_periodicas_tipo_id_fkey"
+            columns: ["tipo_id"]
+            isOneToOne: false
+            referencedRelation: "manutencoes_periodicas_tipos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manutencoes_periodicas_tipo_id_fkey"
+            columns: ["tipo_id"]
+            isOneToOne: false
+            referencedRelation: "v_manutencoes_periodicas_status"
+            referencedColumns: ["tipo_id"]
+          },
+        ]
+      }
+      manutencoes_periodicas_tipos: {
+        Row: {
+          created_at: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          periodicidade_dias: number
+        }
+        Insert: {
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          periodicidade_dias: number
+        }
+        Update: {
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          periodicidade_dias?: number
+        }
+        Relationships: []
       }
       posicoes: {
         Row: {
@@ -272,6 +376,13 @@ export type Database = {
             referencedRelation: "lanchas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "posicoes_lancha_id_fkey"
+            columns: ["lancha_id"]
+            isOneToOne: false
+            referencedRelation: "v_manutencoes_periodicas_status"
+            referencedColumns: ["lancha_id"]
+          },
         ]
       }
       sync_log: {
@@ -303,6 +414,20 @@ export type Database = {
       }
     }
     Views: {
+      v_manutencoes_periodicas_status: {
+        Row: {
+          dias_restantes: number | null
+          lancha_id: string | null
+          lancha_nome: string | null
+          periodicidade_dias: number | null
+          proxima_data: string | null
+          status_semaforo: string | null
+          tipo_id: string | null
+          tipo_nome: string | null
+          ultima_data: string | null
+        }
+        Relationships: []
+      }
       v_situacao_atual: {
         Row: {
           ativo_id: string | null
