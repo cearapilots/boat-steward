@@ -111,7 +111,7 @@ export function useAtivos() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ativos")
-        .select("*, lancha:lanchas(id,nome)")
+        .select("*, marca, modelo, ano_fabricacao, numero_serie, lancha:lanchas(id,nome)")
         .eq("ativo", true)
         .order("nome");
       if (error) throw error;
