@@ -198,6 +198,12 @@ export default function Dashboard() {
         onClose={() => setPeriodicModal({ open: false, row: null })}
         row={periodicModal.row}
       />
+      <AtivoDetalhesModal
+        open={detalhesModal.open}
+        onClose={() => setDetalhesModal({ open: false, row: null })}
+        ativoId={detalhesModal.row?.ativo_id ?? null}
+        row={detalhesModal.row}
+      />
     </div>
   );
 }
