@@ -38,6 +38,62 @@ export function useSituacaoAtual() {
   });
 }
 
+export type ManutencaoPeriodicaStatus = {
+  lancha_id: string;
+  lancha_nome: string;
+  tipo_id: string;
+  tipo_nome: string;
+  periodicidade_dias: number;
+  ultima_data: string | null;
+  proxima_data: string | null;
+  dias_restantes: number | null;
+  status_semaforo: "ok" | "atencao" | "critico" | "vencido" | "sem_registro";
+};
+
+export function useManutencoesPeriodicas() {
+  return useQuery({
+    queryKey: ["manutencoes_periodicas"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_manutencoes_periodicas_status")
+        .select("*")
+        .order("lancha_nome")
+        .order("tipo_nome");
+      if (error) throw error;
+      return (data ?? []) as ManutencaoPeriodicaStatus[];
+    },
+  });
+}
+
+export function useCreateManutencaoPeriodica() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      lancha_id: string;
+      tipo_id: string;
+      data_realizada: string; // YYYY-MM-DD
+      observacao?: string | null;
+    }) => {
+      const { data, error } = await (supabase as any)
+        .from("manutencoes_periodicas")
+        .insert({
+          lancha_id: payload.lancha_id,
+          tipo_id: payload.tipo_id,
+          data_realizada: payload.data_realizada,
+          observacao: payload.observacao ?? null,
+          origem: "manual",
+        })
+        .select()
+        .single();
+      if (error) { console.error("[useCreateManutencaoPeriodica] erro:", error); throw error; }
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["manutencoes_periodicas"] });
+    },
+  });
+}
+
 export function useLanchas() {
   return useQuery({
     queryKey: ["lanchas"],
