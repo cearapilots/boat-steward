@@ -284,12 +284,11 @@ function abbrevManutencao(nome: string): string {
     [/troca\s+de\s+([oó]leo\s+)?motor/i, "Troca óleo motor"],
     [/troca\s+de\s+filtros?\s+de\s+combust[ií]vel/i, "Troca filtro comb."],
     [/troca\s+de\s+filtros?/i, "Troca filtros"],
-    [/inspe[çc][aã]o/i, (s: string) => s.replace(/inspe[çc][aã]o/i, "Insp.")],
   ];
   for (const [re, repl] of map) {
-    if (re.test(nome)) return typeof repl === "string" ? repl : (repl as any)(nome);
+    if (re.test(nome)) return repl;
   }
-  return nome;
+  return nome.replace(/inspe[çc][aã]o/i, "Insp.");
 }
 
 function fmtDateBR(iso: string | null) {
