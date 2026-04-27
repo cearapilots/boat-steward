@@ -183,17 +183,8 @@ export default function Dashboard() {
                     {/* ===== Manutenções Periódicas dentro do card ===== */}
                     {(periodicasByLancha.get(b.lanchaId) ?? []).length > 0 && (
                       <>
-                        <div className="relative my-3">
-                          <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-border" />
-                          </div>
-                          <div className="relative flex justify-center">
-                            <span className="bg-card px-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                              Manutenções Periódicas
-                            </span>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-[1fr_5rem_5rem_5rem_2rem] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
+                        <div className="my-3 border-t border-border" />
+                        <div className="grid grid-cols-[1fr_3.75rem_3.75rem_3.5rem_1.75rem] gap-1.5 text-xs font-medium text-muted-foreground px-2 pb-1">
                           <span>Manutenção</span>
                           <span className="text-center">Última</span>
                           <span className="text-center">Próxima</span>
