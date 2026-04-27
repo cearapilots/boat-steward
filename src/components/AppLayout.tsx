@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { LayoutDashboard, Wrench, History, Settings, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BrandLogo } from "@/components/BrandLogo";
+import cemapiLogo from "@/assets/cemapi-logo.png";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -20,16 +20,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen flex">
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex w-60 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-        <div className="p-5 flex items-center gap-3">
-          <BrandLogo size={32} />
-          <div className="flex flex-col leading-tight">
-            <span className="font-bold text-lg tracking-wide text-sidebar-foreground">CEMAPI</span>
-            <span className="text-[10px] font-light tracking-wide text-sidebar-primary">
-              Fleet Intelligence Hub
-            </span>
-          </div>
+        <div className="px-4 py-5 flex items-center justify-center bg-white">
+          <img
+            src={cemapiLogo}
+            alt="CEMAPI Fleet Intelligence Hub"
+            className="w-full h-auto max-h-16 object-contain"
+          />
         </div>
-        <nav className="flex-1 px-3 space-y-1">
+        <nav className="flex-1 px-3 pt-4 space-y-1">
           {navItems.map(({ to, label, icon: Icon }) => (
             <Link
               key={to}
@@ -50,14 +48,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
       {/* Mobile header */}
       <div className="flex-1 flex flex-col">
-        <header className="md:hidden flex items-center justify-between p-4 border-b bg-card">
-          <div className="flex items-center gap-2">
-            <BrandLogo size={28} />
-            <div className="flex flex-col leading-tight">
-              <span className="font-bold text-sm">CEMAPI</span>
-              <span className="text-[9px] font-light text-accent">Fleet Intelligence Hub</span>
-            </div>
-          </div>
+        <header className="md:hidden flex items-center justify-between p-3 border-b bg-white">
+          <img src={cemapiLogo} alt="CEMAPI Fleet Intelligence Hub" className="h-9 w-auto" />
           <Button variant="ghost" size="icon" onClick={() => setMobileOpen(!mobileOpen)}>
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
