@@ -22,6 +22,25 @@ const boatTextClass: Record<string, string> = {
   Reserva: "text-boat-reserva",
 };
 
+// Cores específicas por lancha + posição (BB/BE) usadas na Linha do Tempo
+const segmentColor = (boat: string, posicao?: string | null): string => {
+  const pos = (posicao ?? "").toUpperCase();
+  if (boat === "Flexeiras") return pos === "BE" ? "#2E75B6" : "#1E3A5F";
+  if (boat === "Fortim") return pos === "BE" ? "#2ECC71" : "#1A5C38";
+  if (boat === "Taíba") return pos === "BE" ? "#E8C96D" : "#C9A84C";
+  return "#E8603C"; // Reserva (sem posição)
+};
+
+const TIMELINE_LEGEND: { label: string; color: string }[] = [
+  { label: "Flexeiras BB", color: "#1E3A5F" },
+  { label: "Flexeiras BE", color: "#2E75B6" },
+  { label: "Fortim BB", color: "#1A5C38" },
+  { label: "Fortim BE", color: "#2ECC71" },
+  { label: "Taíba BB", color: "#C9A84C" },
+  { label: "Taíba BE", color: "#E8C96D" },
+  { label: "Reserva", color: "#E8603C" },
+];
+
 export default function Motors() {
   const { data: posicoes, isLoading } = usePosicoes();
   const { data: ativos, isLoading: loadingAtivos } = useAtivos();
@@ -148,9 +167,9 @@ export default function Motors() {
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <CardTitle className="text-base">Linha do Tempo</CardTitle>
                 <div className="flex gap-3 text-xs flex-wrap">
-                  {Object.entries(boatColorClass).map(([name, cls]) => (
-                    <span key={name} className="flex items-center gap-1">
-                      <span className={cn("h-3 w-3 rounded-sm", cls)} />{name}
+                  {TIMELINE_LEGEND.map((item) => (
+                    <span key={item.label} className="flex items-center gap-1">
+                      <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: item.color }} />{item.label}
                     </span>
                   ))}
                 </div>
@@ -172,12 +191,15 @@ export default function Motors() {
                         const boat = boatLabel(p);
                         const hrs = horasArr[idx];
                         const realHrs = segHoras(p);
+                        const dias = Math.round(realHrs / 24);
+                        const showText = hrs > total * 0.08;
+                        const bg = segmentColor(boat, p.posicao);
                         return (
                           <div key={p.id}
-                            className={cn("flex items-center justify-center text-xs font-medium text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity", boatColorClass[boat] ?? "bg-muted")}
-                            style={{ flex: hrs / total }}
-                            title={`${boat} (${p.posicao ?? "—"}): ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${Math.round(realHrs)}h`}>
-                            {hrs > total * 0.08 ? `${Math.round(realHrs)}h` : ""}
+                            className="flex items-center justify-center text-xs font-medium text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity"
+                            style={{ flex: hrs / total, backgroundColor: bg }}
+                            title={`${boat} (${p.posicao ?? "—"}): ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${Math.round(realHrs)}h (${dias}d)`}>
+                            {showText ? `${Math.round(realHrs)}h (${dias}d)` : ""}
                           </div>
                         );
                       })}
