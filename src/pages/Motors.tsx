@@ -199,30 +199,44 @@ export default function Motors() {
                 return (
                   <div key={mId} className="mb-4">
                     <p className="text-sm font-medium mb-1">{name}</p>
-                    <div className="flex h-8 rounded-lg overflow-hidden gap-0.5">
-                      {segs.map((p: any, idx: number) => {
-                        const boat = boatLabel(p);
-                        const w = weights[idx];
-                        const reserva = isReserva(p);
-                        const dias = reserva
-                          ? (daysBetween(p.data_instalacao, p.data_remocao) ?? 0)
-                          : Math.round(segHoras(p) / 24);
-                        const horasLabel = reserva ? "—h" : `${Math.round(segHoras(p))}h`;
-                        const showText = w > total * 0.08;
-                        const bg = segmentColor(boat, p.posicao);
-                        const tooltip = reserva
-                          ? `Reserva: ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${dias} dias`
-                          : `${boat} (${p.posicao ?? "—"}): ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${Math.round(segHoras(p))}h (${dias}d)`;
-                        return (
-                          <div key={p.id}
-                            className="flex items-center justify-center text-xs font-medium text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity"
-                            style={{ flex: w / total, backgroundColor: bg }}
-                            title={tooltip}>
-                            {showText ? `${horasLabel} (${dias}d)` : ""}
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <TooltipProvider delayDuration={150}>
+                      <div className="flex h-8 rounded-lg overflow-hidden gap-0.5">
+                        {segs.map((p: any, idx: number) => {
+                          const boat = boatLabel(p);
+                          const w = weights[idx];
+                          const reserva = isReserva(p);
+                          const dias = reserva
+                            ? (daysBetween(p.data_instalacao, p.data_remocao) ?? 0)
+                            : Math.round(segHoras(p) / 24);
+                          const horasNum = Math.round(segHoras(p));
+                          const horasFmt = horasNum.toLocaleString("pt-BR");
+                          const pct = w / total;
+                          let label = "";
+                          if (pct >= 0.12) {
+                            label = reserva ? `${dias}d` : `${horasFmt}h / ${dias}d`;
+                          } else if (pct >= 0.05) {
+                            label = `${dias}d`;
+                          }
+                          const bg = segmentColor(boat, p.posicao);
+                          const tooltip = reserva
+                            ? `Reserva: ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${dias} dias`
+                            : `${boat} (${p.posicao ?? "—"}): ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${horasFmt}h / ${dias}d`;
+                          return (
+                            <Tooltip key={p.id}>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className="flex items-center justify-center text-xs font-medium text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity overflow-hidden whitespace-nowrap"
+                                  style={{ flex: w / total, backgroundColor: bg }}
+                                >
+                                  {label}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{tooltip}</TooltipContent>
+                            </Tooltip>
+                          );
+                        })}
+                      </div>
+                    </TooltipProvider>
                   </div>
                 );
               })}
