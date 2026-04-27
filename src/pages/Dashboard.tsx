@@ -127,11 +127,11 @@ export default function Dashboard() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
+                    <div className="grid grid-cols-[1fr_5rem_5rem_5rem_2rem] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
                       <span>Equipamento</span>
-                      <span className="text-right">Horímetro</span>
-                      <span className="text-right">Troca óleo</span>
-                      <span className="text-right">Overhaul</span>
+                      <span className="text-center">Horímetro</span>
+                      <span className="text-center">Troca óleo</span>
+                      <span className="text-center">Overhaul</span>
                       <span></span>
                     </div>
                     {b.itens.map((eq) => {
@@ -147,7 +147,7 @@ export default function Dashboard() {
                             ? `${v.toLocaleString("pt-BR")}h`
                             : `${Math.abs(v).toLocaleString("pt-BR")}h atrás`;
                       return (
-                        <div key={eq.ativo_id} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
+                        <div key={eq.ativo_id} className="grid grid-cols-[1fr_5rem_5rem_5rem_2rem] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <StatusIndicator status={status} />
                             <button
@@ -160,16 +160,16 @@ export default function Dashboard() {
                             </button>
                             <span className="text-muted-foreground text-xs">{slot}</span>
                           </div>
-                          <span className="text-right font-mono text-xs">{(horasEq ?? 0).toLocaleString("pt-BR")}h</span>
+                          <span className="text-center font-mono text-xs">{(horasEq ?? 0).toLocaleString("pt-BR")}h</span>
                           <span className={cn(
-                            "text-right font-mono text-xs font-semibold",
+                            "text-center font-mono text-xs font-semibold",
                             status === "danger" && "text-status-danger",
                             status === "warn" && "text-status-warn",
                             status === "ok" && "text-status-ok",
                           )}>
                             {fmtRestante(restantes)}
                           </span>
-                          <span className="text-right font-mono text-xs text-muted-foreground">
+                          <span className="text-center font-mono text-xs text-muted-foreground">
                             {fmtRestante(restantesOh)}
                           </span>
                           <Button variant="ghost" size="icon" className="h-7 w-7" title="Registrar manutenção"
@@ -179,6 +179,73 @@ export default function Dashboard() {
                         </div>
                       );
                     })}
+
+                    {/* ===== Manutenções Periódicas dentro do card ===== */}
+                    {(periodicasByLancha.get(b.lanchaId) ?? []).length > 0 && (
+                      <>
+                        <div className="relative my-3">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-border" />
+                          </div>
+                          <div className="relative flex justify-center">
+                            <span className="bg-card px-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Manutenções Periódicas
+                            </span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-[1fr_5rem_5rem_5rem_2rem] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
+                          <span>Manutenção</span>
+                          <span className="text-center">Última</span>
+                          <span className="text-center">Próxima</span>
+                          <span className="text-center">Dias</span>
+                          <span></span>
+                        </div>
+                        {(periodicasByLancha.get(b.lanchaId) ?? []).map((it) => {
+                          const lvl = periodicStatusLevel(it.status_semaforo);
+                          const dias = it.dias_restantes;
+                          let diasNode: React.ReactNode;
+                          if (it.ultima_data == null || dias == null) {
+                            diasNode = <span className="text-muted-foreground">—</span>;
+                          } else if (dias < 0) {
+                            diasNode = <span className="text-status-danger font-semibold">{Math.abs(dias)}d atrás</span>;
+                          } else if (dias === 0) {
+                            diasNode = <span className="text-status-danger font-semibold">Hoje!</span>;
+                          } else {
+                            diasNode = (
+                              <span className={cn(
+                                "font-mono",
+                                lvl === "warn" && "text-status-warn font-semibold",
+                                lvl === "ok" && "text-status-ok",
+                              )}>
+                                {dias}d
+                              </span>
+                            );
+                          }
+                          return (
+                            <div key={it.tipo_id} className="grid grid-cols-[1fr_5rem_5rem_5rem_2rem] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {lvl ? <StatusIndicator status={lvl} /> : <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block" />}
+                                <span className="font-medium truncate" title={it.tipo_nome}>{it.tipo_nome}</span>
+                              </div>
+                              <span className="text-center font-mono text-xs">
+                                {it.ultima_data ? fmtDateBR(it.ultima_data) : <span className="text-muted-foreground italic">Nunca</span>}
+                              </span>
+                              <span className="text-center font-mono text-xs">{fmtDateBR(it.proxima_data)}</span>
+                              <span className="text-center text-xs">{diasNode}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                title="Registrar manutenção periódica"
+                                onClick={() => setPeriodicModal({ open: true, row: it })}
+                              >
+                                <CalendarCheck className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>
