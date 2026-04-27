@@ -186,25 +186,38 @@ export default function Motors() {
                   .filter((p: any) => p.ativo_id === mId)
                   .sort((a: any, b: any) => a.data_instalacao.localeCompare(b.data_instalacao));
                 if (segs.length === 0) return null;
-                const horasArr = segs.map((p: any) => Math.max(segHoras(p), 1));
-                const total = horasArr.reduce((s: number, h: number) => s + h, 0);
+                // peso proporcional: reserva usa dias*24 como horas equivalentes
+                const weights = segs.map((p: any) => {
+                  if (isReserva(p)) {
+                    const d = daysBetween(p.data_instalacao, p.data_remocao) ?? 0;
+                    return Math.max(d * 24, 1);
+                  }
+                  return Math.max(segHoras(p), 1);
+                });
+                const total = weights.reduce((s: number, h: number) => s + h, 0);
                 return (
                   <div key={mId} className="mb-4">
                     <p className="text-sm font-medium mb-1">{name}</p>
                     <div className="flex h-8 rounded-lg overflow-hidden gap-0.5">
                       {segs.map((p: any, idx: number) => {
                         const boat = boatLabel(p);
-                        const hrs = horasArr[idx];
-                        const realHrs = segHoras(p);
-                        const dias = Math.round(realHrs / 24);
-                        const showText = hrs > total * 0.08;
+                        const w = weights[idx];
+                        const reserva = isReserva(p);
+                        const dias = reserva
+                          ? (daysBetween(p.data_instalacao, p.data_remocao) ?? 0)
+                          : Math.round(segHoras(p) / 24);
+                        const horasLabel = reserva ? "—h" : `${Math.round(segHoras(p))}h`;
+                        const showText = w > total * 0.08;
                         const bg = segmentColor(boat, p.posicao);
+                        const tooltip = reserva
+                          ? `Reserva: ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${dias} dias`
+                          : `${boat} (${p.posicao ?? "—"}): ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${Math.round(segHoras(p))}h (${dias}d)`;
                         return (
                           <div key={p.id}
                             className="flex items-center justify-center text-xs font-medium text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity"
-                            style={{ flex: hrs / total, backgroundColor: bg }}
-                            title={`${boat} (${p.posicao ?? "—"}): ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${Math.round(realHrs)}h (${dias}d)`}>
-                            {showText ? `${Math.round(realHrs)}h (${dias}d)` : ""}
+                            style={{ flex: w / total, backgroundColor: bg }}
+                            title={tooltip}>
+                            {showText ? `${horasLabel} (${dias}d)` : ""}
                           </div>
                         );
                       })}
