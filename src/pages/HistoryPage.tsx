@@ -21,7 +21,7 @@ export default function HistoryPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Histórico de Manutenções</h1>
-        <p className="text-sm text-muted-foreground">Log completo de eventos da frota</p>
+        <p className="text-sm text-accent">Log completo de eventos da frota</p>
       </div>
 
       <Card>

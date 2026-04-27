@@ -112,7 +112,7 @@ export default function Motors() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Gestão de Motores</h1>
-        <p className="text-sm text-muted-foreground">Posição e histórico dos motores da frota</p>
+        <p className="text-sm text-accent">Posição e histórico dos motores da frota</p>
       </div>
 
       {(isLoading || loadingAtivos) ? (

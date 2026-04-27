@@ -15,8 +15,9 @@
     --popover: 0 0% 100%;
     --popover-foreground: 215 25% 15%;
 
-    --primary: 210 80% 45%;
+    --primary: 220 47% 20%;
     --primary-foreground: 0 0% 100%;
+    --primary-hover: 220 47% 16%;
 
     --secondary: 210 20% 94%;
     --secondary-foreground: 215 25% 15%;
@@ -24,15 +25,19 @@
     --muted: 210 15% 93%;
     --muted-foreground: 215 10% 50%;
 
-    --accent: 210 30% 90%;
-    --accent-foreground: 215 25% 15%;
+    --accent: 180 64% 46%;
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 180 63% 37%;
+
+    --brand-navy: 220 47% 20%;
+    --brand-teal: 180 64% 46%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 214 20% 88%;
     --input: 214 20% 88%;
-    --ring: 210 80% 45%;
+    --ring: 180 64% 46%;
 
     --radius: 0.75rem;
 
@@ -48,14 +53,14 @@
     --boat-taiba: 25 95% 53%;
     --boat-reserva: 215 10% 60%;
 
-    --sidebar-background: 215 25% 15%;
-    --sidebar-foreground: 210 20% 90%;
-    --sidebar-primary: 210 80% 55%;
+    --sidebar-background: 220 47% 20%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 180 64% 46%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 20% 22%;
-    --sidebar-accent-foreground: 210 20% 90%;
-    --sidebar-border: 215 15% 25%;
-    --sidebar-ring: 210 80% 55%;
+    --sidebar-accent: 220 44% 15%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 40% 25%;
+    --sidebar-ring: 180 64% 46%;
   }
 }
 
