@@ -93,10 +93,15 @@ export default function Motors() {
     return Math.max(Math.floor((e - s) / 86400000), 0);
   };
 
+  const isReserva = (p: any) => {
+    const pos = (p.posicao ?? "").toLowerCase();
+    return !p.lancha_id || pos === "reserva" || pos === "retirica";
+  };
+
   // horas estimadas para um segmento (usa lancha atual se posição ainda aberta)
   const segHoras = (p: any) => {
+    if (isReserva(p)) return 0; // em reserva: sem horímetro
     if (p.data_remocao) return Math.max(Number(p.horas_operadas ?? 0), 0);
-    if (!p.lancha_id) return 0; // em reserva: não acumula
     const lancha = lanchaById.get(p.lancha_id);
     if (!lancha) return Number(p.horas_operadas ?? 0);
     return Math.max(Number(lancha.horimetro ?? 0) - Number(p.horimetro_lancha_instalacao ?? 0), 0);
