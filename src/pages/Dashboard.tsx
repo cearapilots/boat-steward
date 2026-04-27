@@ -273,6 +273,25 @@ function periodicStatusLevel(s: ManutencaoPeriodicaStatus["status_semaforo"]) {
   return null; // sem_registro
 }
 
+function abbrevManutencao(nome: string): string {
+  const map: Array<[RegExp, string]> = [
+    [/limpeza\s*\/?\s*manuten[çc][aã]o\s+(do\s+)?ar[-\s]?condicionado/i, "Limpeza ar-cond."],
+    [/regulagem\s+de\s+v[aá]lvulas?\s+dos?\s+motores?/i, "Reg. válvulas motores"],
+    [/regulagem\s+de\s+v[aá]lvulas?/i, "Reg. válvulas"],
+    [/limpeza\s+(dos?\s+)?after[-\s]?coolers?/i, "Limpeza after cooler"],
+    [/troca\s+de\s+([oó]leo\s+)?(do\s+)?reversor/i, "Troca óleo reversor"],
+    [/troca\s+de\s+([oó]leo\s+)?(do\s+)?gerador/i, "Troca óleo gerador"],
+    [/troca\s+de\s+([oó]leo\s+)?motor/i, "Troca óleo motor"],
+    [/troca\s+de\s+filtros?\s+de\s+combust[ií]vel/i, "Troca filtro comb."],
+    [/troca\s+de\s+filtros?/i, "Troca filtros"],
+    [/inspe[çc][aã]o/i, (s: string) => s.replace(/inspe[çc][aã]o/i, "Insp.")],
+  ];
+  for (const [re, repl] of map) {
+    if (re.test(nome)) return typeof repl === "string" ? repl : (repl as any)(nome);
+  }
+  return nome;
+}
+
 function fmtDateBR(iso: string | null) {
   return iso ? new Date(iso + "T00:00:00").toLocaleDateString("pt-BR") : "—";
 }
