@@ -167,9 +167,9 @@ export default function Motors() {
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <CardTitle className="text-base">Linha do Tempo</CardTitle>
                 <div className="flex gap-3 text-xs flex-wrap">
-                  {Object.entries(boatColorClass).map(([name, cls]) => (
-                    <span key={name} className="flex items-center gap-1">
-                      <span className={cn("h-3 w-3 rounded-sm", cls)} />{name}
+                  {TIMELINE_LEGEND.map((item) => (
+                    <span key={item.label} className="flex items-center gap-1">
+                      <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: item.color }} />{item.label}
                     </span>
                   ))}
                 </div>
@@ -191,12 +191,15 @@ export default function Motors() {
                         const boat = boatLabel(p);
                         const hrs = horasArr[idx];
                         const realHrs = segHoras(p);
+                        const dias = Math.round(realHrs / 24);
+                        const showText = hrs > total * 0.08;
+                        const bg = segmentColor(boat, p.posicao);
                         return (
                           <div key={p.id}
-                            className={cn("flex items-center justify-center text-xs font-medium text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity", boatColorClass[boat] ?? "bg-muted")}
-                            style={{ flex: hrs / total }}
-                            title={`${boat} (${p.posicao ?? "—"}): ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${Math.round(realHrs)}h`}>
-                            {hrs > total * 0.08 ? `${Math.round(realHrs)}h` : ""}
+                            className="flex items-center justify-center text-xs font-medium text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity"
+                            style={{ flex: hrs / total, backgroundColor: bg }}
+                            title={`${boat} (${p.posicao ?? "—"}): ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${Math.round(realHrs)}h (${dias}d)`}>
+                            {showText ? `${Math.round(realHrs)}h (${dias}d)` : ""}
                           </div>
                         );
                       })}
