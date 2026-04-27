@@ -255,15 +255,6 @@ export default function Dashboard() {
       )}
 
 
-      {/* ====== MANUTENÇÕES PERIÓDICAS ====== */}
-      <div className="mt-10">
-        <div className="flex items-center gap-3 mb-4">
-          <h2 className="text-xl font-bold text-foreground whitespace-nowrap">Manutenções Periódicas</h2>
-          <Separator className="flex-1" />
-        </div>
-        <PeriodicSection periodicas={periodicas ?? []} onRegister={(row) => setPeriodicModal({ open: true, row })} />
-      </div>
-
       <MaintenanceModal
         open={modal.open}
         onClose={() => setModal({ open: false, row: null })}
