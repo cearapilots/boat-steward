@@ -22,6 +22,25 @@ const boatTextClass: Record<string, string> = {
   Reserva: "text-boat-reserva",
 };
 
+// Cores específicas por lancha + posição (BB/BE) usadas na Linha do Tempo
+const segmentColor = (boat: string, posicao?: string | null): string => {
+  const pos = (posicao ?? "").toUpperCase();
+  if (boat === "Flexeiras") return pos === "BE" ? "#2E75B6" : "#1E3A5F";
+  if (boat === "Fortim") return pos === "BE" ? "#2ECC71" : "#1A5C38";
+  if (boat === "Taíba") return pos === "BE" ? "#E8C96D" : "#C9A84C";
+  return "#E8603C"; // Reserva (sem posição)
+};
+
+const TIMELINE_LEGEND: { label: string; color: string }[] = [
+  { label: "Flexeiras BB", color: "#1E3A5F" },
+  { label: "Flexeiras BE", color: "#2E75B6" },
+  { label: "Fortim BB", color: "#1A5C38" },
+  { label: "Fortim BE", color: "#2ECC71" },
+  { label: "Taíba BB", color: "#C9A84C" },
+  { label: "Taíba BE", color: "#E8C96D" },
+  { label: "Reserva", color: "#E8603C" },
+];
+
 export default function Motors() {
   const { data: posicoes, isLoading } = usePosicoes();
   const { data: ativos, isLoading: loadingAtivos } = useAtivos();
