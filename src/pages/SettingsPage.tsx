@@ -10,7 +10,7 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
-        <p className="text-sm text-muted-foreground">Parâmetros e integrações do sistema</p>
+        <p className="text-sm text-accent">Parâmetros e integrações do sistema</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
