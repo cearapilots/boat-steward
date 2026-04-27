@@ -66,6 +66,15 @@ export default function Dashboard() {
     return Array.from(map.values());
   }, [rows]);
 
+  const periodicasByLancha = useMemo(() => {
+    const map = new Map<string, ManutencaoPeriodicaStatus[]>();
+    (periodicas ?? []).forEach((p) => {
+      if (!map.has(p.lancha_id)) map.set(p.lancha_id, []);
+      map.get(p.lancha_id)!.push(p);
+    });
+    return map;
+  }, [periodicas]);
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
