@@ -20,11 +20,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen flex">
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex w-60 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-        <div className="px-4 py-5 flex items-center justify-center bg-white">
+        <div className="px-2 py-4 flex items-center justify-center bg-white">
           <img
             src={cemapiLogo}
             alt="CEMAPI Fleet Intelligence Hub"
-            className="w-full h-auto max-h-16 object-contain"
+            className="w-full h-auto max-h-32 object-contain"
           />
         </div>
         <nav className="flex-1 px-3 pt-4 space-y-1">
