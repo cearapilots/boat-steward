@@ -7,6 +7,7 @@ import { AtivoDetalhesModal } from "@/components/AtivoDetalhesModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusIndicator } from "@/components/StatusIndicator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { RefreshCw, Clock, Wrench, CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
