@@ -104,33 +104,48 @@ export type Database = {
           created_at: string | null
           dados_extras: Json | null
           data_evento: string
+          data_fim: string | null
+          data_inicio: string | null
           descricao: string
+          duracao_horas: number | null
+          efeito: string | null
           id: string
           lancha_id: string | null
           origem: string
           tipo_evento: string
+          tipo_ocorrencia_webpilot: string | null
         }
         Insert: {
           ativo_id?: string | null
           created_at?: string | null
           dados_extras?: Json | null
           data_evento: string
+          data_fim?: string | null
+          data_inicio?: string | null
           descricao: string
+          duracao_horas?: number | null
+          efeito?: string | null
           id?: string
           lancha_id?: string | null
           origem?: string
           tipo_evento: string
+          tipo_ocorrencia_webpilot?: string | null
         }
         Update: {
           ativo_id?: string | null
           created_at?: string | null
           dados_extras?: Json | null
           data_evento?: string
+          data_fim?: string | null
+          data_inicio?: string | null
           descricao?: string
+          duracao_horas?: number | null
+          efeito?: string | null
           id?: string
           lancha_id?: string | null
           origem?: string
           tipo_evento?: string
+          tipo_ocorrencia_webpilot?: string | null
         }
         Relationships: [
           {
@@ -330,6 +345,60 @@ export type Database = {
         }
         Relationships: []
       }
+      ocorrencias_webpilot: {
+        Row: {
+          created_at: string | null
+          data_fim: string | null
+          data_inicio: string
+          descricao: string | null
+          duracao_horas: number | null
+          efeito: string | null
+          id: string
+          lancha_id: string | null
+          origem: string | null
+          tipo_ocorrencia: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          data_fim?: string | null
+          data_inicio: string
+          descricao?: string | null
+          duracao_horas?: number | null
+          efeito?: string | null
+          id?: string
+          lancha_id?: string | null
+          origem?: string | null
+          tipo_ocorrencia?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          data_fim?: string | null
+          data_inicio?: string
+          descricao?: string | null
+          duracao_horas?: number | null
+          efeito?: string | null
+          id?: string
+          lancha_id?: string | null
+          origem?: string | null
+          tipo_ocorrencia?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocorrencias_webpilot_lancha_id_fkey"
+            columns: ["lancha_id"]
+            isOneToOne: false
+            referencedRelation: "lanchas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocorrencias_webpilot_lancha_id_fkey"
+            columns: ["lancha_id"]
+            isOneToOne: false
+            referencedRelation: "v_manutencoes_periodicas_status"
+            referencedColumns: ["lancha_id"]
+          },
+        ]
+      }
       posicoes: {
         Row: {
           ativo_id: string
@@ -423,6 +492,24 @@ export type Database = {
       }
     }
     Views: {
+      v_historico_completo: {
+        Row: {
+          ativo_id: string | null
+          ativo_nome: string | null
+          data_fim: string | null
+          data_inicio: string | null
+          descricao: string | null
+          duracao_horas: number | null
+          efeito: string | null
+          fonte: string | null
+          id: string | null
+          lancha_id: string | null
+          lancha_nome: string | null
+          origem: string | null
+          tipo: string | null
+        }
+        Relationships: []
+      }
       v_manutencoes_periodicas_status: {
         Row: {
           dias_restantes: number | null
