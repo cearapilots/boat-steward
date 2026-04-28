@@ -7,6 +7,7 @@ import { AtivoDetalhesModal } from "@/components/AtivoDetalhesModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusIndicator } from "@/components/StatusIndicator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { RefreshCw, Clock, Wrench, CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -183,8 +184,12 @@ export default function Dashboard() {
                     {/* ===== Manutenções Periódicas dentro do card ===== */}
                     {(periodicasByLancha.get(b.lanchaId) ?? []).length > 0 && (
                       <>
-                        <div className="my-3 border-t border-border" />
-                        <div className="grid grid-cols-[1fr_3.75rem_3.75rem_3.5rem_1.75rem] gap-1.5 text-xs font-medium text-muted-foreground px-2 pb-1">
+                        <div className="my-2 flex items-center gap-2">
+                          <div className="flex-1 border-t border-border" />
+                          <span className="text-xs text-gray-400">Manutenções Periódicas</span>
+                          <div className="flex-1 border-t border-border" />
+                        </div>
+                        <div className="grid grid-cols-[1fr_90px_90px_60px_32px] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
                           <span>Manutenção</span>
                           <span className="text-center">Última</span>
                           <span className="text-center">Próxima</span>
@@ -213,10 +218,15 @@ export default function Dashboard() {
                             );
                           }
                           return (
-                            <div key={it.tipo_id} className="grid grid-cols-[1fr_3.75rem_3.75rem_3.5rem_1.75rem] gap-1.5 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
+                            <div key={it.tipo_id} className="grid grid-cols-[1fr_90px_90px_60px_32px] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {lvl ? <StatusIndicator status={lvl} /> : <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block shrink-0" />}
-                                <span className="font-medium truncate" title={it.tipo_nome}>{abbrevManutencao(it.tipo_nome)}</span>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="font-medium truncate cursor-help">{abbrevManutencao(it.tipo_nome)}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{it.tipo_nome}</TooltipContent>
+                                </Tooltip>
                               </div>
                               <span className="text-center font-mono text-xs">
                                 {it.ultima_data ? fmtDateBR(it.ultima_data) : <span className="text-muted-foreground italic">Nunca</span>}
