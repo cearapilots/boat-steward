@@ -149,6 +149,37 @@ export function useManutencoes() {
   });
 }
 
+export type HistoricoCompletoRow = {
+  id: string;
+  data_inicio: string;
+  data_fim: string | null;
+  duracao_horas: number | null;
+  tipo: string;
+  descricao: string | null;
+  efeito: string | null;
+  ativo_id: string | null;
+  lancha_id: string | null;
+  lancha_nome: string | null;
+  ativo_nome: string | null;
+  origem: string | null;
+  fonte: string;
+};
+
+export function useHistoricoCompleto() {
+  return useQuery({
+    queryKey: ["historico_completo"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_historico_completo")
+        .select("*")
+        .order("data_inicio", { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      return (data ?? []) as HistoricoCompletoRow[];
+    },
+  });
+}
+
 export function useCreateManutencao() {
   const qc = useQueryClient();
   return useMutation({
