@@ -65,6 +65,80 @@ export function useManutencoesPeriodicas() {
   });
 }
 
+export type CalendarioManutencaoItem = {
+  lancha_id: string;
+  lancha_nome: string;
+  tipo_id: string;
+  tipo_nome: string;
+  periodicidade_dias: number;
+  data: string; // YYYY-MM-DD
+  origem: "realizada" | "prevista";
+};
+
+export function useCalendarioManutencoes(ano: number) {
+  return useQuery({
+    queryKey: ["calendario_manutencoes", ano],
+    queryFn: async (): Promise<CalendarioManutencaoItem[]> => {
+      const { data: registros, error: errReg } = await (supabase as any)
+        .from("manutencoes_periodicas")
+        .select("lancha_id, tipo_id, data_realizada, lancha:lanchas(id,nome), tipo:manutencoes_periodicas_tipos(id,nome,periodicidade_dias)")
+        .order("data_realizada", { ascending: true });
+      if (errReg) throw errReg;
+
+      const items: CalendarioManutencaoItem[] = [];
+      const ultimasPorPar = new Map<string, { data: string; periodicidade: number; lancha_id: string; lancha_nome: string; tipo_id: string; tipo_nome: string }>();
+
+      for (const r of (registros ?? []) as any[]) {
+        const lancha_id = r.lancha?.id ?? r.lancha_id;
+        const lancha_nome = r.lancha?.nome ?? "";
+        const tipo_id = r.tipo?.id ?? r.tipo_id;
+        const tipo_nome = r.tipo?.nome ?? "";
+        const periodicidade_dias = r.tipo?.periodicidade_dias ?? 0;
+        const dataStr: string = r.data_realizada;
+
+        if (dataStr.startsWith(String(ano))) {
+          items.push({
+            lancha_id, lancha_nome, tipo_id, tipo_nome, periodicidade_dias,
+            data: dataStr, origem: "realizada",
+          });
+        }
+
+        const key = `${lancha_id}::${tipo_id}`;
+        const prev = ultimasPorPar.get(key);
+        if (!prev || dataStr > prev.data) {
+          ultimasPorPar.set(key, { data: dataStr, periodicidade: periodicidade_dias, lancha_id, lancha_nome, tipo_id, tipo_nome });
+        }
+      }
+
+      // Projetar próximas datas até o fim do ano alvo
+      const fimAno = new Date(ano, 11, 31);
+      for (const v of ultimasPorPar.values()) {
+        if (!v.periodicidade || v.periodicidade <= 0) continue;
+        let cur = new Date(v.data + "T00:00:00");
+        // avança até passar o início do ano alvo
+        const inicioAno = new Date(ano, 0, 1);
+        while (cur <= fimAno) {
+          cur = new Date(cur.getTime() + v.periodicidade * 24 * 60 * 60 * 1000);
+          if (cur < inicioAno) continue;
+          if (cur > fimAno) break;
+          const iso = cur.toISOString().slice(0, 10);
+          items.push({
+            lancha_id: v.lancha_id,
+            lancha_nome: v.lancha_nome,
+            tipo_id: v.tipo_id,
+            tipo_nome: v.tipo_nome,
+            periodicidade_dias: v.periodicidade,
+            data: iso,
+            origem: "prevista",
+          });
+        }
+      }
+
+      return items;
+    },
+  });
+}
+
 export function useCreateManutencaoPeriodica() {
   const qc = useQueryClient();
   return useMutation({
