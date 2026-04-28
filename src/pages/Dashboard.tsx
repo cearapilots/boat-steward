@@ -217,10 +217,15 @@ export default function Dashboard() {
                             );
                           }
                           return (
-                            <div key={it.tipo_id} className="grid grid-cols-[1fr_3.75rem_3.75rem_3.5rem_1.75rem] gap-1.5 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
+                            <div key={it.tipo_id} className="grid grid-cols-[1fr_90px_90px_60px_32px] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {lvl ? <StatusIndicator status={lvl} /> : <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block shrink-0" />}
-                                <span className="font-medium truncate" title={it.tipo_nome}>{abbrevManutencao(it.tipo_nome)}</span>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="font-medium truncate cursor-help">{abbrevManutencao(it.tipo_nome)}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{it.tipo_nome}</TooltipContent>
+                                </Tooltip>
                               </div>
                               <span className="text-center font-mono text-xs">
                                 {it.ultima_data ? fmtDateBR(it.ultima_data) : <span className="text-muted-foreground italic">Nunca</span>}
