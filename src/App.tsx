@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Motors from "@/pages/Motors";
 import HistoryPage from "@/pages/HistoryPage";
+import CalendarPage from "@/pages/CalendarPage";
 import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
 
@@ -23,6 +24,7 @@ const App = () => (
             <Route path="/" element={<Dashboard />} />
             <Route path="/motores" element={<Motors />} />
             <Route path="/historico" element={<HistoryPage />} />
+            <Route path="/calendario" element={<CalendarPage />} />
             <Route path="/configuracoes" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

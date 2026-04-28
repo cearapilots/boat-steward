@@ -1,7 +1,7 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Wrench, History, Settings, Menu, X } from "lucide-react";
+import { LayoutDashboard, Wrench, History, Settings, Menu, X, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import cemapiLogo from "@/assets/cemapi-logo.png";
 
@@ -9,6 +9,7 @@ const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/motores", label: "Motores", icon: Wrench },
   { to: "/historico", label: "Histórico", icon: History },
+  { to: "/calendario", label: "Calendário", icon: Calendar },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
