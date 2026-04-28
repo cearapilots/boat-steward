@@ -104,33 +104,48 @@ export type Database = {
           created_at: string | null
           dados_extras: Json | null
           data_evento: string
+          data_fim: string | null
+          data_inicio: string | null
           descricao: string
+          duracao_horas: number | null
+          efeito: string | null
           id: string
           lancha_id: string | null
           origem: string
           tipo_evento: string
+          tipo_ocorrencia_webpilot: string | null
         }
         Insert: {
           ativo_id?: string | null
           created_at?: string | null
           dados_extras?: Json | null
           data_evento: string
+          data_fim?: string | null
+          data_inicio?: string | null
           descricao: string
+          duracao_horas?: number | null
+          efeito?: string | null
           id?: string
           lancha_id?: string | null
           origem?: string
           tipo_evento: string
+          tipo_ocorrencia_webpilot?: string | null
         }
         Update: {
           ativo_id?: string | null
           created_at?: string | null
           dados_extras?: Json | null
           data_evento?: string
+          data_fim?: string | null
+          data_inicio?: string | null
           descricao?: string
+          duracao_horas?: number | null
+          efeito?: string | null
           id?: string
           lancha_id?: string | null
           origem?: string
           tipo_evento?: string
+          tipo_ocorrencia_webpilot?: string | null
         }
         Relationships: [
           {
