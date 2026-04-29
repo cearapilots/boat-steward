@@ -287,6 +287,27 @@ export function useCreateManutencao() {
   });
 }
 
+export type SyncHorimetrosResult = {
+  sucesso: boolean;
+  lanchas_atualizadas: number;
+  detalhe: string;
+};
+
+export function useSyncHorimetros() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<SyncHorimetrosResult> => {
+      const { data, error } = await supabase.functions.invoke("sync-horimetros");
+      if (error) throw error;
+      return data as SyncHorimetrosResult;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["situacao_atual"] });
+      qc.invalidateQueries({ queryKey: ["lanchas"] });
+    },
+  });
+}
+
 export type MotorSwapPayload = {
   data_troca: string; // ISO date YYYY-MM-DD
   lancha_destino_id: string | null; // null = Reserva
