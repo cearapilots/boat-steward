@@ -287,6 +287,34 @@ export function useCreateManutencao() {
   });
 }
 
+export type OcorrenciaWebpilot = {
+  id: string;
+  cd_ocorrencia: string | null;
+  data_inicio: string;
+  data_fim: string | null;
+  duracao_horas: number | null;
+  tipo_ocorrencia: string | null;
+  descricao: string | null;
+  efeito: string | null;
+  lancha_id: string | null;
+  lanchas: { nome: string } | null;
+};
+
+export function useOcorrenciasWebpilot() {
+  return useQuery({
+    queryKey: ["ocorrencias_webpilot"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("ocorrencias_webpilot")
+        .select("id, cd_ocorrencia, data_inicio, data_fim, duracao_horas, tipo_ocorrencia, descricao, efeito, lancha_id, lanchas(nome)")
+        .order("data_inicio", { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      return (data ?? []) as OcorrenciaWebpilot[];
+    },
+  });
+}
+
 export type SyncHorimetrosResult = {
   sucesso: boolean;
   lanchas_atualizadas: number;
