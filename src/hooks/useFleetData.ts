@@ -325,13 +325,24 @@ export function useSyncHorimetros() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (): Promise<SyncHorimetrosResult> => {
-      const { data, error } = await supabase.functions.invoke("sync-horimetros");
-      if (error) throw error;
+      // 1. Sync horímetros
+      const { data, error: errHorimetros } = await supabase.functions.invoke("sync-horimetros");
+      if (errHorimetros) throw new Error(`Erro sync-horimetros: ${errHorimetros.message}`);
+
+      // 2. Sync trocas de óleo
+      const { error: errTrocas } = await supabase.functions.invoke("sync-trocas-oleo");
+      if (errTrocas) throw new Error(`Erro sync-trocas-oleo: ${errTrocas.message}`);
+
+      // 3. Sync ocorrências (implementar quando endpoint estiver pronto)
+      // await supabase.functions.invoke('sync-ocorrencias')
+
       return data as SyncHorimetrosResult;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["situacao_atual"] });
       qc.invalidateQueries({ queryKey: ["lanchas"] });
+      qc.invalidateQueries({ queryKey: ["historico"] });
+      qc.invalidateQueries({ queryKey: ["manutencoes"] });
     },
   });
 }
