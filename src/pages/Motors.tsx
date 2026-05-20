@@ -182,64 +182,114 @@ export default function Motors() {
               </div>
             </CardHeader>
             <CardContent>
-              {uniqueMotors.map(([mId, name]) => {
-                const segs = motorPositions
-                  .filter((p: any) => p.ativo_id === mId)
-                  .sort((a: any, b: any) => a.data_instalacao.localeCompare(b.data_instalacao));
-                if (segs.length === 0) return null;
-                // peso proporcional: reserva usa dias*24 como horas equivalentes
-                const weights = segs.map((p: any) => {
-                  if (isReserva(p)) {
-                    const d = daysBetween(p.data_instalacao, p.data_remocao) ?? 0;
-                    return Math.max(d * 24, 1);
-                  }
-                  return Math.max(segHoras(p), 1);
+              {(() => {
+                const allDates: number[] = [];
+                motorPositions.forEach((p: any) => {
+                  if (p.data_instalacao) allDates.push(new Date(p.data_instalacao).getTime());
+                  if (p.data_remocao) allDates.push(new Date(p.data_remocao).getTime());
                 });
-                const total = weights.reduce((s: number, h: number) => s + h, 0);
+                if (allDates.length === 0) return <p className="text-sm text-muted-foreground">Sem dados.</p>;
+                const nowTs = Date.now();
+                allDates.push(nowTs);
+                const minTs = Math.min(...allDates);
+                const maxTs = Math.max(...allDates);
+                const startD = new Date(minTs); startD.setDate(1); startD.setHours(0,0,0,0);
+                const endD = new Date(maxTs); endD.setMonth(endD.getMonth() + 1, 1); endD.setHours(0,0,0,0);
+                const startTs = startD.getTime();
+                const endTs = endD.getTime();
+                const span = endTs - startTs;
+                const pct = (ts: number) => ((ts - startTs) / span) * 100;
+
+                const ticks: { label: string; left: number }[] = [];
+                const cur = new Date(startD);
+                while (cur.getTime() <= endTs) {
+                  if (cur.getMonth() % 3 === 0) {
+                    const m = cur.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+                    ticks.push({ label: `${m} ${cur.getFullYear()}`, left: pct(cur.getTime()) });
+                  }
+                  cur.setMonth(cur.getMonth() + 1);
+                }
+
+                const Y_LABEL_W = 96;
+                const ROW_H = 32;
+                const AXIS_H = 24;
+
                 return (
-                  <div key={mId} className="mb-4">
-                    <p className="text-sm font-medium mb-1">{name}</p>
-                    <TooltipProvider delayDuration={150}>
-                      <div className="flex h-8 rounded-lg overflow-hidden gap-0.5">
-                        {segs.map((p: any, idx: number) => {
-                          const boat = boatLabel(p);
-                          const w = weights[idx];
-                          const reserva = isReserva(p);
-                          const dias = reserva
-                            ? (daysBetween(p.data_instalacao, p.data_remocao) ?? 0)
-                            : Math.round(segHoras(p) / 24);
-                          const horasNum = Math.round(segHoras(p));
-                          const horasFmt = horasNum.toLocaleString("pt-BR");
-                          const pct = w / total;
-                          let label = "";
-                          if (pct >= 0.12) {
-                            label = reserva ? `${dias}d` : `${horasFmt}h / ${dias}d`;
-                          } else if (pct >= 0.05) {
-                            label = `${dias}d`;
-                          }
-                          const bg = segmentColor(boat, p.posicao);
-                          const tooltip = reserva
-                            ? `Reserva: ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${dias} dias`
-                            : `${boat} (${p.posicao ?? "—"}): ${p.data_instalacao} → ${p.data_remocao ?? "atual"} — ${horasFmt}h / ${dias}d`;
+                  <div className="overflow-x-auto">
+                    <div style={{ minWidth: 900 }}>
+                      <div className="flex">
+                        <div style={{ width: Y_LABEL_W }} className="shrink-0" />
+                        <div className="relative flex-1 border-b border-border" style={{ height: AXIS_H }}>
+                          {ticks.map((t, i) => (
+                            <div
+                              key={i}
+                              className="absolute top-0 h-full text-[10px] text-muted-foreground"
+                              style={{ left: `${t.left}%`, transform: "translateX(-50%)" }}
+                            >
+                              <div className="h-2 border-l border-border mx-auto w-px" />
+                              <span className="whitespace-nowrap">{t.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <TooltipProvider delayDuration={150}>
+                        {uniqueMotors.map(([mId, name]) => {
+                          const segs = motorPositions
+                            .filter((p: any) => p.ativo_id === mId)
+                            .sort((a: any, b: any) => a.data_instalacao.localeCompare(b.data_instalacao));
                           return (
-                            <Tooltip key={p.id}>
-                              <TooltipTrigger asChild>
-                                <div
-                                  className="flex items-center justify-center text-xs font-medium text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity overflow-hidden whitespace-nowrap"
-                                  style={{ flex: w / total, backgroundColor: bg }}
-                                >
-                                  {label}
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent>{tooltip}</TooltipContent>
-                            </Tooltip>
+                            <div key={mId} className="flex items-center border-b border-border/40" style={{ height: ROW_H + 8 }}>
+                              <div style={{ width: Y_LABEL_W }} className="shrink-0 pr-2 text-xs font-medium truncate">
+                                {name}
+                              </div>
+                              <div className="relative flex-1 bg-muted/30 rounded" style={{ height: ROW_H }}>
+                                {ticks.map((t, i) => (
+                                  <div
+                                    key={i}
+                                    className="absolute top-0 bottom-0 border-l border-border/30"
+                                    style={{ left: `${t.left}%` }}
+                                  />
+                                ))}
+                                {segs.map((p: any) => {
+                                  const s = new Date(p.data_instalacao).getTime();
+                                  const e = p.data_remocao ? new Date(p.data_remocao).getTime() : nowTs;
+                                  const left = pct(s);
+                                  const width = Math.max(pct(e) - left, 0.3);
+                                  const boat = boatLabel(p);
+                                  const reserva = isReserva(p);
+                                  const dias = reserva
+                                    ? (daysBetween(p.data_instalacao, p.data_remocao) ?? 0)
+                                    : Math.round(segHoras(p) / 24);
+                                  const horasFmt = Math.round(segHoras(p)).toLocaleString("pt-BR");
+                                  const bg = segmentColor(boat, p.posicao);
+                                  const tooltip = reserva
+                                    ? `Reserva: ${new Date(p.data_instalacao).toLocaleDateString("pt-BR")} → ${p.data_remocao ? new Date(p.data_remocao).toLocaleDateString("pt-BR") : "atual"} — ${dias} dias`
+                                    : `${boat} (${p.posicao ?? "—"}): ${new Date(p.data_instalacao).toLocaleDateString("pt-BR")} → ${p.data_remocao ? new Date(p.data_remocao).toLocaleDateString("pt-BR") : "atual"} — ${horasFmt}h / ${dias}d`;
+                                  const showLabel = width > 6;
+                                  return (
+                                    <Tooltip key={p.id}>
+                                      <TooltipTrigger asChild>
+                                        <div
+                                          className="absolute top-0 h-full rounded-sm flex items-center justify-center text-[10px] font-medium text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity overflow-hidden whitespace-nowrap"
+                                          style={{ left: `${left}%`, width: `${width}%`, backgroundColor: bg }}
+                                        >
+                                          {showLabel && `${dias}d`}
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent>{tooltip}</TooltipContent>
+                                    </Tooltip>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           );
                         })}
-                      </div>
-                    </TooltipProvider>
+                      </TooltipProvider>
+                    </div>
                   </div>
                 );
-              })}
+              })()}
             </CardContent>
           </Card>
 
