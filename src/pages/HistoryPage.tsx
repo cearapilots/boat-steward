@@ -64,6 +64,7 @@ export default function HistoryPage() {
   const [filterDe, setFilterDe] = useState("");
   const [filterAte, setFilterAte] = useState("");
   const [page, setPage] = useState(1);
+  const [detalhe, setDetalhe] = useState<{ mode: "historico" | "ocorrencia"; record: any } | null>(null);
 
   const tiposUnicos = useMemo(() => {
     const set = new Set<string>();
