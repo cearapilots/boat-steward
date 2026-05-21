@@ -78,7 +78,10 @@ Deno.serve(async (req) => {
       const lancha = lanchasBanco?.find((l) => l.id_webpilot === String(oc.CD_LANCHA));
       if (!lancha) continue;
 
-      const cdOcorrencia = String(oc.CD_OCORRENCIA);
+      const cdOcorrencia = Number(oc.CD_OCORRENCIA);
+
+      const efeitosValidos = ["Inoperante", "Operante", "Operante com Restrições", "Não Altera"];
+      const efeito = efeitosValidos.includes(oc.DS_EFEITO) ? oc.DS_EFEITO : null;
 
       // ── INSERT OR UPDATE em ocorrencias_webpilot ─────────────────────────
       const { error: errUpsert } = await supabase
@@ -91,14 +94,17 @@ Deno.serve(async (req) => {
             duracao_horas: oc.NR_HORAS ?? null,
             tipo_ocorrencia: oc.DS_TIPO_OCORRENCIA,
             descricao: oc.DS_OCORRENCIA,
-            efeito: oc.DS_EFEITO,
+            efeito,
             lancha_id: lancha.id,
             origem: "webpilot_sync",
           },
           { onConflict: "cd_ocorrencia", ignoreDuplicates: false },
         );
 
-      if (errUpsert) continue;
+      if (errUpsert) {
+        console.error(`Erro upsert cd_ocorrencia ${oc.CD_OCORRENCIA}:`, errUpsert);
+        continue;
+      }
 
       ocorrenciasImportadas++;
       contagemPorLancha.set(lancha.nome, (contagemPorLancha.get(lancha.nome) ?? 0) + 1);
