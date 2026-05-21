@@ -288,7 +288,7 @@ export default function HistoryPage() {
                           const descFull = o.descricao ?? "";
                           const descTrunc = descFull.length > 80 ? descFull.slice(0, 80) + "…" : descFull;
                           return (
-                            <TableRow key={o.id}>
+                            <TableRow key={o.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setDetalhe({ mode: "ocorrencia", record: o })}>
                               <TableCell className="font-mono text-xs whitespace-nowrap">
                                 {fmtDateTime(o.data_inicio)}
                               </TableCell>
