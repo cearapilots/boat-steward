@@ -307,20 +307,28 @@ function periodicStatusLevel(s: ManutencaoPeriodicaStatus["status_semaforo"]) {
 
 function abbrevManutencao(nome: string): string {
   const map: Array<[RegExp, string]> = [
-    [/limpeza\s*\/?\s*manuten[çc][aã]o\s+(do\s+)?ar[-\s]?condicionado/i, "Limpeza ar-cond."],
-    [/regulagem\s+de\s+v[aá]lvulas?\s+dos?\s+motores?/i, "Reg. válvulas motores"],
-    [/regulagem\s+de\s+v[aá]lvulas?/i, "Reg. válvulas"],
-    [/limpeza\s+(dos?\s+)?after[-\s]?coolers?/i, "Limpeza after cooler"],
-    [/troca\s+de\s+([oó]leo\s+)?(do\s+)?reversor/i, "Troca óleo reversor"],
-    [/troca\s+de\s+([oó]leo\s+)?(do\s+)?gerador/i, "Troca óleo gerador"],
-    [/troca\s+de\s+([oó]leo\s+)?motor/i, "Troca óleo motor"],
-    [/troca\s+de\s+filtros?\s+de\s+combust[ií]vel/i, "Troca filtro comb."],
-    [/troca\s+de\s+filtros?/i, "Troca filtros"],
+    [/limpeza\s*\/?\s*manuten[çc][aã]o\s+(do\s+)?ar[-\s]?condicionado/i, "Ar-cond."],
+    [/ar[-\s]?condicionado/i, "Ar-cond."],
+    [/regulagem\s+de\s+v[aá]lvulas?\s+dos?\s+motores?/i, "Válvulas motores"],
+    [/regulagem\s+de\s+v[aá]lvulas?/i, "Válvulas"],
+    [/limpeza\s+(dos?\s+)?after[-\s]?coolers?/i, "After cooler"],
+    [/limpeza\s+(dos?\s+)?tanques?\s+de\s+combust[ií]vel/i, "Tanque comb."],
+    [/limpeza\s+(dos?\s+)?tanques?/i, "Tanque"],
+    [/limpeza\s+(do\s+)?casco/i, "Casco"],
+    [/docagem/i, "Docagem"],
+    [/troca\s+de\s+([oó]leo\s+)?(do\s+)?reversor/i, "Óleo reversor"],
+    [/troca\s+de\s+([oó]leo\s+)?(do\s+)?gerador/i, "Óleo gerador"],
+    [/troca\s+de\s+([oó]leo\s+)?motor/i, "Óleo motor"],
+    [/troca\s+de\s+filtros?\s+de\s+combust[ií]vel/i, "Filtro comb."],
+    [/troca\s+de\s+filtros?\s+de\s+[oó]leo/i, "Filtro óleo"],
+    [/troca\s+de\s+filtros?/i, "Filtros"],
+    [/inspe[çc][aã]o\s+(do\s+)?casco/i, "Insp. casco"],
+    [/inspe[çc][aã]o/i, "Inspeção"],
   ];
   for (const [re, repl] of map) {
     if (re.test(nome)) return repl;
   }
-  return nome.replace(/inspe[çc][aã]o/i, "Insp.");
+  return nome;
 }
 
 function fmtDateBR(iso: string | null) {
