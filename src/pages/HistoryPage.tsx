@@ -351,6 +351,13 @@ export default function HistoryPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <HistoricoDetalheModal
+        open={detalhe !== null}
+        onOpenChange={(v) => { if (!v) setDetalhe(null); }}
+        mode={detalhe?.mode ?? "historico"}
+        record={detalhe?.record ?? null}
+      />
     </div>
   );
 }
