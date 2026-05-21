@@ -237,7 +237,7 @@ export default function Dashboard() {
                             );
                           }
                           return (
-                            <div key={it.tipo_id} className="grid grid-cols-[1fr_90px_90px_60px_32px] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
+                            <div key={it.tipo_id} className="grid grid-cols-[minmax(7rem,1fr)_5rem_5rem_3.5rem_2rem] gap-3 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {lvl ? <StatusIndicator status={lvl} /> : <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block shrink-0" />}
                                 <Tooltip>
