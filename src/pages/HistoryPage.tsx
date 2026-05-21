@@ -136,7 +136,7 @@ export default function HistoryPage() {
                         const hLancha = extras.horimetro_lancha ?? extras.horimetro;
                         const hEquip = extras.horimetro_equipamento;
                         return (
-                          <TableRow key={r.id}>
+                          <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setDetalhe({ mode: "historico", record: r })}>
                             <TableCell>{r.data_evento ? new Date(r.data_evento).toLocaleDateString("pt-BR") : "—"}</TableCell>
                             <TableCell className="font-medium">{r.lancha?.nome ?? "—"}</TableCell>
                             <TableCell>{r.ativo?.posicao ?? "—"}</TableCell>
