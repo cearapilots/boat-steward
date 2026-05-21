@@ -145,8 +145,9 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <div className="grid grid-cols-[1fr_5rem_5rem_5rem_2rem] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
+                  <div className="space-y-1 overflow-x-auto">
+                    <div className="min-w-[440px]">
+                    <div className="grid grid-cols-[minmax(7rem,1fr)_4.5rem_4.5rem_4.5rem_2rem] gap-3 text-xs font-medium text-muted-foreground px-2 pb-1">
                       <span>Equipamento</span>
                       <span className="text-center">Horímetro</span>
                       <span className="text-center">Troca óleo</span>
