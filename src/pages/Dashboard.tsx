@@ -70,7 +70,9 @@ export default function Dashboard() {
 
   const periodicasByLancha = useMemo(() => {
     const map = new Map<string, ManutencaoPeriodicaStatus[]>();
+    const isHidden = (nome: string) => /treinamento\s+(dos?\s+)?tripulantes?/i.test(nome ?? "");
     (periodicas ?? []).forEach((p) => {
+      if (isHidden(p.tipo_nome)) return;
       if (!map.has(p.lancha_id)) map.set(p.lancha_id, []);
       map.get(p.lancha_id)!.push(p);
     });
