@@ -208,7 +208,7 @@ export default function Dashboard() {
                           <span className="text-xs text-gray-400">Manutenções Periódicas</span>
                           <div className="flex-1 border-t border-border" />
                         </div>
-                        <div className="grid grid-cols-[1fr_90px_90px_60px_32px] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
+                        <div className="grid grid-cols-[minmax(7rem,1fr)_5rem_5rem_3.5rem_2rem] gap-3 text-xs font-medium text-muted-foreground px-2 pb-1">
                           <span>Manutenção</span>
                           <span className="text-center">Última</span>
                           <span className="text-center">Próxima</span>
