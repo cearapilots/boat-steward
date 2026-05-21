@@ -65,6 +65,32 @@ export default function Dashboard() {
       }
       map.get(r.lancha_id)!.itens.push(r);
     });
+    const tipoOrdem = (nome: string) => {
+      const n = (nome ?? "").toLowerCase();
+      if (/motor/.test(n)) return 0;
+      if (/reversor/.test(n)) return 1;
+      if (/gerador/.test(n)) return 2;
+      return 3;
+    };
+    const posOrdem = (pos: string | null | undefined) => {
+      const p = (pos ?? "").toUpperCase();
+      if (p === "BB") return 0;
+      if (p === "BE") return 1;
+      return 2;
+    };
+    const numOf = (nome: string) => {
+      const m = (nome ?? "").match(/\d+/);
+      return m ? parseInt(m[0], 10) : 9999;
+    };
+    map.forEach((b) => {
+      b.itens.sort((a, c) => {
+        const ta = tipoOrdem(a.ativo_nome), tc = tipoOrdem(c.ativo_nome);
+        if (ta !== tc) return ta - tc;
+        const na = numOf(a.ativo_nome), nc = numOf(c.ativo_nome);
+        if (na !== nc) return na - nc;
+        return posOrdem(a.posicao) - posOrdem(c.posicao);
+      });
+    });
     return Array.from(map.values());
   }, [rows]);
 
