@@ -13,20 +13,10 @@ import { RefreshCw, Clock, Wrench, CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// Cor dinâmica derivada do nome da lancha (HSL via design system)
-const borderPalette = [
-  "border-t-boat-flexeiras",
-  "border-t-boat-fortim",
-  "border-t-boat-taiba",
-  "border-t-boat-reserva",
-  "border-t-primary",
-  "border-t-accent",
-];
-function borderForBoat(name: string) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return borderPalette[h % borderPalette.length];
+function borderForBoat(_name: string) {
+  return "border-t-primary";
 }
+
 
 function statusFromSemaforo(s: string): "ok" | "warn" | "danger" {
   if (s === "vermelho") return "danger";
