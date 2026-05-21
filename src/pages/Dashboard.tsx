@@ -221,10 +221,8 @@ export default function Dashboard() {
                     {/* ===== Manutenções Periódicas dentro do card ===== */}
                     {(periodicasByLancha.get(b.lanchaId) ?? []).length > 0 && (
                       <>
-                        <div className="my-2 flex items-center gap-2">
-                          <div className="flex-1 border-t border-border" />
-                          <span className="text-xs text-gray-400">Manutenções Periódicas</span>
-                          <div className="flex-1 border-t border-border" />
+                    <div className="my-2">
+                          <div className="border-t border-border" />
                         </div>
                         <div className="grid grid-cols-[minmax(7rem,1fr)_5rem_5rem_3.5rem_2rem] gap-3 text-xs font-medium text-muted-foreground px-2 pb-1">
                           <span>Manutenção</span>
