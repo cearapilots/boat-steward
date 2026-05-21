@@ -167,7 +167,7 @@ export default function Dashboard() {
                             ? `${v.toLocaleString("pt-BR")}h`
                             : `${Math.abs(v).toLocaleString("pt-BR")}h atrás`;
                       return (
-                        <div key={eq.ativo_id} className="grid grid-cols-[1fr_5rem_5rem_5rem_2rem] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
+                        <div key={eq.ativo_id} className="grid grid-cols-[minmax(7rem,1fr)_4.5rem_4.5rem_4.5rem_2rem] gap-3 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <StatusIndicator status={status} />
                             <button
