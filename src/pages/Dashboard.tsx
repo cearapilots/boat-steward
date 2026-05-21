@@ -70,7 +70,9 @@ export default function Dashboard() {
 
   const periodicasByLancha = useMemo(() => {
     const map = new Map<string, ManutencaoPeriodicaStatus[]>();
+    const isHidden = (nome: string) => /treinamento\s+(dos?\s+)?tripulantes?/i.test(nome ?? "");
     (periodicas ?? []).forEach((p) => {
+      if (isHidden(p.tipo_nome)) return;
       if (!map.has(p.lancha_id)) map.set(p.lancha_id, []);
       map.get(p.lancha_id)!.push(p);
     });
@@ -145,8 +147,9 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <div className="grid grid-cols-[1fr_5rem_5rem_5rem_2rem] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
+                  <div className="space-y-1 overflow-x-auto">
+                    <div className="min-w-[440px]">
+                    <div className="grid grid-cols-[minmax(7rem,1fr)_4.5rem_4.5rem_4.5rem_2rem] gap-3 text-xs font-medium text-muted-foreground px-2 pb-1">
                       <span>Equipamento</span>
                       <span className="text-center">Horímetro</span>
                       <span className="text-center">Troca óleo</span>
@@ -166,7 +169,7 @@ export default function Dashboard() {
                             ? `${v.toLocaleString("pt-BR")}h`
                             : `${Math.abs(v).toLocaleString("pt-BR")}h atrás`;
                       return (
-                        <div key={eq.ativo_id} className="grid grid-cols-[1fr_5rem_5rem_5rem_2rem] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
+                        <div key={eq.ativo_id} className="grid grid-cols-[minmax(7rem,1fr)_4.5rem_4.5rem_4.5rem_2rem] gap-3 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <StatusIndicator status={status} />
                             <button
@@ -207,7 +210,7 @@ export default function Dashboard() {
                           <span className="text-xs text-gray-400">Manutenções Periódicas</span>
                           <div className="flex-1 border-t border-border" />
                         </div>
-                        <div className="grid grid-cols-[1fr_90px_90px_60px_32px] gap-2 text-xs font-medium text-muted-foreground px-2 pb-1">
+                        <div className="grid grid-cols-[minmax(7rem,1fr)_5rem_5rem_3.5rem_2rem] gap-3 text-xs font-medium text-muted-foreground px-2 pb-1">
                           <span>Manutenção</span>
                           <span className="text-center">Última</span>
                           <span className="text-center">Próxima</span>
@@ -236,7 +239,7 @@ export default function Dashboard() {
                             );
                           }
                           return (
-                            <div key={it.tipo_id} className="grid grid-cols-[1fr_90px_90px_60px_32px] gap-2 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
+                            <div key={it.tipo_id} className="grid grid-cols-[minmax(7rem,1fr)_5rem_5rem_3.5rem_2rem] gap-3 items-center px-2 py-1.5 rounded hover:bg-secondary/50 text-sm">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {lvl ? <StatusIndicator status={lvl} /> : <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block shrink-0" />}
                                 <Tooltip>
@@ -265,6 +268,7 @@ export default function Dashboard() {
                         })}
                       </>
                     )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -303,20 +307,28 @@ function periodicStatusLevel(s: ManutencaoPeriodicaStatus["status_semaforo"]) {
 
 function abbrevManutencao(nome: string): string {
   const map: Array<[RegExp, string]> = [
-    [/limpeza\s*\/?\s*manuten[çc][aã]o\s+(do\s+)?ar[-\s]?condicionado/i, "Limpeza ar-cond."],
-    [/regulagem\s+de\s+v[aá]lvulas?\s+dos?\s+motores?/i, "Reg. válvulas motores"],
-    [/regulagem\s+de\s+v[aá]lvulas?/i, "Reg. válvulas"],
-    [/limpeza\s+(dos?\s+)?after[-\s]?coolers?/i, "Limpeza after cooler"],
-    [/troca\s+de\s+([oó]leo\s+)?(do\s+)?reversor/i, "Troca óleo reversor"],
-    [/troca\s+de\s+([oó]leo\s+)?(do\s+)?gerador/i, "Troca óleo gerador"],
-    [/troca\s+de\s+([oó]leo\s+)?motor/i, "Troca óleo motor"],
-    [/troca\s+de\s+filtros?\s+de\s+combust[ií]vel/i, "Troca filtro comb."],
-    [/troca\s+de\s+filtros?/i, "Troca filtros"],
+    [/limpeza\s*\/?\s*manuten[çc][aã]o\s+(do\s+)?ar[-\s]?condicionado/i, "Ar-cond."],
+    [/ar[-\s]?condicionado/i, "Ar-cond."],
+    [/regulagem\s+de\s+v[aá]lvulas?\s+dos?\s+motores?/i, "Válvulas motores"],
+    [/regulagem\s+de\s+v[aá]lvulas?/i, "Válvulas"],
+    [/limpeza\s+(dos?\s+)?after[-\s]?coolers?/i, "After cooler"],
+    [/limpeza\s+(dos?\s+)?tanques?\s+de\s+combust[ií]vel/i, "Tanque comb."],
+    [/limpeza\s+(dos?\s+)?tanques?/i, "Tanque"],
+    [/limpeza\s+(do\s+)?casco/i, "Casco"],
+    [/docagem/i, "Docagem"],
+    [/troca\s+de\s+([oó]leo\s+)?(do\s+)?reversor/i, "Óleo reversor"],
+    [/troca\s+de\s+([oó]leo\s+)?(do\s+)?gerador/i, "Óleo gerador"],
+    [/troca\s+de\s+([oó]leo\s+)?motor/i, "Óleo motor"],
+    [/troca\s+de\s+filtros?\s+de\s+combust[ií]vel/i, "Filtro comb."],
+    [/troca\s+de\s+filtros?\s+de\s+[oó]leo/i, "Filtro óleo"],
+    [/troca\s+de\s+filtros?/i, "Filtros"],
+    [/inspe[çc][aã]o\s+(do\s+)?casco/i, "Insp. casco"],
+    [/inspe[çc][aã]o/i, "Inspeção"],
   ];
   for (const [re, repl] of map) {
     if (re.test(nome)) return repl;
   }
-  return nome.replace(/inspe[çc][aã]o/i, "Insp.");
+  return nome;
 }
 
 function fmtDateBR(iso: string | null) {
