@@ -348,6 +348,3 @@ function abbrevManutencao(nome: string): string {
 function fmtDateBR(iso: string | null) {
   return iso ? new Date(iso + "T00:00:00").toLocaleDateString("pt-BR") : "—";
 }
-
-
-
