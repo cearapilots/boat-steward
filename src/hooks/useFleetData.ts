@@ -333,8 +333,9 @@ export function useSyncHorimetros() {
       const { error: errTrocas } = await supabase.functions.invoke("sync-trocas-oleo");
       if (errTrocas) throw new Error(`Erro sync-trocas-oleo: ${errTrocas.message}`);
 
-      // 3. Sync ocorrências (implementar quando endpoint estiver pronto)
-      // await supabase.functions.invoke('sync-ocorrencias')
+      // 3. Sync ocorrências operacionais
+      const { error: errOcorrencias } = await supabase.functions.invoke("sync-ocorrencias");
+      if (errOcorrencias) throw new Error(`Erro sync-ocorrencias: ${errOcorrencias.message}`);
 
       return data as SyncHorimetrosResult;
     },
@@ -343,6 +344,8 @@ export function useSyncHorimetros() {
       qc.invalidateQueries({ queryKey: ["lanchas"] });
       qc.invalidateQueries({ queryKey: ["historico"] });
       qc.invalidateQueries({ queryKey: ["manutencoes"] });
+      qc.invalidateQueries({ queryKey: ["ocorrencias_webpilot"] });
+      qc.invalidateQueries({ queryKey: ["manutencoes_periodicas"] });
     },
   });
 }
