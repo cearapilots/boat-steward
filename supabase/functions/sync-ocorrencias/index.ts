@@ -110,7 +110,17 @@ Deno.serve(async (req) => {
       contagemPorLancha.set(lancha.nome, (contagemPorLancha.get(lancha.nome) ?? 0) + 1);
 
       // ── Verificar se é manutenção periódica ──────────────────────────────
-      const nomePeriodicaMapeado = MAPEAMENTO_PERIODICAS[oc.DS_TIPO_OCORRENCIA];
+      let nomePeriodicaMapeado = MAPEAMENTO_PERIODICAS[oc.DS_TIPO_OCORRENCIA];
+
+      if (!nomePeriodicaMapeado) {
+        const desc = oc.DS_OCORRENCIA.toLowerCase();
+        if (desc.includes("regulag") && desc.includes("válvula")) {
+          nomePeriodicaMapeado = "Regulagem de válvulas dos motores";
+        } else if (desc.includes("ar condicionado") || desc.includes("ar-condicionado")) {
+          nomePeriodicaMapeado = "Limpeza/manutenção ar-condicionado";
+        }
+      }
+
       if (!nomePeriodicaMapeado) continue;
 
       const tipoId = tipoIdByNome.get(nomePeriodicaMapeado);
