@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { HistoricoDetalheModal } from "@/components/HistoricoDetalheModal";
 
 const PAGE_SIZE = 50;
 
@@ -64,7 +63,6 @@ export default function HistoryPage() {
   const [filterDe, setFilterDe] = useState("");
   const [filterAte, setFilterAte] = useState("");
   const [page, setPage] = useState(1);
-  const [detalhe, setDetalhe] = useState<{ mode: "historico" | "ocorrencia"; record: any } | null>(null);
 
   const tiposUnicos = useMemo(() => {
     const set = new Set<string>();
@@ -136,7 +134,7 @@ export default function HistoryPage() {
                         const hLancha = extras.horimetro_lancha ?? extras.horimetro;
                         const hEquip = extras.horimetro_equipamento;
                         return (
-                          <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setDetalhe({ mode: "historico", record: r })}>
+                          <TableRow key={r.id}>
                             <TableCell>{r.data_evento ? new Date(r.data_evento).toLocaleDateString("pt-BR") : "—"}</TableCell>
                             <TableCell className="font-medium">{r.lancha?.nome ?? "—"}</TableCell>
                             <TableCell>{r.ativo?.posicao ?? "—"}</TableCell>
@@ -288,7 +286,7 @@ export default function HistoryPage() {
                           const descFull = o.descricao ?? "";
                           const descTrunc = descFull.length > 80 ? descFull.slice(0, 80) + "…" : descFull;
                           return (
-                            <TableRow key={o.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setDetalhe({ mode: "ocorrencia", record: o })}>
+                            <TableRow key={o.id}>
                               <TableCell className="font-mono text-xs whitespace-nowrap">
                                 {fmtDateTime(o.data_inicio)}
                               </TableCell>
@@ -351,13 +349,6 @@ export default function HistoryPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      <HistoricoDetalheModal
-        open={detalhe !== null}
-        onOpenChange={(v) => { if (!v) setDetalhe(null); }}
-        mode={detalhe?.mode ?? "historico"}
-        record={detalhe?.record ?? null}
-      />
     </div>
   );
 }
