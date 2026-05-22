@@ -34,9 +34,8 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-[400px] bg-white rounded-xl shadow-lg p-8 space-y-6">
-        <div className="flex flex-col items-center gap-2">
-          <img src={cemapiLogo} alt="CEMAPI" className="h-24 w-auto object-contain" />
-          <p className="text-base font-semibold text-foreground tracking-tight">FleetIQ Hub</p>
+        <div className="flex justify-center">
+          <img src={cemapiLogo} alt="CEMAPI" className="h-32 w-auto object-contain" />
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
