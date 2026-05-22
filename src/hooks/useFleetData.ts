@@ -164,6 +164,7 @@ export function useCreateManutencaoPeriodica() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["manutencoes_periodicas"] });
+      qc.invalidateQueries({ queryKey: ["calendario_manutencoes"] });
     },
   });
 }
@@ -348,6 +349,7 @@ export function useSyncHorimetros() {
       qc.invalidateQueries({ queryKey: ["manutencoes"] });
       qc.invalidateQueries({ queryKey: ["ocorrencias_webpilot"] });
       qc.invalidateQueries({ queryKey: ["manutencoes_periodicas"] });
+      qc.invalidateQueries({ queryKey: ["calendario_manutencoes"] });
     },
   });
 }
