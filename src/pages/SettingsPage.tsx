@@ -17,15 +17,6 @@ import {
 
 const VERSION = "1.0.0";
 
-const CHAVES_SEMAFORO = [
-  { chave: "semaforo_amarelo_horas", label: "Troca de óleo — Alerta amarelo (h antes)" },
-  { chave: "semaforo_vermelho_horas", label: "Troca de óleo — Alerta vermelho (h antes)" },
-  { chave: "semaforo_amarelo_overhaul", label: "Overhaul — Alerta amarelo (h antes)" },
-  { chave: "semaforo_vermelho_overhaul", label: "Overhaul — Alerta vermelho (h antes)" },
-  { chave: "semaforo_amarelo_periodicas_dias", label: "Periódicas — Alerta amarelo (dias antes)" },
-  { chave: "semaforo_vermelho_periodicas_dias", label: "Periódicas — Alerta vermelho (dias antes)" },
-];
-
 const TIPOS_ATIVOS = [
   { key: "motor", label: "Motor" },
   { key: "reversor", label: "Reversor" },
@@ -51,9 +42,12 @@ export default function SettingsPage() {
   const saveIntervalos = useSaveIntervalosTipo();
   const savePeriodid = useSavePeriodicidadeTipo();
 
-  const [semaforos, setSemaforos] = useState<Record<string, string>>(() =>
-    Object.fromEntries(CHAVES_SEMAFORO.map((c) => [c.chave, ""]))
-  );
+  const [amareloHoras, setAmareloHoras] = useState("50");
+  const [vermelhoHoras, setVermelhoHoras] = useState("20");
+  const [amareloOverhaul, setAmareloOverhaul] = useState("500");
+  const [vermelhoOverhaul, setVermelhoOverhaul] = useState("200");
+  const [amareloPeriodicas, setAmareloPeriodicas] = useState("30");
+  const [vermelhoPeriodicas, setVermelhoPeriodicas] = useState("10");
 
   const [intervalos, setIntervalos] = useState<Record<string, { troca: string; overhaul: string }>>({
     motor: { troca: "", overhaul: "" },
@@ -66,14 +60,16 @@ export default function SettingsPage() {
   const [savingPeriodTipoId, setSavingPeriodTipoId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!configData || configData.length === 0) return;
-    setSemaforos((prev) => {
-      const next = { ...prev };
-      for (const c of configData) {
-        if (c.chave in next) next[c.chave] = c.valor;
-      }
-      return next;
-    });
+    if (!configData || !Array.isArray(configData)) return;
+    const config = Object.fromEntries(
+      (configData as any[]).map((r) => [r.chave, r.valor])
+    );
+    setAmareloHoras(config["semaforo_amarelo_horas"] ?? "50");
+    setVermelhoHoras(config["semaforo_vermelho_horas"] ?? "20");
+    setAmareloOverhaul(config["semaforo_amarelo_overhaul"] ?? "500");
+    setVermelhoOverhaul(config["semaforo_vermelho_overhaul"] ?? "200");
+    setAmareloPeriodicas(config["semaforo_amarelo_periodicas_dias"] ?? "30");
+    setVermelhoPeriodicas(config["semaforo_vermelho_periodicas_dias"] ?? "10");
   }, [configData]);
 
   useEffect(() => {
@@ -105,10 +101,14 @@ export default function SettingsPage() {
   }, [tiposData]);
 
   function handleSaveSemaforos() {
-    const updates = CHAVES_SEMAFORO.filter((c) => semaforos[c.chave] !== "").map((c) => ({
-      chave: c.chave,
-      valor: semaforos[c.chave],
-    }));
+    const updates = [
+      { chave: "semaforo_amarelo_horas", valor: amareloHoras },
+      { chave: "semaforo_vermelho_horas", valor: vermelhoHoras },
+      { chave: "semaforo_amarelo_overhaul", valor: amareloOverhaul },
+      { chave: "semaforo_vermelho_overhaul", valor: vermelhoOverhaul },
+      { chave: "semaforo_amarelo_periodicas_dias", valor: amareloPeriodicas },
+      { chave: "semaforo_vermelho_periodicas_dias", valor: vermelhoPeriodicas },
+    ];
     saveConfigs.mutate(updates, {
       onSuccess: () => toast.success("Limiares de semáforo salvos"),
       onError: (e: unknown) =>
@@ -179,19 +179,30 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
-            {CHAVES_SEMAFORO.map((c) => (
-              <div key={c.chave} className="space-y-1">
-                <Label className="text-xs">{c.label}</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={semaforos[c.chave] ?? ""}
-                  onChange={(e) =>
-                    setSemaforos((prev) => ({ ...prev, [c.chave]: e.target.value }))
-                  }
-                />
-              </div>
-            ))}
+            <div className="space-y-1">
+              <Label className="text-xs">Troca de óleo — Alerta amarelo (h antes)</Label>
+              <Input type="number" min={1} value={amareloHoras} onChange={(e) => setAmareloHoras(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Troca de óleo — Alerta vermelho (h antes)</Label>
+              <Input type="number" min={1} value={vermelhoHoras} onChange={(e) => setVermelhoHoras(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Overhaul — Alerta amarelo (h antes)</Label>
+              <Input type="number" min={1} value={amareloOverhaul} onChange={(e) => setAmareloOverhaul(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Overhaul — Alerta vermelho (h antes)</Label>
+              <Input type="number" min={1} value={vermelhoOverhaul} onChange={(e) => setVermelhoOverhaul(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Periódicas — Alerta amarelo (dias antes)</Label>
+              <Input type="number" min={1} value={amareloPeriodicas} onChange={(e) => setAmareloPeriodicas(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Periódicas — Alerta vermelho (dias antes)</Label>
+              <Input type="number" min={1} value={vermelhoPeriodicas} onChange={(e) => setVermelhoPeriodicas(e.target.value)} />
+            </div>
           </div>
           <Button size="sm" onClick={handleSaveSemaforos} disabled={saveConfigs.isPending}>
             {saveConfigs.isPending ? "Salvando..." : "Salvar limiares"}
