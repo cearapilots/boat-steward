@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useManutencoes, useOcorrenciasWebpilot, OcorrenciaWebpilot } from "@/hooks/useFleetData";
+import { useManutencoes, useOcorrenciasWebpilot } from "@/hooks/useFleetData";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import { HistoricoDetalheModal } from "@/components/HistoricoDetalheModal";
 
 const PAGE_SIZE = 50;
@@ -137,7 +136,7 @@ export default function HistoryPage() {
                         const hEquip = extras.horimetro_equipamento;
                         return (
                           <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setDetalhe({ mode: "historico", record: r })}>
-                            <TableCell>{r.data_evento ? new Date(r.data_evento).toLocaleDateString("pt-BR") : "—"}</TableCell>
+                            <TableCell>{r.data_evento ? r.data_evento.slice(0, 10).split("-").reverse().join("/") : "—"}</TableCell>
                             <TableCell className="font-medium">{r.lancha?.nome ?? "—"}</TableCell>
                             <TableCell>{r.ativo?.posicao ?? "—"}</TableCell>
                             <TableCell>{r.ativo?.nome ?? "—"}</TableCell>
