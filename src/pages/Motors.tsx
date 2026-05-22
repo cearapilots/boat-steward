@@ -88,6 +88,12 @@ export default function Motors() {
 
   const boatLabel = (p: any) => p?.lancha?.nome ?? "Reserva";
 
+  const fmtDate = (iso: string | null): string => {
+    if (!iso) return "—";
+    const [ano, mes, dia] = iso.slice(0, 10).split("-");
+    return `${dia}/${mes}/${ano}`;
+  };
+
   const daysBetween = (start?: string | null, end?: string | null) => {
     if (!start) return null;
     const s = new Date(start).getTime();
@@ -155,7 +161,7 @@ export default function Motors() {
                           <TableCell className="font-medium">{a.nome}</TableCell>
                           <TableCell>{p?.posicao ?? a.posicao ?? "—"}</TableCell>
                           <TableCell><span className={cn("font-medium", boatTextClass[boat])}>{boat}</span></TableCell>
-                          <TableCell>{p?.data_instalacao ? new Date(p.data_instalacao).toLocaleDateString("pt-BR") : "—"}</TableCell>
+                          <TableCell>{fmtDate(p?.data_instalacao ?? null)}</TableCell>
                           <TableCell className="text-right font-mono">{dias != null ? `${dias.toLocaleString("pt-BR")}d` : "—"}</TableCell>
                           <TableCell className="text-right font-mono">{Math.round(horas).toLocaleString("pt-BR")}h</TableCell>
                         </TableRow>
@@ -266,8 +272,8 @@ export default function Motors() {
                                   const horasFmt = Math.round(segHoras(p)).toLocaleString("pt-BR");
                                   const bg = segmentColor(boat, p.posicao);
                                   const tooltip = reserva
-                                    ? `Reserva: ${new Date(p.data_instalacao).toLocaleDateString("pt-BR")} → ${p.data_remocao ? new Date(p.data_remocao).toLocaleDateString("pt-BR") : "atual"} — ${dias} dias`
-                                    : `${boat} (${p.posicao ?? "—"}): ${new Date(p.data_instalacao).toLocaleDateString("pt-BR")} → ${p.data_remocao ? new Date(p.data_remocao).toLocaleDateString("pt-BR") : "atual"} — ${horasFmt}h / ${dias}d`;
+                                    ? `Reserva: ${fmtDate(p.data_instalacao)} → ${p.data_remocao ? fmtDate(p.data_remocao) : "atual"} — ${dias} dias`
+                                    : `${boat} (${p.posicao ?? "—"}): ${fmtDate(p.data_instalacao)} → ${p.data_remocao ? fmtDate(p.data_remocao) : "atual"} — ${horasFmt}h / ${dias}d`;
                                   const showLabel = width > 6;
                                   return (
                                     <Tooltip key={p.id}>
@@ -332,8 +338,8 @@ export default function Motors() {
                           <TableCell className="font-medium">{p.ativo?.nome}</TableCell>
                           <TableCell><span className={cn("font-medium", boatTextClass[boat])}>{boat}</span></TableCell>
                           <TableCell>{p.posicao ?? "—"}</TableCell>
-                          <TableCell>{new Date(p.data_instalacao).toLocaleDateString("pt-BR")}</TableCell>
-                          <TableCell>{p.data_remocao ? new Date(p.data_remocao).toLocaleDateString("pt-BR") : "—"}</TableCell>
+                          <TableCell>{fmtDate(p.data_instalacao)}</TableCell>
+                          <TableCell>{fmtDate(p.data_remocao)}</TableCell>
                           <TableCell className="text-right font-mono">{dias != null ? `${dias.toLocaleString("pt-BR")}d` : "—"}</TableCell>
                           <TableCell className="text-right font-mono">{Math.round(horas).toLocaleString("pt-BR")}h</TableCell>
                         </TableRow>
