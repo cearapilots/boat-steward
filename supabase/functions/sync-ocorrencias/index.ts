@@ -84,26 +84,41 @@ Deno.serve(async (req) => {
       const efeito = efeitosValidos.includes(oc.DS_EFEITO) ? oc.DS_EFEITO : null;
 
       // ── INSERT OR UPDATE em ocorrencias_webpilot ─────────────────────────
-      const { error: errUpsert } = await supabase
+      // Tenta INSERT primeiro; em conflito (cd_ocorrencia já existe),
+      // atualiza apenas data_fim e duracao_horas — preserva descricao editada manualmente.
+      const { error: errInsert } = await supabase
         .from("ocorrencias_webpilot")
-        .upsert(
-          {
-            cd_ocorrencia: cdOcorrencia,
-            data_inicio: oc.DH_ABERTURA,
-            data_fim: oc.DH_FECHAMENTO ?? null,
-            duracao_horas: oc.NR_HORAS ?? null,
-            tipo_ocorrencia: oc.DS_TIPO_OCORRENCIA,
-            descricao: oc.DS_OCORRENCIA,
-            efeito,
-            lancha_id: lancha.id,
-            origem: "webpilot_sync",
-          },
-          { onConflict: "cd_ocorrencia", ignoreDuplicates: false },
-        );
+        .insert({
+          cd_ocorrencia: cdOcorrencia,
+          data_inicio: oc.DH_ABERTURA,
+          data_fim: oc.DH_FECHAMENTO ?? null,
+          duracao_horas: oc.NR_HORAS ?? null,
+          tipo_ocorrencia: oc.DS_TIPO_OCORRENCIA,
+          descricao: oc.DS_OCORRENCIA,
+          efeito,
+          lancha_id: lancha.id,
+          origem: "webpilot_sync",
+        });
 
-      if (errUpsert) {
-        console.error(`Erro upsert cd_ocorrencia ${oc.CD_OCORRENCIA}:`, errUpsert);
-        continue;
+      if (errInsert) {
+        if (errInsert.code === "23505") {
+          // Registro já existe — atualiza apenas campos que o WebPilot pode mudar
+          const { error: errUpdate } = await supabase
+            .from("ocorrencias_webpilot")
+            .update({
+              data_fim: oc.DH_FECHAMENTO ?? null,
+              duracao_horas: oc.NR_HORAS ?? null,
+              efeito,
+            })
+            .eq("cd_ocorrencia", cdOcorrencia);
+          if (errUpdate) {
+            console.error(`Erro update cd_ocorrencia ${oc.CD_OCORRENCIA}:`, errUpdate);
+            continue;
+          }
+        } else {
+          console.error(`Erro insert cd_ocorrencia ${oc.CD_OCORRENCIA}:`, errInsert);
+          continue;
+        }
       }
 
       ocorrenciasImportadas++;
