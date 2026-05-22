@@ -197,6 +197,8 @@ export function useAtivos() {
 export function usePosicoes() {
   return useQuery({
     queryKey: ["posicoes"],
+    staleTime: 0,
+    refetchOnMount: true,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("posicoes")
