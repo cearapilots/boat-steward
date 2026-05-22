@@ -1,8 +1,9 @@
 import { ReactNode, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Wrench, History, Settings, Menu, X, Calendar } from "lucide-react";
+import { LayoutDashboard, Wrench, History, Settings, Menu, X, Calendar, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/components/AuthProvider";
 import cemapiLogo from "@/assets/cemapi-logo.png";
 
 const navItems = [
@@ -15,7 +16,14 @@ const navItems = [
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  async function handleSignOut() {
+    await signOut();
+    navigate("/login");
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -45,6 +53,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
+
+        {/* User / Logout */}
+        <div className="px-3 py-4 border-t border-sidebar-border">
+          {user?.email && (
+            <p className="text-xs text-sidebar-foreground/50 px-3 mb-2 truncate" title={user.email}>
+              {user.email}
+            </p>
+          )}
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </button>
+        </div>
       </aside>
 
       {/* Mobile header */}
@@ -75,6 +99,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 {label}
               </Link>
             ))}
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+              Sair
+            </button>
           </nav>
         )}
 
