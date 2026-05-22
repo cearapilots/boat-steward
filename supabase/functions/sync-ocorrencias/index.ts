@@ -136,34 +136,132 @@ Deno.serve(async (req) => {
         }
       }
 
-      if (!nomePeriodicaMapeado) continue;
+      if (nomePeriodicaMapeado) {
+        const tipoId = tipoIdByNome.get(nomePeriodicaMapeado);
+        if (tipoId) {
+          const { data: existePeriodicaOc } = await supabase
+            .from("manutencoes_periodicas")
+            .select("id")
+            .eq("lancha_id", lancha.id)
+            .eq("tipo_id", tipoId)
+            .eq("data_realizada", oc.DH_ABERTURA.slice(0, 10))
+            .neq("origem", "manual")
+            .maybeSingle();
 
-      const tipoId = tipoIdByNome.get(nomePeriodicaMapeado);
-      if (!tipoId) continue;
+          if (!existePeriodicaOc) {
+            const { error: errPeriodica } = await supabase
+              .from("manutencoes_periodicas")
+              .insert({
+                lancha_id: lancha.id,
+                tipo_id: tipoId,
+                data_realizada: oc.DH_ABERTURA.slice(0, 10),
+                observacao: oc.DS_OCORRENCIA,
+                origem: "webpilot_sync",
+              });
+            if (!errPeriodica) periodicasRegistradas++;
+          }
+        }
+      }
 
-      // Verificar se já existe uma periódica importada para essa cd_ocorrencia
-      const { data: existePeriodicaOc } = await supabase
-        .from("manutencoes_periodicas")
-        .select("id")
-        .eq("lancha_id", lancha.id)
-        .eq("tipo_id", tipoId)
-        .eq("data_realizada", oc.DH_ABERTURA.slice(0, 10))
-        .neq("origem", "manual")
-        .maybeSingle();
+      // ── Verificar se é troca de óleo em ocorrência preventiva ────────────
+      // Cobre casos onde a troca de óleo aparece como ocorrência operacional
+      // e não foi capturada pela API de trocas (sync-trocas-oleo).
+      const isPreventiva = oc.DS_TIPO_OCORRENCIA.toLowerCase().includes("preventiva");
+      const descLower = oc.DS_OCORRENCIA.toLowerCase();
+      const isTrocaOleo =
+        isPreventiva &&
+        (descLower.includes("troca de óleo") ||
+          descLower.includes("troca de oleo") ||
+          descLower.includes("troca óleo") ||
+          descLower.includes("troca oleo"));
 
-      if (existePeriodicaOc) continue;
+      if (isTrocaOleo) {
+        const tipoOcStr = oc.DS_TIPO_OCORRENCIA.toLowerCase();
+        let tipoAtivoOleo: string | null = null;
+        const posicoesAlvoOleo: string[] = [];
 
-      const { error: errPeriodica } = await supabase
-        .from("manutencoes_periodicas")
-        .insert({
-          lancha_id: lancha.id,
-          tipo_id: tipoId,
-          data_realizada: oc.DH_ABERTURA.slice(0, 10),
-          observacao: oc.DS_OCORRENCIA,
-          origem: "webpilot_sync",
-        });
+        if (tipoOcStr.includes("motor")) {
+          tipoAtivoOleo = "motor";
+          posicoesAlvoOleo.push("BB", "BE");
+        } else if (tipoOcStr.includes("gerador")) {
+          tipoAtivoOleo = "gerador";
+        } else if (tipoOcStr.includes("reversor")) {
+          tipoAtivoOleo = "reversor";
+          posicoesAlvoOleo.push("BB", "BE");
+        }
 
-      if (!errPeriodica) periodicasRegistradas++;
+        if (tipoAtivoOleo) {
+          const dataOcorrencia = oc.DH_ABERTURA.slice(0, 10);
+          const nextDayDate = new Date(dataOcorrencia + "T00:00:00");
+          nextDayDate.setDate(nextDayDate.getDate() + 1);
+          const nextDay = nextDayDate.toISOString().slice(0, 10);
+
+          const { data: posicoesOleo } = await supabase
+            .from("posicoes")
+            .select("ativo_id, posicao, ativos(id, nome, tipo)")
+            .eq("lancha_id", lancha.id)
+            .lte("data_instalacao", dataOcorrencia)
+            .or(`data_remocao.is.null,data_remocao.gt.${dataOcorrencia}`);
+
+          const alvosOleo = ((posicoesOleo ?? []) as any[]).filter((p: any) => {
+            if (p.ativos?.tipo !== tipoAtivoOleo) return false;
+            if (posicoesAlvoOleo.length > 0 && !posicoesAlvoOleo.includes(p.posicao ?? "")) return false;
+            return true;
+          });
+
+          for (const pos of alvosOleo) {
+            // Dedup: verifica qualquer troca de óleo do mesmo ativo no mesmo dia
+            // (range para cobrir registros com e sem componente de hora)
+            const { data: existeMutOleo } = await supabase
+              .from("manutencoes")
+              .select("id")
+              .eq("ativo_id", pos.ativo_id)
+              .gte("data_manutencao", dataOcorrencia)
+              .lt("data_manutencao", nextDay)
+              .eq("tipo", "troca_oleo")
+              .neq("origem", "manual")
+              .maybeSingle();
+
+            if (existeMutOleo) continue;
+
+            const { error: errMutOleo } = await supabase.from("manutencoes").insert({
+              ativo_id: pos.ativo_id,
+              lancha_id: lancha.id,
+              tipo: "troca_oleo",
+              data_manutencao: dataOcorrencia,
+              horimetro_lancha: null,
+              horimetro_equipamento: null,
+              observacao: oc.DS_OCORRENCIA,
+              origem: "webpilot_sync",
+            });
+
+            if (!errMutOleo) {
+              const { data: existeHistOleo } = await supabase
+                .from("historico")
+                .select("id")
+                .eq("ativo_id", pos.ativo_id)
+                .eq("data_evento", dataOcorrencia)
+                .eq("tipo_evento", "troca_oleo")
+                .maybeSingle();
+
+              if (!existeHistOleo) {
+                await supabase.from("historico").insert({
+                  tipo_evento: "troca_oleo",
+                  ativo_id: pos.ativo_id,
+                  lancha_id: lancha.id,
+                  data_evento: dataOcorrencia,
+                  descricao: oc.DS_OCORRENCIA,
+                  dados_extras: {
+                    cd_ocorrencia: cdOcorrencia,
+                    ds_tipo_ocorrencia: oc.DS_TIPO_OCORRENCIA,
+                  },
+                  origem: "webpilot_sync",
+                });
+              }
+            }
+          }
+        }
+      }
     }
 
     // ── 5. Gravar no sync_log ────────────────────────────────────────────────
