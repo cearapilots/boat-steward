@@ -82,12 +82,14 @@ Deno.serve(async (req) => {
       const observacao = `Troca de óleo e filtro dos ${troca.DS_EQUIPAMENTO}`;
       const horimetroLancha = isGerador ? troca.DC_HORIMETRO_GERADOR : troca.DC_HORIMETRO_BB;
 
-      // Buscar posições abertas da lancha (ativos instalados no momento)
+      // Buscar qual ativo estava instalado na lancha NA DATA do abastecimento
+      const dataAbastecimento = troca.DH_ABASTECIMENTO.split("T")[0];
       const { data: posicoes, error: errPos } = await supabase
         .from("posicoes")
         .select("ativo_id, posicao, ativos(id, nome, tipo)")
         .eq("lancha_id", lancha.id)
-        .is("data_remocao", null);
+        .lte("data_instalacao", dataAbastecimento)
+        .or(`data_remocao.is.null,data_remocao.gt.${dataAbastecimento}`);
 
       if (errPos || !posicoes) continue;
 
