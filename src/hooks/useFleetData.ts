@@ -512,3 +512,183 @@ export function useCreateMotorPosition() {
     },
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Configurações (limiares de semáforo)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type Configuracao = {
+  id: string;
+  chave: string;
+  valor: string;
+  descricao: string | null;
+  updated_at: string | null;
+};
+
+export function useConfiguracoes() {
+  return useQuery({
+    queryKey: ["configuracoes"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("configuracoes")
+        .select("id, chave, valor, descricao, updated_at");
+      if (error) throw error;
+      return (data ?? []) as Configuracao[];
+    },
+  });
+}
+
+export function useSaveConfiguracoes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (updates: { chave: string; valor: string }[]) => {
+      for (const u of updates) {
+        const { error } = await (supabase as any)
+          .from("configuracoes")
+          .update({ valor: u.valor, updated_at: new Date().toISOString() })
+          .eq("chave", u.chave);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["configuracoes"] });
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Intervalos de manutenção por tipo de ativo
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AtivoIntervalo = {
+  id: string;
+  tipo: string;
+  nome: string;
+  intervalo_manutencao: number | null;
+  intervalo_overhaul: number | null;
+};
+
+export function useAtivosIntervalos() {
+  return useQuery({
+    queryKey: ["ativos_intervalos"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("ativos")
+        .select("id, tipo, nome, intervalo_manutencao, intervalo_overhaul")
+        .eq("ativo", true)
+        .order("nome");
+      if (error) throw error;
+      return (data ?? []) as AtivoIntervalo[];
+    },
+  });
+}
+
+export function useSaveIntervalosTipo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      tipo: string;
+      intervalo_manutencao: number;
+      intervalo_overhaul: number | null;
+    }) => {
+      const updates: Record<string, number | null> = {
+        intervalo_manutencao: payload.intervalo_manutencao,
+      };
+      if (payload.intervalo_overhaul !== null) {
+        updates.intervalo_overhaul = payload.intervalo_overhaul;
+      }
+      const { error } = await (supabase as any)
+        .from("ativos")
+        .update(updates)
+        .eq("tipo", payload.tipo)
+        .eq("ativo", true);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ativos"] });
+      qc.invalidateQueries({ queryKey: ["ativos_intervalos"] });
+      qc.invalidateQueries({ queryKey: ["situacao_atual"] });
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tipos de manutenções periódicas
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ManutencaoTipo = {
+  id: string;
+  nome: string;
+  periodicidade_dias: number;
+};
+
+export function useManutencoesTipos() {
+  return useQuery({
+    queryKey: ["manutencoes_periodicas_tipos"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("manutencoes_periodicas_tipos")
+        .select("id, nome, periodicidade_dias")
+        .order("nome");
+      if (error) throw error;
+      return (data ?? []) as ManutencaoTipo[];
+    },
+  });
+}
+
+export function useSavePeriodicidadeTipo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { id: string; periodicidade_dias: number }) => {
+      const { error } = await (supabase as any)
+        .from("manutencoes_periodicas_tipos")
+        .update({ periodicidade_dias: payload.periodicidade_dias })
+        .eq("id", payload.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["manutencoes_periodicas_tipos"] });
+      qc.invalidateQueries({ queryKey: ["manutencoes_periodicas"] });
+      qc.invalidateQueries({ queryKey: ["calendario_manutencoes"] });
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Informações gerais do sistema (seção Sobre)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SistemaInfo = {
+  ultimoSync: string | null;
+  totalAtivos: number;
+  totalHistorico: number;
+};
+
+export function useSistemaInfo() {
+  return useQuery({
+    queryKey: ["sistema_info"],
+    queryFn: async (): Promise<SistemaInfo> => {
+      const [syncResult, ativosResult, historicoResult] = await Promise.all([
+        (supabase as any)
+          .from("sync_log")
+          .select("created_at")
+          .eq("status", "sucesso")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("ativos")
+          .select("*", { count: "exact", head: true })
+          .eq("ativo", true),
+        supabase
+          .from("historico")
+          .select("*", { count: "exact", head: true }),
+      ]);
+      return {
+        ultimoSync: (syncResult.data as any)?.created_at ?? null,
+        totalAtivos: ativosResult.count ?? 0,
+        totalHistorico: historicoResult.count ?? 0,
+      };
+    },
+  });
+}
