@@ -60,7 +60,9 @@ export default function Motors() {
 
   const currentByAtivo = useMemo(() => {
     const map = new Map<string, any>();
-    motorPositions.filter((p: any) => !p.data_remocao).forEach((p: any) => map.set(p.ativo_id, p));
+    motorPositions
+      .filter((p: any) => !p.data_remocao)
+      .forEach((p: any) => { if (!map.has(p.ativo_id)) map.set(p.ativo_id, p); });
     return map;
   }, [motorPositions]);
 
@@ -68,7 +70,7 @@ export default function Motors() {
     const map = new Map<string, any>();
     motorPositions
       .filter((p: any) => !p.data_remocao && p.lancha_id && p.posicao)
-      .forEach((p: any) => map.set(`${p.lancha_id}|${p.posicao}`, p));
+      .forEach((p: any) => { const k = `${p.lancha_id}|${p.posicao}`; if (!map.has(k)) map.set(k, p); });
     return map;
   }, [motorPositions]);
 
