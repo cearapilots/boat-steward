@@ -20,12 +20,13 @@ const typeLabels: Record<string, string> = {
   outro: "Outro",
 };
 
-function fmtDateTime(iso: string | null) {
+function fmtDateTime(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+  const normalized = iso.replace(" ", "T");
+  const [datePart, timePart] = normalized.split("T");
+  const [ano, mes, dia] = datePart.split("-");
+  if (!timePart) return `${dia}/${mes}/${ano}`;
+  return `${dia}/${mes}/${ano} ${timePart.slice(0, 5)}`;
 }
 
 const inputClass =
@@ -94,7 +95,8 @@ export function HistoricoDetalheModal({ open, onOpenChange, mode, record }: Prop
       toast.success("Registro atualizado com sucesso");
       onOpenChange(false);
     } catch (err: any) {
-      toast.error(`Erro ao salvar: ${err?.message ?? "tente novamente"}`);
+      console.error("[HistoricoDetalheModal] erro ao salvar:", err);
+      toast.error(`Erro ao salvar: ${err?.message ?? String(err)}`);
     } finally {
       setSaving(false);
     }
