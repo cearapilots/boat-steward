@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pencil } from "lucide-react";
 import { HistoricoDetalheModal } from "@/components/HistoricoDetalheModal";
 
 const PAGE_SIZE = 50;
@@ -127,6 +128,7 @@ export default function HistoryPage() {
                         <TableHead>Tipo</TableHead>
                         <TableHead className="text-right">Horímetro</TableHead>
                         <TableHead>Observação</TableHead>
+                        <TableHead className="w-8" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -135,7 +137,7 @@ export default function HistoryPage() {
                         const hLancha = extras.horimetro_lancha ?? extras.horimetro;
                         const hEquip = extras.horimetro_equipamento;
                         return (
-                          <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setDetalhe({ mode: "historico", record: r })}>
+                          <TableRow key={r.id}>
                             <TableCell>{r.data_evento ? r.data_evento.slice(0, 10).split("-").reverse().join("/") : "—"}</TableCell>
                             <TableCell className="font-medium">{r.lancha?.nome ?? "—"}</TableCell>
                             <TableCell>{r.ativo?.posicao ?? "—"}</TableCell>
@@ -149,12 +151,18 @@ export default function HistoryPage() {
                               {hLancha == null && hEquip == null ? "—" : ""}
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">{r.descricao ?? "—"}</TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver / editar"
+                                onClick={() => setDetalhe({ mode: "historico", record: r })}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         );
                       })}
                       {(data ?? []).length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center text-muted-foreground">
+                          <TableCell colSpan={8} className="text-center text-muted-foreground">
                             Nenhuma manutenção registrada
                           </TableCell>
                         </TableRow>
@@ -279,6 +287,7 @@ export default function HistoryPage() {
                           <TableHead>Tipo</TableHead>
                           <TableHead>Descrição</TableHead>
                           <TableHead>Efeito</TableHead>
+                          <TableHead className="w-8" />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -287,7 +296,7 @@ export default function HistoryPage() {
                           const descFull = o.descricao ?? "";
                           const descTrunc = descFull.length > 80 ? descFull.slice(0, 80) + "…" : descFull;
                           return (
-                            <TableRow key={o.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setDetalhe({ mode: "ocorrencia", record: o })}>
+                            <TableRow key={o.id}>
                               <TableCell className="font-mono text-xs whitespace-nowrap">
                                 {fmtDateTime(o.data_inicio)}
                               </TableCell>
@@ -318,12 +327,18 @@ export default function HistoryPage() {
                               <TableCell>
                                 <EfeitoBadge efeito={o.efeito} />
                               </TableCell>
+                              <TableCell>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver / editar"
+                                  onClick={() => setDetalhe({ mode: "ocorrencia", record: o })}>
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              </TableCell>
                             </TableRow>
                           );
                         })}
                         {paginated.length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                            <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                               Nenhuma ocorrência encontrada para os filtros selecionados
                             </TableCell>
                           </TableRow>
