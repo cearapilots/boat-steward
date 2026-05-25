@@ -155,8 +155,8 @@ export default function Motors() {
                       <TableHead>Desde</TableHead>
                       <TableHead className="text-right">
                         <Tooltip>
-                          <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">Horas na posição</TooltipTrigger>
-                          <TooltipContent>Horas acumuladas desde a instalação atual</TooltipContent>
+                          <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">Horas desde overhaul</TooltipTrigger>
+                          <TooltipContent>Horas acumuladas desde o último overhaul do equipamento (Horímetro atual - Horímetro do último overhaul)</TooltipContent>
                         </Tooltip>
                       </TableHead>
                       <TableHead className="text-right">
@@ -173,11 +173,14 @@ export default function Motors() {
                       const boat = p ? boatLabel(p) : (a.lancha?.nome ?? "Reserva");
                       const emReserva = !p || isReserva(p);
 
-                      const horasNaPosicao = emReserva ? null : segHoras(p);
+                      const situacao = situacaoByAtivo.get(a.id);
+                      const horasDesdeOverhaul =
+                        situacao && situacao.horimetro_overhaul != null
+                          ? situacao.horas_equipamento_calculadas - situacao.horimetro_overhaul
+                          : null;
 
-                      const horasTotaisLancha = situacaoByAtivo.get(a.id)?.horas_equipamento_calculadas;
-                      const horasTotaisReserva = p?.horimetro_equipamento_instalacao ?? (a as any).horimetro_equipamento;
-                      const horasTotais = emReserva ? horasTotaisReserva : horasTotaisLancha;
+                      const horasTotais = situacao?.horas_equipamento_calculadas
+                        ?? (emReserva ? (p?.horimetro_equipamento_instalacao ?? (a as any).horimetro_equipamento) : null);
 
                       const fmtH = (v: number | null | undefined) =>
                         v == null || v === 0 ? "—" : `${Math.round(Number(v)).toLocaleString("pt-BR")}h`;
@@ -188,7 +191,7 @@ export default function Motors() {
                           <TableCell>{p?.posicao ?? a.posicao ?? "—"}</TableCell>
                           <TableCell><span className={cn("font-medium", boatTextClass[boat])}>{boat}</span></TableCell>
                           <TableCell>{fmtDate(p?.data_instalacao ?? null)}</TableCell>
-                          <TableCell className="text-right">{fmtH(horasNaPosicao)}</TableCell>
+                          <TableCell className="text-right">{fmtH(horasDesdeOverhaul)}</TableCell>
                           <TableCell className="text-right font-mono">{fmtH(horasTotais)}</TableCell>
                         </TableRow>
                       );
