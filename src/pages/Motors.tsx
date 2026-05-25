@@ -123,6 +123,15 @@ export default function Motors() {
     return Math.max(Number(lancha.horimetro ?? 0) - Number(p.horimetro_lancha_instalacao ?? 0), 0);
   };
 
+  const horasOperadasByAtivo = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of motorPositions) {
+      if (isReserva(p)) continue;
+      m.set(p.ativo_id, (m.get(p.ativo_id) ?? 0) + segHoras(p));
+    }
+    return m;
+  }, [motorPositions, lanchaById]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -161,8 +170,8 @@ export default function Motors() {
                       </TableHead>
                       <TableHead className="text-right">
                         <Tooltip>
-                          <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">Horas totais</TooltipTrigger>
-                          <TooltipContent>Horímetro total do equipamento desde o início da operação</TooltipContent>
+                          <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">Horas operadas</TooltipTrigger>
+                          <TooltipContent>Total de horas operadas em todas as lanchas (excluindo períodos em reserva/retífica)</TooltipContent>
                         </Tooltip>
                       </TableHead>
                     </TableRow>
@@ -171,7 +180,6 @@ export default function Motors() {
                     {motorAtivos.map((a: any) => {
                       const p = currentByAtivo.get(a.id);
                       const boat = p ? boatLabel(p) : (a.lancha?.nome ?? "Reserva");
-                      const emReserva = !p || isReserva(p);
 
                       const situacao = situacaoByAtivo.get(a.id);
                       const horasDesdeOverhaul =
@@ -179,8 +187,7 @@ export default function Motors() {
                           ? situacao.horas_equipamento_calculadas - situacao.horimetro_overhaul
                           : null;
 
-                      const horasTotais = situacao?.horas_equipamento_calculadas
-                        ?? (emReserva ? (p?.horimetro_equipamento_instalacao ?? (a as any).horimetro_equipamento) : null);
+                      const horasOperadas = horasOperadasByAtivo.get(a.id) ?? null;
 
                       const fmtH = (v: number | null | undefined) =>
                         v == null || v === 0 ? "—" : `${Math.round(Number(v)).toLocaleString("pt-BR")}h`;
@@ -192,7 +199,7 @@ export default function Motors() {
                           <TableCell><span className={cn("font-medium", boatTextClass[boat])}>{boat}</span></TableCell>
                           <TableCell>{fmtDate(p?.data_instalacao ?? null)}</TableCell>
                           <TableCell className="text-right">{fmtH(horasDesdeOverhaul)}</TableCell>
-                          <TableCell className="text-right font-mono">{fmtH(horasTotais)}</TableCell>
+                          <TableCell className="text-right font-mono">{fmtH(horasOperadas)}</TableCell>
                         </TableRow>
                       );
                     })}
