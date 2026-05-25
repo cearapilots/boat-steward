@@ -295,14 +295,13 @@ export default function Motors() {
                                   const width = Math.max(pct(e) - left, 0.3);
                                   const boat = boatLabel(p);
                                   const reserva = isReserva(p);
-                                  const dias = reserva
-                                    ? (daysBetween(p.data_instalacao, p.data_remocao) ?? 0)
-                                    : Math.round(segHoras(p) / 24);
+                                  const dias = daysBetween(p.data_instalacao, p.data_remocao) ?? 0;
                                   const horasFmt = Math.round(segHoras(p)).toLocaleString("pt-BR");
                                   const bg = segmentColor(boat, p.posicao);
+                                  const fimLabel = p.data_remocao ? fmtDate(p.data_remocao) : "atual";
                                   const tooltip = reserva
-                                    ? `Reserva: ${fmtDate(p.data_instalacao)} → ${p.data_remocao ? fmtDate(p.data_remocao) : "atual"} — ${dias} dias`
-                                    : `${boat} (${p.posicao ?? "—"}): ${fmtDate(p.data_instalacao)} → ${p.data_remocao ? fmtDate(p.data_remocao) : "atual"} — ${horasFmt}h / ${dias}d`;
+                                    ? `Reserva: ${fmtDate(p.data_instalacao)} → ${fimLabel} — ${dias}d`
+                                    : `${boat} (${p.posicao ?? "—"}): ${fmtDate(p.data_instalacao)} → ${fimLabel} — ${horasFmt}h / ${dias}d`;
                                   const showLabel = width > 6;
                                   return (
                                     <Tooltip key={p.id}>
