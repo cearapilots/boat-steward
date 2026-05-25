@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { usePosicoes, useAtivos, useLanchas } from "@/hooks/useFleetData";
+import { usePosicoes, useAtivos, useLanchas, useSituacaoAtual } from "@/hooks/useFleetData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -46,6 +46,7 @@ export default function Motors() {
   const { data: posicoes, isLoading } = usePosicoes();
   const { data: ativos, isLoading: loadingAtivos } = useAtivos();
   const { data: lanchas } = useLanchas();
+  const { data: situacaoAtual } = useSituacaoAtual();
   const [filterMotor, setFilterMotor] = useState("all");
   const [swapOpen, setSwapOpen] = useState(false);
 
@@ -57,6 +58,12 @@ export default function Motors() {
     (lanchas ?? []).forEach((l: any) => m.set(l.id, l));
     return m;
   }, [lanchas]);
+
+  const situacaoByAtivo = useMemo(() => {
+    const m = new Map<string, any>();
+    (situacaoAtual ?? []).forEach((s: any) => m.set(s.ativo_id, s));
+    return m;
+  }, [situacaoAtual]);
 
   const currentByAtivo = useMemo(() => {
     const map = new Map<string, any>();
@@ -146,24 +153,43 @@ export default function Motors() {
                       <TableHead>Posição</TableHead>
                       <TableHead>Lancha</TableHead>
                       <TableHead>Desde</TableHead>
-                      <TableHead className="text-right">Dias</TableHead>
-                      <TableHead className="text-right">Horas operadas</TableHead>
+                      <TableHead className="text-right">
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">Horas na posição</TooltipTrigger>
+                          <TooltipContent>Horas acumuladas desde a instalação atual</TooltipContent>
+                        </Tooltip>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">Horas totais</TooltipTrigger>
+                          <TooltipContent>Horímetro total do equipamento desde o início da operação</TooltipContent>
+                        </Tooltip>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {motorAtivos.map((a: any) => {
                       const p = currentByAtivo.get(a.id);
                       const boat = p ? boatLabel(p) : (a.lancha?.nome ?? "Reserva");
-                      const horas = p ? segHoras(p) : 0;
-                      const dias = p ? daysBetween(p.data_instalacao, null) : null;
+                      const emReserva = !p || isReserva(p);
+
+                      const horasNaPosicao = emReserva ? null : segHoras(p);
+
+                      const horasTotaisLancha = situacaoByAtivo.get(a.id)?.horas_equipamento_calculadas;
+                      const horasTotaisReserva = p?.horimetro_equipamento_instalacao ?? (a as any).horimetro_equipamento;
+                      const horasTotais = emReserva ? horasTotaisReserva : horasTotaisLancha;
+
+                      const fmtH = (v: number | null | undefined) =>
+                        v == null || v === 0 ? "—" : `${Math.round(Number(v)).toLocaleString("pt-BR")}h`;
+
                       return (
                         <TableRow key={a.id}>
                           <TableCell className="font-medium">{a.nome}</TableCell>
                           <TableCell>{p?.posicao ?? a.posicao ?? "—"}</TableCell>
                           <TableCell><span className={cn("font-medium", boatTextClass[boat])}>{boat}</span></TableCell>
                           <TableCell>{fmtDate(p?.data_instalacao ?? null)}</TableCell>
-                          <TableCell className="text-right font-mono">{dias != null ? `${dias.toLocaleString("pt-BR")}d` : "—"}</TableCell>
-                          <TableCell className="text-right font-mono">{Math.round(horas).toLocaleString("pt-BR")}h</TableCell>
+                          <TableCell className="text-right">{fmtH(horasNaPosicao)}</TableCell>
+                          <TableCell className="text-right font-mono">{fmtH(horasTotais)}</TableCell>
                         </TableRow>
                       );
                     })}
