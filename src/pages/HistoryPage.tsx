@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Pencil } from "lucide-react";
 import { HistoricoDetalheModal } from "@/components/HistoricoDetalheModal";
@@ -150,7 +150,20 @@ export default function HistoryPage() {
                               {hEquip != null ? `${Number(hEquip).toLocaleString("pt-BR")}h (equip)` : ""}
                               {hLancha == null && hEquip == null ? "—" : ""}
                             </TableCell>
-                            <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">{r.descricao ?? "—"}</TableCell>
+                            <TableCell className="text-sm max-w-[200px]">
+                              {(r.descricao ?? "").length > 50 ? (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help text-muted-foreground">{r.descricao.slice(0, 50) + "…"}</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-sm whitespace-pre-wrap">{r.descricao}</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <span className="text-muted-foreground">{r.descricao ?? "—"}</span>
+                              )}
+                            </TableCell>
                             <TableCell>
                               <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver / editar"
                                 onClick={() => setDetalhe({ mode: "historico", record: r })}>
@@ -294,7 +307,7 @@ export default function HistoryPage() {
                         {paginated.map((o) => {
                           const lanchaNome = (o.lanchas as any)?.nome ?? "—";
                           const descFull = o.descricao ?? "";
-                          const descTrunc = descFull.length > 80 ? descFull.slice(0, 80) + "…" : descFull;
+                          const descTrunc = descFull.length > 60 ? descFull.slice(0, 60) + "…" : descFull;
                           return (
                             <TableRow key={o.id}>
                               <TableCell className="font-mono text-xs whitespace-nowrap">
@@ -313,13 +326,15 @@ export default function HistoryPage() {
                               </TableCell>
                               <TableCell className="text-sm">{o.tipo_ocorrencia ?? "—"}</TableCell>
                               <TableCell className="text-sm max-w-[260px]">
-                                {descFull.length > 80 ? (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="cursor-help text-muted-foreground">{descTrunc}</span>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="max-w-sm whitespace-pre-wrap">{descFull}</TooltipContent>
-                                  </Tooltip>
+                                {descFull.length > 60 ? (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="cursor-help text-muted-foreground">{descTrunc}</span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-sm whitespace-pre-wrap">{descFull}</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
                                 ) : (
                                   <span className="text-muted-foreground">{descFull || "—"}</span>
                                 )}
