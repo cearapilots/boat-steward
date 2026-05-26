@@ -158,7 +158,19 @@ Deno.serve(async (req) => {
                 observacao: oc.DS_OCORRENCIA,
                 origem: "webpilot_sync",
               });
-            if (!errPeriodica) periodicasRegistradas++;
+            if (errPeriodica) {
+              if (errPeriodica.code === "23505") {
+                console.log(`Periódica já existe (manual): ${nomePeriodicaMapeado} - ${lancha.nome} - ${oc.DH_ABERTURA.slice(0, 10)}`);
+              } else {
+                console.error(`Erro ao inserir periódica: ${errPeriodica.message}`, {
+                  tipo: nomePeriodicaMapeado,
+                  lancha: lancha.nome,
+                  data: oc.DH_ABERTURA.slice(0, 10),
+                });
+              }
+            } else {
+              periodicasRegistradas++;
+            }
           }
         }
       }
