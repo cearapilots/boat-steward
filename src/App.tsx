@@ -13,6 +13,9 @@ import CalendarPage from "@/pages/CalendarPage";
 import SettingsPage from "@/pages/SettingsPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/NotFound";
+import ProvasMarRegistrar from "@/pages/ProvasMarRegistrar";
+import ProvasMarHistorico from "@/pages/ProvasMarHistorico";
+import ProvasMarEstatisticas from "@/pages/ProvasMarEstatisticas";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +54,9 @@ const App = () => (
                       <Route path="/historico" element={<HistoryPage />} />
                       <Route path="/calendario" element={<CalendarPage />} />
                       <Route path="/configuracoes" element={<SettingsPage />} />
+                      <Route path="/provas-mar/registrar" element={<ProvasMarRegistrar />} />
+                      <Route path="/provas-mar/historico" element={<ProvasMarHistorico />} />
+                      <Route path="/provas-mar/estatisticas" element={<ProvasMarEstatisticas />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </AppLayout>
