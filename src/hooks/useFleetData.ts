@@ -692,3 +692,98 @@ export function useSistemaInfo() {
     },
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Provas de Mar
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ProvaMar = {
+  id: string;
+  lancha_id: string;
+  data: string;
+  descricao: string;
+  velocidade: number | null;
+  rpm: number | null;
+  consumo: number | null;
+  peso: number | null;
+  qtd_odm: number | null;
+  mestre: string | null;
+  horimetro: number | null;
+  porto: string | null;
+  vento_popa: boolean | null;
+  mar_calmo: boolean | null;
+  observacao: string | null;
+  origem: string;
+  created_at: string | null;
+  lanchas: { id: string; nome: string } | null;
+};
+
+type ProvaMarInsert = {
+  lancha_id: string;
+  data: string;
+  descricao: string;
+  velocidade?: number | null;
+  rpm?: number | null;
+  consumo?: number | null;
+  peso?: number | null;
+  qtd_odm?: number | null;
+  mestre?: string | null;
+  horimetro?: number | null;
+  porto?: string | null;
+  vento_popa?: boolean | null;
+  mar_calmo?: boolean | null;
+  observacao?: string | null;
+};
+
+export function useProvasMar(lanchaId?: string) {
+  return useQuery({
+    queryKey: ["provas_mar", lanchaId ?? "all"],
+    queryFn: async () => {
+      let query = (supabase as any)
+        .from("provas_mar")
+        .select("*, lanchas(id, nome)")
+        .order("data", { ascending: false });
+      if (lanchaId) query = query.eq("lancha_id", lanchaId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as ProvaMar[];
+    },
+  });
+}
+
+export function useCreateProvaMar() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ProvaMarInsert) => {
+      const { data, error } = await (supabase as any)
+        .from("provas_mar")
+        .insert({ ...payload, origem: "manual" })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as ProvaMar;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["provas_mar"] });
+    },
+  });
+}
+
+export function useUpdateProvaMar() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: ProvaMarInsert & { id: string }) => {
+      const { data, error } = await (supabase as any)
+        .from("provas_mar")
+        .update(payload)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as ProvaMar;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["provas_mar"] });
+    },
+  });
+}
