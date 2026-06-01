@@ -66,13 +66,13 @@ export default function ProvasMarRegistrar() {
         descricao: form.descricao,
         velocidade: toNum(form.velocidade),
         rpm: toNum(form.rpm),
-        consumo: toNum(form.consumo),
-        peso: toNum(form.peso),
-        qtd_odm: toNum(form.qtd_odm),
+        consumo_lts_hora: toNum(form.consumo),
+        peso_kg: toNum(form.peso),
+        qtd_odm_lts: toNum(form.qtd_odm),
         mestre: form.mestre || null,
         horimetro: toNum(form.horimetro),
         porto: form.porto || null,
-        vento_popa: form.vento_popa,
+        vento_de_popa: form.vento_popa,
         mar_calmo: form.mar_calmo,
         observacao: form.observacao || null,
       },
@@ -255,4 +255,3 @@ export default function ProvasMarRegistrar() {
     </div>
   );
 }
-
