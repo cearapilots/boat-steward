@@ -120,7 +120,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
               )}
             >
-              <Anchor className="h-4 w-4" style={{ color: "#2ABFBF" }} />
+              <Anchor className="h-4 w-4" />
               <span className="flex-1 text-left">Provas de Mar</span>
               {provasMarOpen
                 ? <ChevronUp className="h-3 w-3 opacity-60" />
@@ -195,7 +195,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
                 )}
               >
-                <Anchor className="h-4 w-4" style={{ color: "#2ABFBF" }} />
+                <Anchor className="h-4 w-4" />
                 <span className="flex-1 text-left">Provas de Mar</span>
                 {provasMarOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               </button>
@@ -241,4 +241,3 @@ export function AppLayout({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
