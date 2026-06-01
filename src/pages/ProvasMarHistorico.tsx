@@ -21,6 +21,10 @@ const PORTOS = ["Mucuripe", "Pecém"];
 const inputClass =
   "h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
+function fmtNum(v: number): string {
+  return v.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
   const [y, m, d] = iso.slice(0, 10).split("-");
@@ -75,13 +79,13 @@ function toEditForm(p: ProvaMar): EditForm {
   return {
     velocidade: p.velocidade != null ? String(p.velocidade) : "",
     rpm: p.rpm != null ? String(p.rpm) : "",
-    consumo: p.consumo != null ? String(p.consumo) : "",
-    peso: p.peso != null ? String(p.peso) : "",
-    qtd_odm: p.qtd_odm != null ? String(p.qtd_odm) : "",
+    consumo: p.consumo_lts_hora != null ? String(p.consumo_lts_hora) : "",
+    peso: p.peso_kg != null ? String(p.peso_kg) : "",
+    qtd_odm: p.qtd_odm_lts != null ? String(p.qtd_odm_lts) : "",
     mestre: p.mestre ?? "",
     horimetro: p.horimetro != null ? String(p.horimetro) : "",
     porto: p.porto ?? "",
-    vento_popa: p.vento_popa ?? false,
+    vento_popa: p.vento_de_popa ?? false,
     mar_calmo: p.mar_calmo ?? false,
     observacao: p.observacao ?? "",
     descricao: p.descricao ?? "",
@@ -125,13 +129,13 @@ function DetalheModal({
         descricao: form.descricao,
         velocidade: toNum(form.velocidade),
         rpm: toNum(form.rpm),
-        consumo: toNum(form.consumo),
-        peso: toNum(form.peso),
-        qtd_odm: toNum(form.qtd_odm),
+        consumo_lts_hora: toNum(form.consumo),
+        peso_kg: toNum(form.peso),
+        qtd_odm_lts: toNum(form.qtd_odm),
         mestre: form.mestre || null,
         horimetro: toNum(form.horimetro),
         porto: form.porto || null,
-        vento_popa: form.vento_popa,
+        vento_de_popa: form.vento_popa,
         mar_calmo: form.mar_calmo,
         observacao: form.observacao || null,
       },
@@ -164,15 +168,15 @@ function DetalheModal({
               ["Lancha", lanchaNome],
               ["Data", fmtDate(prova.data)],
               ["Descrição", prova.descricao],
-              ["Velocidade", prova.velocidade != null ? `${prova.velocidade} nós` : "—"],
-              ["RPM", prova.rpm != null ? String(prova.rpm) : "—"],
-              ["Consumo", prova.consumo != null ? `${prova.consumo} Lts/h` : "—"],
-              ["Peso", prova.peso != null ? `${prova.peso} Kg` : "—"],
-              ["Qtd ODM", prova.qtd_odm != null ? `${prova.qtd_odm} Lts` : "—"],
+              ["Velocidade", prova.velocidade != null ? `${fmtNum(prova.velocidade)} nós` : "—"],
+              ["RPM", prova.rpm != null ? fmtNum(prova.rpm) : "—"],
+              ["Consumo", prova.consumo_lts_hora != null ? `${fmtNum(prova.consumo_lts_hora)} Lts/h` : "—"],
+              ["Peso", prova.peso_kg != null ? `${fmtNum(prova.peso_kg)} Kg` : "—"],
+              ["Qtd ODM", prova.qtd_odm_lts != null ? `${fmtNum(prova.qtd_odm_lts)} Lts` : "—"],
               ["Mestre", prova.mestre ?? "—"],
-              ["Horímetro", prova.horimetro != null ? String(prova.horimetro) : "—"],
+              ["Horímetro", prova.horimetro != null ? `${fmtNum(prova.horimetro)}h` : "—"],
               ["Porto", prova.porto ?? "—"],
-              ["Vento de popa", prova.vento_popa === true ? "Sim" : prova.vento_popa === false ? "Não" : "—"],
+              ["Vento de popa", prova.vento_de_popa === true ? "Sim" : prova.vento_de_popa === false ? "Não" : "—"],
               ["Mar calmo", prova.mar_calmo === true ? "Sim" : prova.mar_calmo === false ? "Não" : "—"],
             ].map(([label, value]) => (
               <div key={label}>
@@ -434,20 +438,20 @@ export default function ProvasMarHistorico() {
                           <TableCell className={boatColorClass(lanchaNome)}>{lanchaNome}</TableCell>
                           <TableCell className="text-sm">{p.descricao}</TableCell>
                           <TableCell className="text-right font-mono text-sm">
-                            {p.velocidade != null ? p.velocidade.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—"}
+                            {p.velocidade != null ? fmtNum(p.velocidade) : "—"}
                           </TableCell>
                           <TableCell className="text-right font-mono text-sm">
-                            {p.rpm != null ? p.rpm.toLocaleString("pt-BR") : "—"}
+                            {p.rpm != null ? fmtNum(p.rpm) : "—"}
                           </TableCell>
                           <TableCell className="text-right font-mono text-sm">
-                            {p.consumo != null ? `${p.consumo.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : "—"}
+                            {p.consumo_lts_hora != null ? fmtNum(p.consumo_lts_hora) : "—"}
                           </TableCell>
                           <TableCell className="text-sm">{p.porto ?? "—"}</TableCell>
-                          <TableCell className="text-center"><BoolCell v={p.vento_popa} /></TableCell>
+                          <TableCell className="text-center"><BoolCell v={p.vento_de_popa} /></TableCell>
                           <TableCell className="text-center"><BoolCell v={p.mar_calmo} /></TableCell>
                           <TableCell className="text-sm">{p.mestre ?? "—"}</TableCell>
                           <TableCell className="text-right font-mono text-sm">
-                            {p.horimetro != null ? p.horimetro.toLocaleString("pt-BR") : "—"}
+                            {p.horimetro != null ? `${fmtNum(p.horimetro)}h` : "—"}
                           </TableCell>
                           <TableCell className="max-w-[180px]" onClick={(e) => e.stopPropagation()}>
                             <TruncCell text={p.observacao} limit={40} />
