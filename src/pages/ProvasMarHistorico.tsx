@@ -90,9 +90,11 @@ function toEditForm(p: ProvaMar): EditForm {
 
 function DetalheModal({
   prova,
+  startEdit = false,
   onClose,
 }: {
   prova: ProvaMar | null;
+  startEdit?: boolean;
   onClose: () => void;
 }) {
   const updateProvaMar = useUpdateProvaMar();
@@ -102,9 +104,9 @@ function DetalheModal({
   useEffect(() => {
     if (prova) {
       setForm(toEditForm(prova));
-      setEditing(false);
+      setEditing(startEdit);
     }
-  }, [prova]);
+  }, [prova, startEdit]);
 
   if (!prova || !form) return null;
 
@@ -285,7 +287,7 @@ export default function ProvasMarHistorico() {
   const [filterDe, setFilterDe] = useState("");
   const [filterAte, setFilterAte] = useState("");
   const [page, setPage] = useState(1);
-  const [detalhe, setDetalhe] = useState<ProvaMar | null>(null);
+  const [detalhe, setDetalhe] = useState<{ prova: ProvaMar; edit: boolean } | null>(null);
 
   const filtered = useMemo(() => {
     return (provas ?? []).filter((p) => {
@@ -426,7 +428,7 @@ export default function ProvasMarHistorico() {
                         <TableRow
                           key={p.id}
                           className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => setDetalhe(p)}
+                          onClick={() => setDetalhe({ prova: p, edit: false })}
                         >
                           <TableCell className="font-mono text-xs whitespace-nowrap">{fmtDate(p.data)}</TableCell>
                           <TableCell className={boatColorClass(lanchaNome)}>{lanchaNome}</TableCell>
@@ -453,7 +455,7 @@ export default function ProvasMarHistorico() {
                           <TableCell onClick={(e) => e.stopPropagation()}>
                             <Button
                               variant="ghost" size="icon" className="h-7 w-7"
-                              onClick={() => setDetalhe(p)}
+                              onClick={() => setDetalhe({ prova: p, edit: true })}
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
@@ -488,8 +490,11 @@ export default function ProvasMarHistorico() {
         </CardContent>
       </Card>
 
-      <DetalheModal prova={detalhe} onClose={() => setDetalhe(null)} />
+      <DetalheModal
+        prova={detalhe?.prova ?? null}
+        startEdit={detalhe?.edit ?? false}
+        onClose={() => setDetalhe(null)}
+      />
     </div>
   );
 }
-
