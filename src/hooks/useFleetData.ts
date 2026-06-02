@@ -139,6 +139,27 @@ export function useCalendarioManutencoes(ano: number) {
   });
 }
 
+export type RealizadaItem = {
+  lancha_id: string;
+  tipo_id: string;
+  data_realizada: string;
+};
+
+export function useRealizadasCalendario(ano: number) {
+  return useQuery({
+    queryKey: ["manutencoes_periodicas_realizadas", ano],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("manutencoes_periodicas")
+        .select("lancha_id, tipo_id, data_realizada")
+        .gte("data_realizada", `${ano - 1}-01-01`)
+        .lte("data_realizada", `${ano + 1}-12-31`);
+      if (error) throw error;
+      return (data ?? []) as RealizadaItem[];
+    },
+  });
+}
+
 export function useCreateManutencaoPeriodica() {
   const qc = useQueryClient();
   return useMutation({
@@ -165,6 +186,7 @@ export function useCreateManutencaoPeriodica() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["manutencoes_periodicas"] });
       qc.invalidateQueries({ queryKey: ["calendario_manutencoes"] });
+      qc.invalidateQueries({ queryKey: ["manutencoes_periodicas_realizadas"] });
     },
   });
 }
@@ -350,6 +372,7 @@ export function useSyncHorimetros() {
       qc.invalidateQueries({ queryKey: ["ocorrencias_webpilot"] });
       qc.invalidateQueries({ queryKey: ["manutencoes_periodicas"] });
       qc.invalidateQueries({ queryKey: ["calendario_manutencoes"] });
+      qc.invalidateQueries({ queryKey: ["manutencoes_periodicas_realizadas"] });
     },
   });
 }
