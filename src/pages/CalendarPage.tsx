@@ -115,6 +115,18 @@ function buildMonthGroups(
           continue;
         }
 
+        // Meses futuros: sem carry-forward — apenas exibir o que está agendado
+        if (mes > mesAtual) {
+          if (sched.has(mes)) {
+            lanchaDatas.push({
+              lancha_id,
+              lancha_nome: lanchaMeta.get(lancha_id)!,
+              status: "pendente",
+            });
+          }
+          continue;
+        }
+
         // Find earliest unresolved past scheduled month (carry-forward source)
         let earliestUnresolved: number | undefined;
         for (const schMes of sched) {
@@ -279,11 +291,6 @@ function MesCell({ mesIdx, groups, ano }: { mesIdx: number; groups: GroupData[];
           <div key={`${g.tipo_id}-${g.isCarryForward ? "cf" : "norm"}`} className="flex items-start gap-1.5 text-xs">
             <span className="flex-1 text-foreground leading-tight">
               {g.tipo_nome}
-              {g.isCarryForward && (
-                <span className="ml-1 font-medium" style={{ color: "#DC2626" }}>
-                  atrasado ⚠️
-                </span>
-              )}
             </span>
             <span className="flex items-center gap-0.5 shrink-0 mt-0.5">
               {g.lanchas
