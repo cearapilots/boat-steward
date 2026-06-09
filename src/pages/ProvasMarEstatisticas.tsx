@@ -1,9 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useProvasMar, type ProvaMar } from "@/hooks/useFleetData";
 import { DESCRICOES_PROVA } from "@/pages/ProvasMarRegistrar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -29,6 +28,26 @@ const CYCLE_LINES = [
   { key: "mes3Vel",   rpmKey: "mes3Rpm",   label: "3 meses",  color: "#EF4444" },
   { key: "preSegVel", rpmKey: "preSegRpm", label: "Pré-Seg",  color: "#991B1B" },
 ];
+
+// Maps CYCLE_LINES velocity key → canonical description
+const LINE_DESC_MAP: Record<string, string> = {
+  preVel:    "Pré-Docagem",
+  posVel:    "Pós-Docagem",
+  mes1Vel:   "1 mês Pós-Docagem",
+  mes2Vel:   "2 meses Pós-Docagem",
+  mes3Vel:   "3 meses Pós-Docagem",
+  preSegVel: "Pré-Docagem seguinte",
+};
+
+// Short display labels for toggle buttons
+const DESC_SHORT: Record<string, string> = {
+  "Pré-Docagem":          "Pré-Doc",
+  "Pós-Docagem":          "Pós-Doc",
+  "1 mês Pós-Docagem":    "1 mês",
+  "2 meses Pós-Docagem":  "2 meses",
+  "3 meses Pós-Docagem":  "3 meses",
+  "Pré-Docagem seguinte": "Pré-Seg",
+};
 
 type CicloDescKey = "posDocagem" | "mes1" | "mes2" | "mes3" | "preSeguinte";
 
@@ -98,23 +117,52 @@ function avg(values: number[]): number | null {
   return values.reduce((s, v) => s + v, 0) / values.length;
 }
 
+// ── Description normalization ────────────────────────────────────────────────
+// Handles case, accents and hyphen/space variations across lanchas
+
+function normalizeDesc(d: string): string {
+  return d
+    .trim()
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[-\s]+/g, " ");
+}
+
+const DESC_CANON: Record<string, string> = {
+  "pre docagem":          "PRE",
+  "pos docagem":          "POS",
+  "1 mes pos docagem":    "M1",
+  "2 meses pos docagem":  "M2",
+  "3 meses pos docagem":  "M3",
+  "pre docagem seguinte": "PRE_SEG",
+};
+
+function getDescCanon(d: string): string | null {
+  return DESC_CANON[normalizeDesc(d)] ?? null;
+}
+
 // ── Cycle building ────────────────────────────────────────────────────────────
 
 function buildCiclos(provas: ProvaMar[]): CicloDocagem[] {
   const sorted = [...provas].sort((a, b) => a.data.localeCompare(b.data));
-  const posAnchors = sorted.filter(p => p.descricao === "Pós-Docagem");
+
+  // Log unmapped descriptions to help diagnose data issues
+  const unmapped = [...new Set(sorted.map(p => p.descricao).filter(d => !getDescCanon(d)))];
+  if (unmapped.length > 0) {
+    console.warn("[buildCiclos] Descrições não mapeadas:", unmapped);
+  }
+
+  const posAnchors = sorted.filter(p => getDescCanon(p.descricao) === "POS");
   if (posAnchors.length === 0) return [];
 
   return posAnchors.map((pos, i) => {
     const prevDate = posAnchors[i - 1]?.data ?? "0000-00-00";
     const nextDate = posAnchors[i + 1]?.data ?? "9999-99-99";
 
-    // Most recent Pré-Docagem before this Pós-Docagem (after previous Pós-Docagem)
     const preDoc = sorted
-      .filter(p => p.descricao === "Pré-Docagem" && p.data <= pos.data && p.data > prevDate)
+      .filter(p => getDescCanon(p.descricao) === "PRE" && p.data <= pos.data && p.data > prevDate)
       .slice(-1)[0];
 
-    // Records between this Pós-Docagem and the next one
     const after = sorted.filter(p => p.data > pos.data && p.data < nextDate);
 
     return {
@@ -122,16 +170,15 @@ function buildCiclos(provas: ProvaMar[]): CicloDocagem[] {
       dataPos: pos.data,
       preDocagem: preDoc,
       posDocagem: pos,
-      mes1: after.find(p => p.descricao === "1 mês Pós-Docagem"),
-      mes2: after.find(p => p.descricao === "2 meses Pós-Docagem"),
-      mes3: after.find(p => p.descricao === "3 meses Pós-Docagem"),
-      preSeguinte: after.filter(p => p.descricao === "Pré-Docagem seguinte").slice(-1)[0],
+      mes1: after.find(p => getDescCanon(p.descricao) === "M1"),
+      mes2: after.find(p => getDescCanon(p.descricao) === "M2"),
+      mes3: after.find(p => getDescCanon(p.descricao) === "M3"),
+      preSeguinte: after.filter(p => getDescCanon(p.descricao) === "PRE_SEG").slice(-1)[0],
     };
   });
 }
 
 function computeScorecard(lancha: string, ciclos: CicloDocagem[]): ScorecardData {
-  // Only cycles with all three velocity readings are "complete" for scorecard
   const completos = ciclos.filter(c =>
     c.posDocagem?.velocidade != null &&
     c.preDocagem?.velocidade != null &&
@@ -344,11 +391,12 @@ function ScorecardCard({ data }: { data: ScorecardData }) {
 export default function ProvasMarEstatisticas() {
   const { data: provas, isLoading } = useProvasMar();
 
-  const [selectedLanchas, setSelectedLanchas] = useState<string[]>([...LANCHAS_ORDER]);
-  const [filterDe, setFilterDe] = useState("");
-  const [filterAte, setFilterAte] = useState("");
-  const [filterDescricao, setFilterDescricao] = useState("__all__");
-  const [modalState, setModalState] = useState<{ ciclo: CicloDocagem; lancha: string } | null>(null);
+  const [selectedLanchas, setSelectedLanchas]       = useState<string[]>([...LANCHAS_ORDER]);
+  const [filterDe, setFilterDe]                     = useState("");
+  const [filterAte, setFilterAte]                   = useState("");
+  // Multi-select: which description lines to SHOW in the cycle charts
+  const [filterDescricoes, setFilterDescricoes]     = useState<string[]>([...DESCRICOES_PROVA]);
+  const [modalState, setModalState]                 = useState<{ ciclo: CicloDocagem; lancha: string } | null>(null);
 
   function toggleLancha(nome: string) {
     setSelectedLanchas(prev =>
@@ -356,7 +404,16 @@ export default function ProvasMarEstatisticas() {
     );
   }
 
-  // Build ciclos per lancha — only date+lancha filter applied before buildCiclos
+  function toggleDescricao(desc: string) {
+    setFilterDescricoes(prev =>
+      prev.includes(desc) ? prev.filter(d => d !== desc) : [...prev, desc]
+    );
+  }
+
+  // ── Data pipeline ──────────────────────────────────────────────────────────
+  // Only date + lancha filter applied before buildCiclos; description filter
+  // is visual-only (controls which lines appear in the cycle chart).
+
   const ciclosByLancha = useMemo(() => {
     return Object.fromEntries(LANCHAS_ORDER.map(lanchaName => {
       const byDate = (provas ?? []).filter(p => {
@@ -369,43 +426,22 @@ export default function ProvasMarEstatisticas() {
     }));
   }, [provas, filterDe, filterAte]);
 
-  // Description filter applied AFTER cycle building — keeps only cycles that
-  // have a record with that description and a non-null velocity
-  const descMap: Record<string, (c: CicloDocagem) => ProvaMar | undefined> = {
-    "Pré-Docagem":           c => c.preDocagem,
-    "Pós-Docagem":           c => c.posDocagem,
-    "1 mês Pós-Docagem":     c => c.mes1,
-    "2 meses Pós-Docagem":   c => c.mes2,
-    "3 meses Pós-Docagem":   c => c.mes3,
-    "Pré-Docagem seguinte":  c => c.preSeguinte,
-  };
-
-  const ciclosFiltradosByLancha = useMemo(() => {
-    return Object.fromEntries(LANCHAS_ORDER.map(l => {
-      const ciclos = ciclosByLancha[l] ?? [];
-      const filtered = filterDescricao === "__all__"
-        ? ciclos
-        : ciclos.filter(c => descMap[filterDescricao]?.(c)?.velocidade != null);
-      return [l, filtered];
-    }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ciclosByLancha, filterDescricao]);
-
+  // Scorecards use the full (unfiltered by description) cycle set
   const scorecards = useMemo(() =>
-    Object.fromEntries(LANCHAS_ORDER.map(l => [l, computeScorecard(l, ciclosFiltradosByLancha[l] ?? [])])),
-    [ciclosFiltradosByLancha]
+    Object.fromEntries(LANCHAS_ORDER.map(l => [l, computeScorecard(l, ciclosByLancha[l] ?? [])])),
+    [ciclosByLancha]
   );
 
   const cicloPointsByLancha = useMemo(() =>
-    Object.fromEntries(LANCHAS_ORDER.map(l => [l, buildCicloPoints(ciclosFiltradosByLancha[l] ?? [])])),
-    [ciclosFiltradosByLancha]
+    Object.fromEntries(LANCHAS_ORDER.map(l => [l, buildCicloPoints(ciclosByLancha[l] ?? [])])),
+    [ciclosByLancha]
   );
 
-  // Ganho chart: one point per unique dataPos across selected lanchas
+  // Ganho chart: full dataset, one point per cycle with pre+pos velocidade
   const ganhoChartData = useMemo(() => {
     const allDates = new Set<string>();
     for (const l of selectedLanchas) {
-      (ciclosFiltradosByLancha[l] ?? []).forEach(c => {
+      (ciclosByLancha[l] ?? []).forEach(c => {
         if (c.posDocagem?.velocidade != null && c.preDocagem?.velocidade != null) {
           allDates.add(c.dataPos);
         }
@@ -414,32 +450,52 @@ export default function ProvasMarEstatisticas() {
     return [...allDates].sort().map(dataPos => {
       const pt: Record<string, unknown> = { dataPos };
       for (const l of selectedLanchas) {
-        const c = (ciclosFiltradosByLancha[l] ?? []).find(x => x.dataPos === dataPos);
+        const c = (ciclosByLancha[l] ?? []).find(x => x.dataPos === dataPos);
         if (c?.posDocagem?.velocidade != null && c?.preDocagem?.velocidade != null) {
           pt[l] = c.posDocagem.velocidade - c.preDocagem.velocidade;
         }
       }
       return pt;
     });
-  }, [ciclosFiltradosByLancha, selectedLanchas]);
+  }, [ciclosByLancha, selectedLanchas]);
 
-  // Degradação chart: average velocity at each stage per selected lancha
+  // Degradação chart: full dataset, average velocity at each stage
   const degradacaoData = useMemo(() =>
     DEGRAD_STAGES.map(stage => {
       const pt: Record<string, unknown> = { desc: stage.label };
       for (const l of selectedLanchas) {
-        const vels = (ciclosFiltradosByLancha[l] ?? [])
+        const vels = (ciclosByLancha[l] ?? [])
           .map(c => c[stage.key]?.velocidade)
           .filter((v): v is number => v != null);
         pt[l] = avg(vels);
       }
       return pt;
     }),
-    [ciclosFiltradosByLancha, selectedLanchas]
+    [ciclosByLancha, selectedLanchas]
   );
 
-  const totalCiclos = selectedLanchas.reduce((s, l) => s + (ciclosFiltradosByLancha[l]?.length ?? 0), 0);
-  const hasFilters = filterDe !== "" || filterAte !== "" || filterDescricao !== "__all__";
+  const totalCiclos = selectedLanchas.reduce((s, l) => s + (ciclosByLancha[l]?.length ?? 0), 0);
+  const hasFilters = filterDe !== "" || filterAte !== "" || filterDescricoes.length < DESCRICOES_PROVA.length;
+
+  // Lines visible in cycle chart based on description filter
+  const visibleLines = CYCLE_LINES.filter(cfg => filterDescricoes.includes(LINE_DESC_MAP[cfg.key]));
+
+  // ── Debug: log cycle stats per lancha ─────────────────────────────────────
+  useEffect(() => {
+    if (!provas || provas.length === 0) return;
+    console.table(
+      LANCHAS_ORDER.map(l => ({
+        lancha: l,
+        totalRegistros: (provas ?? []).filter(p => p.lanchas?.nome === l).length,
+        ciclos: ciclosByLancha[l]?.length ?? 0,
+        ciclosCompletos: ciclosByLancha[l]?.filter(c => c.preDocagem && c.posDocagem).length ?? 0,
+        ciclosComPreSeg: ciclosByLancha[l]?.filter(c => c.posDocagem && c.preSeguinte).length ?? 0,
+        descricoesUnicas: JSON.stringify([...new Set(
+          (provas ?? []).filter(p => p.lanchas?.nome === l).map(p => p.descricao)
+        )]),
+      }))
+    );
+  }, [provas, ciclosByLancha]);
 
   if (isLoading) {
     return (
@@ -497,22 +553,40 @@ export default function ProvasMarEstatisticas() {
               <input type="date" value={filterAte} onChange={e => setFilterAte(e.target.value)} className={inputClass} />
             </div>
 
-            {/* Descrição */}
+            {/* Descrição multi-select (controls chart lines only) */}
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Descrição</span>
-              <Select value={filterDescricao} onValueChange={setFilterDescricao}>
-                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Todas</SelectItem>
-                  {DESCRICOES_PROVA.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <span className="text-xs text-muted-foreground">Linhas do gráfico</span>
+              <div className="flex flex-wrap gap-1.5">
+                {DESCRICOES_PROVA.map(desc => {
+                  const selected = filterDescricoes.includes(desc);
+                  const cfg = CYCLE_LINES.find(c => LINE_DESC_MAP[c.key] === desc);
+                  const color = cfg?.color ?? "#6B7280";
+                  return (
+                    <button
+                      key={desc}
+                      onClick={() => toggleDescricao(desc)}
+                      className="px-2.5 py-1 text-xs rounded-md font-medium border transition-colors"
+                      style={{
+                        borderColor: color,
+                        backgroundColor: selected ? color : "transparent",
+                        color: selected ? "white" : color,
+                      }}
+                    >
+                      {DESC_SHORT[desc] ?? desc}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {hasFilters && (
               <Button
                 variant="ghost" size="sm"
-                onClick={() => { setFilterDe(""); setFilterAte(""); setFilterDescricao("__all__"); }}
+                onClick={() => {
+                  setFilterDe("");
+                  setFilterAte("");
+                  setFilterDescricoes([...DESCRICOES_PROVA]);
+                }}
               >
                 Limpar filtros
               </Button>
@@ -530,7 +604,7 @@ export default function ProvasMarEstatisticas() {
         </Card>
       ) : (
         <>
-          {/* Scorecards */}
+          {/* Scorecards — always use full dataset, unaffected by description filter */}
           {selectedLanchas.length > 0 && (
             <div className={`grid gap-4 ${
               selectedLanchas.length === 1 ? "grid-cols-1 max-w-xs" :
@@ -543,7 +617,7 @@ export default function ProvasMarEstatisticas() {
             </div>
           )}
 
-          {/* Per-lancha cycle chart */}
+          {/* Per-lancha cycle chart — description filter controls visible lines */}
           {selectedLanchas.map(lancha => {
             const pts = cicloPointsByLancha[lancha] ?? [];
             if (pts.length === 0) return null;
@@ -581,8 +655,8 @@ export default function ProvasMarEstatisticas() {
                       />
                       <Tooltip content={<CicloTooltip />} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
-                      {/* Velocity lines — solid */}
-                      {CYCLE_LINES.map(cfg => (
+                      {/* Velocity lines — filtered by description toggle */}
+                      {visibleLines.map(cfg => (
                         <Line
                           key={cfg.key} yAxisId="vel" type="monotone" dataKey={cfg.key}
                           stroke={cfg.color} strokeWidth={2}
@@ -590,8 +664,8 @@ export default function ProvasMarEstatisticas() {
                           name={cfg.label} connectNulls={false}
                         />
                       ))}
-                      {/* RPM lines — dashed */}
-                      {CYCLE_LINES.map(cfg => (
+                      {/* RPM lines — dashed, same description filter */}
+                      {visibleLines.map(cfg => (
                         <Line
                           key={cfg.rpmKey} yAxisId="rpm" type="monotone" dataKey={cfg.rpmKey}
                           stroke={cfg.color} strokeWidth={1.5} strokeDasharray="4 2"
@@ -606,7 +680,7 @@ export default function ProvasMarEstatisticas() {
             );
           })}
 
-          {/* Série temporal — Ganho por docagem */}
+          {/* Série temporal — Ganho por docagem (always full dataset) */}
           {ganhoChartData.length > 0 && (
             <Card>
               <CardHeader>
@@ -638,7 +712,7 @@ export default function ProvasMarEstatisticas() {
             </Card>
           )}
 
-          {/* Série temporal — Degradação entre docagens */}
+          {/* Série temporal — Degradação entre docagens (always full dataset) */}
           {degradacaoData.some(pt => selectedLanchas.some(l => pt[l] != null)) && (
             <Card>
               <CardHeader>
