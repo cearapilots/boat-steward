@@ -217,10 +217,8 @@ function LanchaBadge({
               fontSize: 10,
               lineHeight: 1,
               flexShrink: 0,
-              border: isAtrasado
-                ? "2px solid #DC2626"
-                : `2px ${isPendente ? "dashed" : "solid"} ${style.color}`,
-              color: isAtrasado ? "#DC2626" : isPendente ? `${style.color}99` : style.color,
+              border: `2px ${isPendente ? "dashed" : "solid"} ${style.color}`,
+              color: isPendente ? `${style.color}99` : style.color,
             }}
           >
             {style.letter}
@@ -398,7 +396,7 @@ export default function CalendarPage() {
             <span className="flex items-center gap-1">
               <span
                 className="inline-flex items-center justify-center rounded-full font-bold bg-white relative"
-                style={{ width: 18, height: 18, border: "2px solid #DC2626", color: "#DC2626", fontSize: 9 }}
+                style={{ width: 18, height: 18, border: "2px solid #2563EB", color: "#2563EB", fontSize: 9 }}
               >
                 F
                 <span style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, borderRadius: "50%",
