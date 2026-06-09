@@ -98,6 +98,72 @@ export type Database = {
           },
         ]
       }
+      configuracoes: {
+        Row: {
+          chave: string
+          descricao: string | null
+          id: string
+          updated_at: string | null
+          valor: string
+        }
+        Insert: {
+          chave: string
+          descricao?: string | null
+          id?: string
+          updated_at?: string | null
+          valor: string
+        }
+        Update: {
+          chave?: string
+          descricao?: string | null
+          id?: string
+          updated_at?: string | null
+          valor?: string
+        }
+        Relationships: []
+      }
+      fainas_deslocamentos: {
+        Row: {
+          cd_faina_lancha: number
+          cd_lancha: number | null
+          created_at: string | null
+          dc_horas: number | null
+          dh_fim: string | null
+          dh_inicio: string | null
+          ds_lancha: string | null
+          ds_local_dest: string | null
+          ds_local_orig: string | null
+          id: string
+          nr_minutos: number | null
+        }
+        Insert: {
+          cd_faina_lancha: number
+          cd_lancha?: number | null
+          created_at?: string | null
+          dc_horas?: number | null
+          dh_fim?: string | null
+          dh_inicio?: string | null
+          ds_lancha?: string | null
+          ds_local_dest?: string | null
+          ds_local_orig?: string | null
+          id?: string
+          nr_minutos?: number | null
+        }
+        Update: {
+          cd_faina_lancha?: number
+          cd_lancha?: number | null
+          created_at?: string | null
+          dc_horas?: number | null
+          dh_fim?: string | null
+          dh_inicio?: string | null
+          ds_lancha?: string | null
+          ds_local_dest?: string | null
+          ds_local_orig?: string | null
+          id?: string
+          nr_minutos?: number | null
+        }
+        Relationships: []
+      }
       historico: {
         Row: {
           ativo_id: string | null
@@ -171,6 +237,60 @@ export type Database = {
           },
         ]
       }
+      indicadores_ativos: {
+        Row: {
+          cd_ativo_indicador: number
+          cd_lancha: number | null
+          created_at: string | null
+          dc_dif_bb: number | null
+          dc_dif_be: number | null
+          dc_dif_gerador: number | null
+          dc_horimetro_bb: number | null
+          dc_horimetro_be: number | null
+          dc_horimetro_gerador: number | null
+          dh_leitura: string
+          ds_lancha: string | null
+          ds_origem: string | null
+          id: string
+          porto: string | null
+          porto_base: string | null
+        }
+        Insert: {
+          cd_ativo_indicador: number
+          cd_lancha?: number | null
+          created_at?: string | null
+          dc_dif_bb?: number | null
+          dc_dif_be?: number | null
+          dc_dif_gerador?: number | null
+          dc_horimetro_bb?: number | null
+          dc_horimetro_be?: number | null
+          dc_horimetro_gerador?: number | null
+          dh_leitura: string
+          ds_lancha?: string | null
+          ds_origem?: string | null
+          id?: string
+          porto?: string | null
+          porto_base?: string | null
+        }
+        Update: {
+          cd_ativo_indicador?: number
+          cd_lancha?: number | null
+          created_at?: string | null
+          dc_dif_bb?: number | null
+          dc_dif_be?: number | null
+          dc_dif_gerador?: number | null
+          dc_horimetro_bb?: number | null
+          dc_horimetro_be?: number | null
+          dc_horimetro_gerador?: number | null
+          dh_leitura?: string
+          ds_lancha?: string | null
+          ds_origem?: string | null
+          id?: string
+          porto?: string | null
+          porto_base?: string | null
+        }
+        Relationships: []
+      }
       lanchas: {
         Row: {
           created_at: string | null
@@ -198,6 +318,36 @@ export type Database = {
           id_webpilot?: string | null
           nome?: string
           ultima_atualizacao?: string | null
+        }
+        Relationships: []
+      }
+      manobras_lanchas: {
+        Row: {
+          cd_lancha: number | null
+          cd_manobra: number
+          created_at: string | null
+          dh_manobra: string
+          ds_lancha: string | null
+          ds_porto: string | null
+          id: string
+        }
+        Insert: {
+          cd_lancha?: number | null
+          cd_manobra: number
+          created_at?: string | null
+          dh_manobra: string
+          ds_lancha?: string | null
+          ds_porto?: string | null
+          id?: string
+        }
+        Update: {
+          cd_lancha?: number | null
+          cd_manobra?: number
+          created_at?: string | null
+          dh_manobra?: string
+          ds_lancha?: string | null
+          ds_porto?: string | null
+          id?: string
         }
         Relationships: []
       }
@@ -459,6 +609,81 @@ export type Database = {
           },
           {
             foreignKeyName: "posicoes_lancha_id_fkey"
+            columns: ["lancha_id"]
+            isOneToOne: false
+            referencedRelation: "v_manutencoes_periodicas_status"
+            referencedColumns: ["lancha_id"]
+          },
+        ]
+      }
+      provas_mar: {
+        Row: {
+          consumo_lts_hora: number | null
+          created_at: string | null
+          data: string
+          descricao: string
+          horimetro: number | null
+          id: string
+          lancha_id: string
+          mar_calmo: boolean | null
+          mestre: string | null
+          observacao: string | null
+          origem: string | null
+          peso_kg: number | null
+          porto: string | null
+          qtd_odm_lts: number | null
+          rpm: number | null
+          velocidade: number | null
+          vento_de_popa: boolean | null
+        }
+        Insert: {
+          consumo_lts_hora?: number | null
+          created_at?: string | null
+          data: string
+          descricao: string
+          horimetro?: number | null
+          id?: string
+          lancha_id: string
+          mar_calmo?: boolean | null
+          mestre?: string | null
+          observacao?: string | null
+          origem?: string | null
+          peso_kg?: number | null
+          porto?: string | null
+          qtd_odm_lts?: number | null
+          rpm?: number | null
+          velocidade?: number | null
+          vento_de_popa?: boolean | null
+        }
+        Update: {
+          consumo_lts_hora?: number | null
+          created_at?: string | null
+          data?: string
+          descricao?: string
+          horimetro?: number | null
+          id?: string
+          lancha_id?: string
+          mar_calmo?: boolean | null
+          mestre?: string | null
+          observacao?: string | null
+          origem?: string | null
+          peso_kg?: number | null
+          porto?: string | null
+          qtd_odm_lts?: number | null
+          rpm?: number | null
+          velocidade?: number | null
+          vento_de_popa?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provas_mar_lancha_id_fkey"
+            columns: ["lancha_id"]
+            isOneToOne: false
+            referencedRelation: "lanchas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provas_mar_lancha_id_fkey"
             columns: ["lancha_id"]
             isOneToOne: false
             referencedRelation: "v_manutencoes_periodicas_status"
