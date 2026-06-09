@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  ComposedChart, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ReferenceLine, ResponsiveContainer,
 } from "recharts";
 
@@ -155,27 +155,33 @@ function buildCiclos(provas: ProvaMar[]): CicloDocagem[] {
   const posAnchors = sorted.filter(p => getDescCanon(p.descricao) === "POS");
   if (posAnchors.length === 0) return [];
 
-  return posAnchors.map((pos, i) => {
+  return posAnchors.reduce<CicloDocagem[]>((acc, pos, i) => {
     const prevDate = posAnchors[i - 1]?.data ?? "0000-00-00";
     const nextDate = posAnchors[i + 1]?.data ?? "9999-99-99";
 
+    // Explicit Pré-Docagem before this anchor
     const preDoc = sorted
       .filter(p => getDescCanon(p.descricao) === "PRE" && p.data <= pos.data && p.data > prevDate)
       .slice(-1)[0];
 
+    // Fallback: preSeguinte from the previous cycle (same physical measurement)
+    const preDocFallback = acc[i - 1]?.preSeguinte;
+
     const after = sorted.filter(p => p.data > pos.data && p.data < nextDate);
 
-    return {
+    acc.push({
       cicloNum: i + 1,
       dataPos: pos.data,
-      preDocagem: preDoc,
+      preDocagem: preDoc ?? preDocFallback,
       posDocagem: pos,
       mes1: after.find(p => getDescCanon(p.descricao) === "M1"),
       mes2: after.find(p => getDescCanon(p.descricao) === "M2"),
       mes3: after.find(p => getDescCanon(p.descricao) === "M3"),
       preSeguinte: after.filter(p => getDescCanon(p.descricao) === "PRE_SEG").slice(-1)[0],
-    };
-  });
+    });
+
+    return acc;
+  }, []);
 }
 
 function computeScorecard(lancha: string, ciclos: CicloDocagem[]): ScorecardData {
@@ -632,49 +638,72 @@ export default function ProvasMarEstatisticas() {
                     Velocidade (eixo esq.) · RPM tracejado (eixo dir.) · Clique no gráfico para ver detalhes do ciclo
                   </p>
                 </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={340}>
-                    <ComposedChart
-                      data={pts}
-                      margin={{ top: 5, right: 55, bottom: 5, left: 0 }}
-                      onClick={chartData => {
-                        const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
-                        if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
-                      }}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
-                      <YAxis
-                        yAxisId="vel" tick={{ fontSize: 10 }} domain={["auto", "auto"]}
-                        label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
-                      />
-                      <YAxis
-                        yAxisId="rpm" orientation="right" tick={{ fontSize: 10 }} domain={["auto", "auto"]}
-                        label={{ value: "RPM", angle: 90, position: "insideRight", offset: 10, style: { fontSize: 10 } }}
-                      />
-                      <Tooltip content={<CicloTooltip />} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      {/* Velocity lines — filtered by description toggle */}
-                      {visibleLines.map(cfg => (
-                        <Line
-                          key={cfg.key} yAxisId="vel" type="monotone" dataKey={cfg.key}
-                          stroke={cfg.color} strokeWidth={2}
-                          dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
-                          name={cfg.label} connectNulls={false}
+                <CardContent className="space-y-6">
+                  {/* Chart 1 — Velocidade (nós) */}
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Velocidade (nós)</p>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <LineChart
+                        data={pts}
+                        margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                        onClick={chartData => {
+                          const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
+                          if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
+                        }}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
+                        <YAxis
+                          tick={{ fontSize: 10 }} domain={["auto", "auto"]}
+                          label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
                         />
-                      ))}
-                      {/* RPM lines — dashed, same description filter */}
-                      {visibleLines.map(cfg => (
-                        <Line
-                          key={cfg.rpmKey} yAxisId="rpm" type="monotone" dataKey={cfg.rpmKey}
-                          stroke={cfg.color} strokeWidth={1.5} strokeDasharray="4 2"
-                          dot={{ r: 2, fill: cfg.color }} activeDot={{ r: 4 }}
-                          name={`${cfg.label} RPM`} connectNulls={false}
+                        <Tooltip content={<CicloTooltip />} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        {visibleLines.map(cfg => (
+                          <Line
+                            key={cfg.key} type="monotone" dataKey={cfg.key}
+                            stroke={cfg.color} strokeWidth={2}
+                            dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
+                            name={cfg.label} connectNulls={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Chart 2 — RPM */}
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">RPM</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <LineChart
+                        data={pts}
+                        margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                        onClick={chartData => {
+                          const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
+                          if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
+                        }}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
+                        <YAxis
+                          tick={{ fontSize: 10 }} domain={["auto", "auto"]}
+                          label={{ value: "RPM", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
                         />
-                      ))}
-                    </ComposedChart>
-                  </ResponsiveContainer>
+                        <Tooltip content={<CicloTooltip />} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        {visibleLines.map(cfg => (
+                          <Line
+                            key={cfg.rpmKey} type="monotone" dataKey={cfg.rpmKey}
+                            stroke={cfg.color} strokeWidth={2}
+                            dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
+                            name={`${cfg.label} RPM`} connectNulls={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </CardContent>
               </Card>
             );
