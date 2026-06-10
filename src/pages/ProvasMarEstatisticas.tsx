@@ -9,6 +9,9 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ReferenceLine, ResponsiveContainer,
 } from "recharts";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronDown } from "lucide-react";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -523,67 +526,83 @@ export default function ProvasMarEstatisticas() {
       {/* Filtros */}
       <Card>
         <CardContent className="pt-4 pb-4">
-          <div className="flex flex-wrap gap-4 items-end">
-            {/* Lancha toggles */}
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Lanchas</span>
-              <div className="flex gap-2">
-                {LANCHAS_ORDER.map(nome => {
-                  const selected = selectedLanchas.includes(nome);
-                  const color = LANCHA_COLORS[nome];
-                  return (
-                    <button
+          <div className="flex flex-wrap gap-3 items-center">
+            {/* Lanchas dropdown */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[140px]">
+                  <span className="font-medium">Lanchas</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">
+                    {selectedLanchas.length === LANCHAS_ORDER.length
+                      ? "Todas"
+                      : selectedLanchas.length === 0
+                      ? "Nenhuma"
+                      : selectedLanchas.join(", ")}
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-2" align="start">
+                <div className="space-y-1">
+                  {LANCHAS_ORDER.map(nome => (
+                    <label
                       key={nome}
-                      onClick={() => toggleLancha(nome)}
-                      className="px-3 py-1.5 text-xs rounded-md font-medium border transition-colors"
-                      style={{
-                        borderColor: color,
-                        backgroundColor: selected ? color : "transparent",
-                        color: selected ? "white" : color,
-                      }}
+                      className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent"
                     >
-                      {nome}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                      <Checkbox
+                        checked={selectedLanchas.includes(nome)}
+                        onCheckedChange={() => toggleLancha(nome)}
+                      />
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COLORS[nome] }} />
+                      <span className="text-sm">{nome}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
             {/* Date range */}
-            <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">De</span>
               <input type="date" value={filterDe} onChange={e => setFilterDe(e.target.value)} className={inputClass} />
             </div>
-            <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Até</span>
               <input type="date" value={filterAte} onChange={e => setFilterAte(e.target.value)} className={inputClass} />
             </div>
 
-            {/* Descrição multi-select (controls chart lines only) */}
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Linhas do gráfico</span>
-              <div className="flex flex-wrap gap-1.5">
-                {DESCRICOES_PROVA.map(desc => {
-                  const selected = filterDescricoes.includes(desc);
-                  const cfg = CYCLE_LINES.find(c => LINE_DESC_MAP[c.key] === desc);
-                  const color = cfg?.color ?? "#6B7280";
-                  return (
-                    <button
+            {/* Ciclos dropdown */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[140px]">
+                  <span className="font-medium">Ciclos</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">
+                    {filterDescricoes.length === DESCRICOES_PROVA.length
+                      ? "Todos"
+                      : filterDescricoes.length === 0
+                      ? "Nenhum"
+                      : filterDescricoes.map(d => DESC_SHORT[d] ?? d).join(", ")}
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-2" align="start">
+                <div className="space-y-1">
+                  {DESCRICOES_PROVA.map(desc => (
+                    <label
                       key={desc}
-                      onClick={() => toggleDescricao(desc)}
-                      className="px-2.5 py-1 text-xs rounded-md font-medium border transition-colors"
-                      style={{
-                        borderColor: color,
-                        backgroundColor: selected ? color : "transparent",
-                        color: selected ? "white" : color,
-                      }}
+                      className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent"
                     >
-                      {DESC_SHORT[desc] ?? desc}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                      <Checkbox
+                        checked={filterDescricoes.includes(desc)}
+                        onCheckedChange={() => toggleDescricao(desc)}
+                      />
+                      <span className="text-sm">{DESC_SHORT[desc] ?? desc}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
             {hasFilters && (
               <Button
@@ -635,7 +654,7 @@ export default function ProvasMarEstatisticas() {
                     {lancha} — Evolução por Ciclo de Docagem
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Velocidade (eixo esq.) · RPM tracejado (eixo dir.) · Clique no gráfico para ver detalhes do ciclo
+                    Clique no gráfico para ver detalhes do ciclo
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-6">
