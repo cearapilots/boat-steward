@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     // ── 2. Carregar lanchas do banco ─────────────────────────────────────────
     const { data: lanchasBanco, error: errLanchas } = await supabase
       .from("lanchas")
-      .select("id, nome, id_webpilot")
+      .select("id, nome, id_webpilot, horimetro, horimetro_gerador")
       .not("id_webpilot", "is", null);
 
     if (errLanchas) throw new Error(`Erro ao buscar lanchas: ${errLanchas.message}`);
@@ -210,7 +210,7 @@ Deno.serve(async (req) => {
 
           const { data: posicoesOleo } = await supabase
             .from("posicoes")
-            .select("ativo_id, posicao, ativos(id, nome, tipo)")
+            .select("ativo_id, posicao, ativos(id, nome, tipo, offset_instalacao)")
             .eq("lancha_id", lancha.id)
             .lte("data_instalacao", dataOcorrencia)
             .or(`data_remocao.is.null,data_remocao.gt.${dataOcorrencia}`);
@@ -220,6 +220,10 @@ Deno.serve(async (req) => {
             if (posicoesAlvoOleo.length > 0 && !posicoesAlvoOleo.includes(p.posicao ?? "")) return false;
             return true;
           });
+
+          // Horímetros da lancha carregados no início do sync
+          const horimetroLanchaBase = (lancha as any).horimetro ?? null;
+          const horimetroGeradorBase = (lancha as any).horimetro_gerador ?? null;
 
           for (const pos of alvosOleo) {
             // Dedup: verifica qualquer troca de óleo do mesmo ativo no mesmo dia
@@ -236,13 +240,31 @@ Deno.serve(async (req) => {
 
             if (existeMutOleo) continue;
 
+            // Calcular horímetros conforme tipo do ativo
+            const tipoAtivo = (pos.ativos as any)?.tipo;
+            const offsetInstalacao = (pos.ativos as any)?.offset_instalacao ?? null;
+            let horimetroLancha: number | null;
+            let horimetroEquipamento: number | null;
+
+            if (tipoAtivo === "gerador") {
+              horimetroLancha = null;
+              horimetroEquipamento = horimetroGeradorBase;
+            } else {
+              // motor e reversor usam horímetro principal da lancha
+              horimetroLancha = horimetroLanchaBase;
+              horimetroEquipamento =
+                horimetroLanchaBase != null && offsetInstalacao != null
+                  ? horimetroLanchaBase - offsetInstalacao
+                  : horimetroLanchaBase;
+            }
+
             const { error: errMutOleo } = await supabase.from("manutencoes").insert({
               ativo_id: pos.ativo_id,
               lancha_id: lancha.id,
               tipo: "troca_oleo",
               data_manutencao: dataOcorrencia,
-              horimetro_lancha: null,
-              horimetro_equipamento: null,
+              horimetro_lancha: horimetroLancha,
+              horimetro_equipamento: horimetroEquipamento,
               observacao: oc.DS_OCORRENCIA,
               origem: "webpilot_sync",
             });
@@ -266,6 +288,8 @@ Deno.serve(async (req) => {
                   dados_extras: {
                     cd_ocorrencia: cdOcorrencia,
                     ds_tipo_ocorrencia: oc.DS_TIPO_OCORRENCIA,
+                    horimetro_lancha: horimetroLancha,
+                    horimetro_equipamento: horimetroEquipamento,
                   },
                   origem: "webpilot_sync",
                 });
