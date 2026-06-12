@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useProvasMar, type ProvaMar } from "@/hooks/useFleetData";
-import { DESCRICOES_PROVA } from "@/pages/ProvasMarRegistrar";
+import { DESCRICOES_PROVA } from "@/lib/provas-mar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -13,26 +13,27 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown } from "lucide-react";
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── Boat colors (hsl values match --boat-* tokens in index.css) ──────────────
 
-const LANCHAS_ORDER = ["Flexeiras", "Fortim", "Taíba"];
-
-const LANCHA_COLORS: Record<string, string> = {
-  Flexeiras: "#2563EB",
-  Fortim:    "#16A34A",
-  "Taíba":   "#F97316",
+const BOAT_COLORS_STATIC: Record<string, string> = {
+  Flexeiras: "hsl(210 80% 45%)",
+  Fortim:    "hsl(142 71% 40%)",
+  "Taíba":   "hsl(25 95% 53%)",
 };
+const BOAT_FALLBACK_COLORS = ["hsl(260 60% 55%)", "hsl(330 60% 55%)", "hsl(215 10% 50%)"];
+
+// ── Cycle stage colors — palette separate from boat colors ───────────────────
+// Avoids blue (Flexeiras), green (Fortim), orange (Taíba)
 
 const CYCLE_LINES = [
-  { key: "preVel",    rpmKey: "preRpm",    label: "Pré-Doc",  color: "#6B7280" },
-  { key: "posVel",    rpmKey: "posRpm",    label: "Pós-Doc",  color: "#16A34A" },
-  { key: "mes1Vel",   rpmKey: "mes1Rpm",   label: "1 mês",    color: "#EAB308" },
-  { key: "mes2Vel",   rpmKey: "mes2Rpm",   label: "2 meses",  color: "#F97316" },
-  { key: "mes3Vel",   rpmKey: "mes3Rpm",   label: "3 meses",  color: "#EF4444" },
-  { key: "preSegVel", rpmKey: "preSegRpm", label: "Pré-Seg",  color: "#991B1B" },
+  { key: "preVel",    rpmKey: "preRpm",    label: "Pré-Doc",  color: "hsl(215 10% 55%)"  },
+  { key: "posVel",    rpmKey: "posRpm",    label: "Pós-Doc",  color: "hsl(180 64% 46%)"  },
+  { key: "mes1Vel",   rpmKey: "mes1Rpm",   label: "1 mês",    color: "hsl(45 90% 48%)"   },
+  { key: "mes2Vel",   rpmKey: "mes2Rpm",   label: "2 meses",  color: "hsl(280 60% 55%)"  },
+  { key: "mes3Vel",   rpmKey: "mes3Rpm",   label: "3 meses",  color: "hsl(0 72% 51%)"    },
+  { key: "preSegVel", rpmKey: "preSegRpm", label: "Pré-Seg",  color: "hsl(0 72% 32%)"    },
 ];
 
-// Maps CYCLE_LINES velocity key → canonical description
 const LINE_DESC_MAP: Record<string, string> = {
   preVel:    "Pré-Docagem",
   posVel:    "Pós-Docagem",
@@ -42,7 +43,6 @@ const LINE_DESC_MAP: Record<string, string> = {
   preSegVel: "Pré-Docagem seguinte",
 };
 
-// Short display labels for toggle buttons
 const DESC_SHORT: Record<string, string> = {
   "Pré-Docagem":          "Pré-Doc",
   "Pós-Docagem":          "Pós-Doc",
@@ -61,6 +61,13 @@ const DEGRAD_STAGES: Array<{ key: CicloDescKey; label: string }> = [
   { key: "mes3",        label: "3 meses"  },
   { key: "preSeguinte", label: "Pré-Seg"  },
 ];
+
+const DEGRAD_SCOPE_OPTIONS = [
+  { value: "all" as const,   label: "Todos"     },
+  { value: "last5" as const, label: "Últimos 5" },
+  { value: "last1" as const, label: "Último"    },
+];
+type DegradScope = typeof DEGRAD_SCOPE_OPTIONS[number]["value"];
 
 const inputClass =
   "h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background " +
@@ -121,7 +128,6 @@ function avg(values: number[]): number | null {
 }
 
 // ── Description normalization ────────────────────────────────────────────────
-// Handles case, accents and hyphen/space variations across lanchas
 
 function normalizeDesc(d: string): string {
   return d
@@ -149,10 +155,9 @@ function getDescCanon(d: string): string | null {
 function buildCiclos(provas: ProvaMar[]): CicloDocagem[] {
   const sorted = [...provas].sort((a, b) => a.data.localeCompare(b.data));
 
-  // Log unmapped descriptions to help diagnose data issues
-  const unmapped = [...new Set(sorted.map(p => p.descricao).filter(d => !getDescCanon(d)))];
-  if (unmapped.length > 0) {
-    console.warn("[buildCiclos] Descrições não mapeadas:", unmapped);
+  if (import.meta.env.DEV) {
+    const unmapped = [...new Set(sorted.map(p => p.descricao).filter(d => !getDescCanon(d)))];
+    if (unmapped.length > 0) console.warn("[buildCiclos] Descrições não mapeadas:", unmapped);
   }
 
   const posAnchors = sorted.filter(p => getDescCanon(p.descricao) === "POS");
@@ -162,12 +167,10 @@ function buildCiclos(provas: ProvaMar[]): CicloDocagem[] {
     const prevDate = posAnchors[i - 1]?.data ?? "0000-00-00";
     const nextDate = posAnchors[i + 1]?.data ?? "9999-99-99";
 
-    // Explicit Pré-Docagem before this anchor
     const preDoc = sorted
       .filter(p => getDescCanon(p.descricao) === "PRE" && p.data <= pos.data && p.data > prevDate)
       .slice(-1)[0];
 
-    // Fallback: preSeguinte from the previous cycle (same physical measurement)
     const preDocFallback = acc[i - 1]?.preSeguinte;
 
     const after = sorted.filter(p => p.data > pos.data && p.data < nextDate);
@@ -239,7 +242,7 @@ function CicloTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const pt = payload[0].payload as CicloPoint;
   return (
-    <div className="bg-white border border-border rounded-md px-3 py-2 text-xs shadow-md space-y-0.5 max-w-56">
+    <div className="bg-background border border-border rounded-md px-3 py-2 text-xs shadow-md space-y-0.5 max-w-56">
       <p className="font-semibold mb-1">{`Ciclo ${pt.cicloNum} — ${fmtDate(pt._ciclo.dataPos)}`}</p>
       {CYCLE_LINES.map(cfg => {
         const vel = (pt as any)[cfg.key] as number | null;
@@ -260,13 +263,15 @@ function CicloTooltip({ active, payload }: any) {
 
 function GanhoTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
+  const pt = payload[0]?.payload;
   return (
-    <div className="bg-white border border-border rounded-md px-3 py-2 text-xs shadow-md space-y-0.5">
-      <p className="font-semibold">{fmtDate(payload[0]?.payload?.dataPos)}</p>
+    <div className="bg-background border border-border rounded-md px-3 py-2 text-xs shadow-md space-y-0.5">
+      <p className="font-semibold">{pt?.label ?? ""}</p>
       {payload.map((e: any) =>
         e.value != null ? (
           <p key={e.dataKey} style={{ color: e.color }}>
             {e.name}: {e.value >= 0 ? "+" : ""}{fmtNum(e.value)} nós
+            {pt?.[`${e.dataKey}_dataPos`] ? ` · ${fmtDate(pt[`${e.dataKey}_dataPos`])}` : ""}
           </p>
         ) : null
       )}
@@ -352,9 +357,8 @@ function CicloModal({
 
 // ── ScorecardCard ─────────────────────────────────────────────────────────────
 
-function ScorecardCard({ data }: { data: ScorecardData }) {
+function ScorecardCard({ data, color }: { data: ScorecardData; color: string }) {
   const { lancha, numCiclos, ganhoMedio, perdaTotal, perdaMensal } = data;
-  const color = LANCHA_COLORS[lancha] ?? "#6B7280";
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -371,7 +375,7 @@ function ScorecardCard({ data }: { data: ScorecardData }) {
           <span className="text-muted-foreground text-xs">Ganho Pré→Pós</span>
           <span
             className="font-mono font-semibold"
-            style={{ color: ganhoMedio != null && ganhoMedio >= 0 ? "#16A34A" : "#DC2626" }}
+            style={{ color: ganhoMedio != null && ganhoMedio >= 0 ? "hsl(var(--status-ok))" : "hsl(var(--destructive))" }}
           >
             {ganhoMedio != null
               ? `${ganhoMedio >= 0 ? "+" : ""}${fmtNum(ganhoMedio)} nós`
@@ -380,13 +384,13 @@ function ScorecardCard({ data }: { data: ScorecardData }) {
         </div>
         <div className="flex justify-between items-baseline gap-2">
           <span className="text-muted-foreground text-xs">Perda total/docagem</span>
-          <span className="font-mono font-semibold text-red-600">
+          <span className="font-mono font-semibold" style={{ color: "hsl(var(--destructive))" }}>
             {perdaTotal != null ? `-${fmtNum(perdaTotal)} nós` : "—"}
           </span>
         </div>
         <div className="flex justify-between items-baseline gap-2">
           <span className="text-muted-foreground text-xs">Perda/mês</span>
-          <span className="font-mono font-semibold text-orange-500">
+          <span className="font-mono font-semibold" style={{ color: "hsl(var(--status-warn))" }}>
             {perdaMensal != null ? `-${fmtNum(perdaMensal)} nós/mês` : "—"}
           </span>
         </div>
@@ -400,12 +404,13 @@ function ScorecardCard({ data }: { data: ScorecardData }) {
 export default function ProvasMarEstatisticas() {
   const { data: provas, isLoading } = useProvasMar();
 
-  const [selectedLanchas, setSelectedLanchas]       = useState<string[]>([...LANCHAS_ORDER]);
-  const [filterDe, setFilterDe]                     = useState("");
-  const [filterAte, setFilterAte]                   = useState("");
-  // Multi-select: which description lines to SHOW in the cycle charts
-  const [filterDescricoes, setFilterDescricoes]     = useState<string[]>([...DESCRICOES_PROVA]);
-  const [modalState, setModalState]                 = useState<{ ciclo: CicloDocagem; lancha: string } | null>(null);
+  const [selectedLanchas, setSelectedLanchas]   = useState<string[]>([]);
+  const [filterDe, setFilterDe]                 = useState("");
+  const [filterAte, setFilterAte]               = useState("");
+  const [filterDescricoes, setFilterDescricoes] = useState<string[]>([...DESCRICOES_PROVA]);
+  const [degradScope, setDegradScope]           = useState<DegradScope>("all");
+  const [modalState, setModalState]             = useState<{ ciclo: CicloDocagem; lancha: string } | null>(null);
+  const didInitLanchas                          = useRef(false);
 
   function toggleLancha(nome: string) {
     setSelectedLanchas(prev =>
@@ -419,12 +424,35 @@ export default function ProvasMarEstatisticas() {
     );
   }
 
+  // ── Derive available lanchas from provas data ──────────────────────────────
+  const lanchasDisponiveis = useMemo(() => {
+    const names = new Set(
+      (provas ?? []).map(p => p.lanchas?.nome).filter((n): n is string => !!n)
+    );
+    return [...names].sort();
+  }, [provas]);
+
+  // Auto-select all lanchas on first data load
+  useEffect(() => {
+    if (!didInitLanchas.current && lanchasDisponiveis.length > 0) {
+      setSelectedLanchas(lanchasDisponiveis);
+      didInitLanchas.current = true;
+    }
+  }, [lanchasDisponiveis]);
+
+  // Stable color map — matches --boat-* CSS tokens for known lanchas
+  const lanchaColor = useMemo(() => {
+    const map: Record<string, string> = {};
+    lanchasDisponiveis.forEach((nome, i) => {
+      map[nome] = BOAT_COLORS_STATIC[nome] ?? BOAT_FALLBACK_COLORS[i % BOAT_FALLBACK_COLORS.length];
+    });
+    return map;
+  }, [lanchasDisponiveis]);
+
   // ── Data pipeline ──────────────────────────────────────────────────────────
-  // Only date + lancha filter applied before buildCiclos; description filter
-  // is visual-only (controls which lines appear in the cycle chart).
 
   const ciclosByLancha = useMemo(() => {
-    return Object.fromEntries(LANCHAS_ORDER.map(lanchaName => {
+    return Object.fromEntries(lanchasDisponiveis.map(lanchaName => {
       const byDate = (provas ?? []).filter(p => {
         if (p.lanchas?.nome !== lanchaName) return false;
         if (filterDe && p.data < filterDe) return false;
@@ -433,67 +461,65 @@ export default function ProvasMarEstatisticas() {
       });
       return [lanchaName, buildCiclos(byDate)];
     }));
-  }, [provas, filterDe, filterAte]);
+  }, [provas, filterDe, filterAte, lanchasDisponiveis]);
 
-  // Scorecards use the full (unfiltered by description) cycle set
   const scorecards = useMemo(() =>
-    Object.fromEntries(LANCHAS_ORDER.map(l => [l, computeScorecard(l, ciclosByLancha[l] ?? [])])),
-    [ciclosByLancha]
+    Object.fromEntries(lanchasDisponiveis.map(l => [l, computeScorecard(l, ciclosByLancha[l] ?? [])])),
+    [ciclosByLancha, lanchasDisponiveis]
   );
 
   const cicloPointsByLancha = useMemo(() =>
-    Object.fromEntries(LANCHAS_ORDER.map(l => [l, buildCicloPoints(ciclosByLancha[l] ?? [])])),
-    [ciclosByLancha]
+    Object.fromEntries(lanchasDisponiveis.map(l => [l, buildCicloPoints(ciclosByLancha[l] ?? [])])),
+    [ciclosByLancha, lanchasDisponiveis]
   );
 
-  // Ganho chart: full dataset, one point per cycle with pre+pos velocidade
+  // Ganho chart: cycle INDEX on X so all lanchas align for direct comparison
   const ganhoChartData = useMemo(() => {
-    const allDates = new Set<string>();
-    for (const l of selectedLanchas) {
-      (ciclosByLancha[l] ?? []).forEach(c => {
-        if (c.posDocagem?.velocidade != null && c.preDocagem?.velocidade != null) {
-          allDates.add(c.dataPos);
-        }
-      });
-    }
-    return [...allDates].sort().map(dataPos => {
-      const pt: Record<string, unknown> = { dataPos };
+    const maxCiclos = Math.max(0, ...selectedLanchas.map(l =>
+      (ciclosByLancha[l] ?? []).filter(c =>
+        c.posDocagem?.velocidade != null && c.preDocagem?.velocidade != null
+      ).length
+    ));
+    return Array.from({ length: maxCiclos }, (_, i) => {
+      const pt: Record<string, unknown> = { label: `C${i + 1}` };
       for (const l of selectedLanchas) {
-        const c = (ciclosByLancha[l] ?? []).find(x => x.dataPos === dataPos);
-        if (c?.posDocagem?.velocidade != null && c?.preDocagem?.velocidade != null) {
-          pt[l] = c.posDocagem.velocidade - c.preDocagem.velocidade;
+        const valid = (ciclosByLancha[l] ?? []).filter(c =>
+          c.posDocagem?.velocidade != null && c.preDocagem?.velocidade != null
+        );
+        if (i < valid.length) {
+          pt[l] = parseFloat((valid[i].posDocagem!.velocidade! - valid[i].preDocagem!.velocidade!).toFixed(2));
+          pt[`${l}_dataPos`] = valid[i].dataPos;
         }
       }
       return pt;
     });
   }, [ciclosByLancha, selectedLanchas]);
 
-  // Degradação chart: full dataset, average velocity at each stage
+  // Degradação chart: scoped by degradScope
   const degradacaoData = useMemo(() =>
     DEGRAD_STAGES.map(stage => {
       const pt: Record<string, unknown> = { desc: stage.label };
       for (const l of selectedLanchas) {
-        const vels = (ciclosByLancha[l] ?? [])
-          .map(c => c[stage.key]?.velocidade)
-          .filter((v): v is number => v != null);
+        let ciclos = ciclosByLancha[l] ?? [];
+        if (degradScope === "last5") ciclos = ciclos.slice(-5);
+        else if (degradScope === "last1") ciclos = ciclos.slice(-1);
+        const vels = ciclos.map(c => c[stage.key]?.velocidade).filter((v): v is number => v != null);
         pt[l] = avg(vels);
       }
       return pt;
     }),
-    [ciclosByLancha, selectedLanchas]
+    [ciclosByLancha, selectedLanchas, degradScope]
   );
 
   const totalCiclos = selectedLanchas.reduce((s, l) => s + (ciclosByLancha[l]?.length ?? 0), 0);
-  const hasFilters = filterDe !== "" || filterAte !== "" || filterDescricoes.length < DESCRICOES_PROVA.length;
-
-  // Lines visible in cycle chart based on description filter
+  const hasFilters = filterDe !== "" || filterAte !== "" || filterDescricoes.length < DESCRICOES_PROVA.length || degradScope !== "all";
   const visibleLines = CYCLE_LINES.filter(cfg => filterDescricoes.includes(LINE_DESC_MAP[cfg.key]));
 
-  // ── Debug: log cycle stats per lancha ─────────────────────────────────────
+  // ── Debug — dev only ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!provas || provas.length === 0) return;
+    if (!import.meta.env.DEV || !provas || provas.length === 0) return;
     console.table(
-      LANCHAS_ORDER.map(l => ({
+      lanchasDisponiveis.map(l => ({
         lancha: l,
         totalRegistros: (provas ?? []).filter(p => p.lanchas?.nome === l).length,
         ciclos: ciclosByLancha[l]?.length ?? 0,
@@ -504,7 +530,7 @@ export default function ProvasMarEstatisticas() {
         )]),
       }))
     );
-  }, [provas, ciclosByLancha]);
+  }, [provas, ciclosByLancha, lanchasDisponiveis]);
 
   if (isLoading) {
     return (
@@ -533,7 +559,7 @@ export default function ProvasMarEstatisticas() {
                 <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[140px]">
                   <span className="font-medium">Lanchas</span>
                   <span className="text-muted-foreground text-xs flex-1 text-right truncate">
-                    {selectedLanchas.length === LANCHAS_ORDER.length
+                    {selectedLanchas.length === lanchasDisponiveis.length
                       ? "Todas"
                       : selectedLanchas.length === 0
                       ? "Nenhuma"
@@ -544,7 +570,7 @@ export default function ProvasMarEstatisticas() {
               </PopoverTrigger>
               <PopoverContent className="w-48 p-2" align="start">
                 <div className="space-y-1">
-                  {LANCHAS_ORDER.map(nome => (
+                  {lanchasDisponiveis.map(nome => (
                     <label
                       key={nome}
                       className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent"
@@ -553,7 +579,7 @@ export default function ProvasMarEstatisticas() {
                         checked={selectedLanchas.includes(nome)}
                         onCheckedChange={() => toggleLancha(nome)}
                       />
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COLORS[nome] }} />
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: lanchaColor[nome] }} />
                       <span className="text-sm">{nome}</span>
                     </label>
                   ))}
@@ -611,6 +637,7 @@ export default function ProvasMarEstatisticas() {
                   setFilterDe("");
                   setFilterAte("");
                   setFilterDescricoes([...DESCRICOES_PROVA]);
+                  setDegradScope("all");
                 }}
               >
                 Limpar filtros
@@ -629,7 +656,7 @@ export default function ProvasMarEstatisticas() {
         </Card>
       ) : (
         <>
-          {/* Scorecards — always use full dataset, unaffected by description filter */}
+          {/* Scorecards */}
           {selectedLanchas.length > 0 && (
             <div className={`grid gap-4 ${
               selectedLanchas.length === 1 ? "grid-cols-1 max-w-xs" :
@@ -637,12 +664,12 @@ export default function ProvasMarEstatisticas() {
               "grid-cols-1 sm:grid-cols-3"
             }`}>
               {selectedLanchas.map(l => (
-                <ScorecardCard key={l} data={scorecards[l]} />
+                <ScorecardCard key={l} data={scorecards[l]} color={lanchaColor[l] ?? "hsl(215 10% 50%)"} />
               ))}
             </div>
           )}
 
-          {/* Per-lancha cycle chart — description filter controls visible lines */}
+          {/* Per-lancha cycle charts */}
           {selectedLanchas.map(lancha => {
             const pts = cicloPointsByLancha[lancha] ?? [];
             if (pts.length === 0) return null;
@@ -650,7 +677,7 @@ export default function ProvasMarEstatisticas() {
               <Card key={lancha}>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COLORS[lancha] }} />
+                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: lanchaColor[lancha] }} />
                     {lancha} — Evolução por Ciclo de Docagem
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
@@ -658,77 +685,85 @@ export default function ProvasMarEstatisticas() {
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Chart 1 — Velocidade (nós) */}
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Velocidade (nós)</p>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <LineChart
-                        data={pts}
-                        margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
-                        onClick={chartData => {
-                          const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
-                          if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
-                        }}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
-                        <YAxis
-                          tick={{ fontSize: 10 }} domain={["auto", "auto"]}
-                          label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
-                        />
-                        <Tooltip content={<CicloTooltip />} />
-                        <Legend wrapperStyle={{ fontSize: 11 }} />
-                        {visibleLines.map(cfg => (
-                          <Line
-                            key={cfg.key} type="monotone" dataKey={cfg.key}
-                            stroke={cfg.color} strokeWidth={2}
-                            dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
-                            name={cfg.label} connectNulls={false}
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {visibleLines.length === 0 ? (
+                    <p className="py-10 text-center text-sm text-muted-foreground">
+                      Nenhuma linha selecionada — escolha ao menos um estágio em "Ciclos"
+                    </p>
+                  ) : (
+                    <>
+                      {/* Chart 1 — Velocidade (nós) */}
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Velocidade (nós)</p>
+                        <ResponsiveContainer width="100%" height={260}>
+                          <LineChart
+                            data={pts}
+                            margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                            onClick={chartData => {
+                              const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
+                              if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
+                            }}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
+                            <YAxis
+                              tick={{ fontSize: 10 }} domain={["auto", "auto"]}
+                              label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
+                            />
+                            <Tooltip content={<CicloTooltip />} />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
+                            {visibleLines.map(cfg => (
+                              <Line
+                                key={cfg.key} type="monotone" dataKey={cfg.key}
+                                stroke={cfg.color} strokeWidth={2}
+                                dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
+                                name={cfg.label} connectNulls={false}
+                              />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
 
-                  {/* Chart 2 — RPM */}
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-2">RPM</p>
-                    <ResponsiveContainer width="100%" height={240}>
-                      <LineChart
-                        data={pts}
-                        margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
-                        onClick={chartData => {
-                          const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
-                          if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
-                        }}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
-                        <YAxis
-                          tick={{ fontSize: 10 }} domain={["auto", "auto"]}
-                          label={{ value: "RPM", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
-                        />
-                        <Tooltip content={<CicloTooltip />} />
-                        <Legend wrapperStyle={{ fontSize: 11 }} />
-                        {visibleLines.map(cfg => (
-                          <Line
-                            key={cfg.rpmKey} type="monotone" dataKey={cfg.rpmKey}
-                            stroke={cfg.color} strokeWidth={2}
-                            dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
-                            name={`${cfg.label} RPM`} connectNulls={false}
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                      {/* Chart 2 — RPM */}
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-2">RPM</p>
+                        <ResponsiveContainer width="100%" height={240}>
+                          <LineChart
+                            data={pts}
+                            margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                            onClick={chartData => {
+                              const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
+                              if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
+                            }}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
+                            <YAxis
+                              tick={{ fontSize: 10 }} domain={["auto", "auto"]}
+                              label={{ value: "RPM", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
+                            />
+                            <Tooltip content={<CicloTooltip />} />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
+                            {visibleLines.map(cfg => (
+                              <Line
+                                key={cfg.rpmKey} type="monotone" dataKey={cfg.rpmKey}
+                                stroke={cfg.color} strokeWidth={2}
+                                dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
+                                name={`${cfg.label} RPM`} connectNulls={false}
+                              />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             );
           })}
 
-          {/* Série temporal — Ganho por docagem (always full dataset) */}
+          {/* Ganho de Velocidade por Docagem */}
           {ganhoChartData.length > 0 && (
             <Card>
               <CardHeader>
@@ -738,7 +773,7 @@ export default function ProvasMarEstatisticas() {
                 <ResponsiveContainer width="100%" height={280}>
                   <LineChart data={ganhoChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="dataPos" tickFormatter={fmtDateShort} tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                     <YAxis
                       tick={{ fontSize: 10 }} domain={["auto", "auto"]}
                       tickFormatter={v => `${v >= 0 ? "+" : ""}${fmtNum(v)}`}
@@ -749,7 +784,7 @@ export default function ProvasMarEstatisticas() {
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     {selectedLanchas.map(l => (
                       <Line
-                        key={l} type="monotone" dataKey={l} stroke={LANCHA_COLORS[l]}
+                        key={l} type="monotone" dataKey={l} stroke={lanchaColor[l]}
                         strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }}
                         name={l} connectNulls
                       />
@@ -760,11 +795,28 @@ export default function ProvasMarEstatisticas() {
             </Card>
           )}
 
-          {/* Série temporal — Degradação entre docagens (always full dataset) */}
+          {/* Curva de Degradação Média entre Docagens */}
           {degradacaoData.some(pt => selectedLanchas.some(l => pt[l] != null)) && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Curva de Degradação Média entre Docagens</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+                  Curva de Degradação Média entre Docagens
+                  <div className="ml-auto flex gap-1">
+                    {DEGRAD_SCOPE_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setDegradScope(opt.value)}
+                        className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                          degradScope === opt.value
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border bg-transparent text-muted-foreground hover:border-foreground/50 hover:text-foreground"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={280}>
@@ -779,7 +831,7 @@ export default function ProvasMarEstatisticas() {
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     {selectedLanchas.map(l => (
                       <Line
-                        key={l} type="monotone" dataKey={l} stroke={LANCHA_COLORS[l]}
+                        key={l} type="monotone" dataKey={l} stroke={lanchaColor[l]}
                         strokeWidth={2} dot={{ r: 5 }} activeDot={{ r: 7 }}
                         name={l} connectNulls
                       />
