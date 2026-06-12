@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useProvasMar, useUpdateProvaMar, useLanchas, type ProvaMar } from "@/hooks/useFleetData";
-import { DESCRICOES_PROVA } from "@/pages/ProvasMarRegistrar";
+import { DESCRICOES_PROVA } from "@/lib/provas-mar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
