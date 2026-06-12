@@ -8,15 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useLanchas, useCreateProvaMar } from "@/hooks/useFleetData";
-
-export const DESCRICOES_PROVA = [
-  "Pré-Docagem",
-  "Pós-Docagem",
-  "1 mês Pós-Docagem",
-  "2 meses Pós-Docagem",
-  "3 meses Pós-Docagem",
-  "Pré-Docagem seguinte",
-];
+import { DESCRICOES_PROVA } from "@/lib/provas-mar";
 
 const PORTOS = ["Mucuripe", "Pecém"];
 
