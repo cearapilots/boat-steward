@@ -173,7 +173,12 @@ function buildCiclos(provas: ProvaMar[]): CicloDocagem[] {
 
     const preDocFallback = acc[i - 1]?.preSeguinte;
 
-    const after = sorted.filter(p => p.data > pos.data && p.data < nextDate);
+    // Include records on the same date as the next anchor (e.g. preSeguinte recorded on docking day)
+    // but exclude the anchor itself (POS record)
+    const after = sorted.filter(p =>
+      p.data > pos.data &&
+      (p.data < nextDate || (p.data === nextDate && getDescCanon(p.descricao) !== "POS"))
+    );
 
     acc.push({
       cicloNum: i + 1,
