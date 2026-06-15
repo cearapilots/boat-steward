@@ -22,6 +22,13 @@ type WpIndicador = {
   DS_ORIGEM: string | null;
 };
 
+// Porto de origem de cada lancha conforme histórico Excel
+const PORTO_INICIAL: Record<string, string> = {
+  "121":  "Mucuripe", // Flexeiras  — primeiro registro: 03/01/19
+  "1003": "Mucuripe", // Fortim     — primeiro registro: 05/11/19
+  "117":  "Pecém",    // Taíba III  — primeiro registro: 04/01/19
+};
+
 function portoOposto(porto: string | null): string | null {
   if (porto === "Mucuripe") return "Pecém";
   if (porto === "Pecém") return "Mucuripe";
@@ -53,8 +60,10 @@ Deno.serve(async (req) => {
     indicadores.sort((a, b) => a.DH_LEITURA.localeCompare(b.DH_LEITURA));
 
     // 3. Processar cada indicador com lógica de porto
-    // Map<cd_lancha, porto_atual> — rastreia onde cada lancha está
-    const portoPorLancha = new Map<string, string | null>();
+    // Inicializar com os portos de origem conhecidos de cada lancha
+    const portoPorLancha = new Map<string, string | null>(
+      Object.entries(PORTO_INICIAL)
+    );
 
     for (const ind of indicadores) {
       const cdLancha = String(ind.CD_LANCHA);
@@ -88,7 +97,7 @@ Deno.serve(async (req) => {
             porto_base,
             porto,
           },
-          { onConflict: "cd_ativo_indicador", ignoreDuplicates: true },
+          { onConflict: "cd_ativo_indicador", ignoreDuplicates: false },
         );
 
       if (!error) registrosInseridos++;
