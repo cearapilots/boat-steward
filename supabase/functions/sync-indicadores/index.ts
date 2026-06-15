@@ -22,12 +22,11 @@ type WpIndicador = {
   DS_ORIGEM: string | null;
 };
 
-// Fallback: porto na primeira ocorrência histórica de cada lancha
-const PORTO_INICIAL: Record<string, string> = {
-  "121":  "Mucuripe", // FLEXEIRAS  — primeiro registro: 03/01/19
-  "1003": "Mucuripe", // FORTIM     — primeiro registro: 05/11/19
-  "117":  "Pecém",    // TAÍBA III  — primeiro registro: 04/01/19
-};
+function portoOposto(porto: string | null): string | null {
+  if (porto === "Mucuripe") return "Pecém";
+  if (porto === "Pecém") return "Mucuripe";
+  return null;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -46,103 +45,60 @@ Deno.serve(async (req) => {
     const resp = await fetch(WEBPILOT_URL, { headers: { Accept: "application/json" } });
     if (!resp.ok) throw new Error(`WebPilot retornou HTTP ${resp.status}`);
 
-    const todos: WpIndicador[] = await resp.json();
-    if (!Array.isArray(todos) || todos.length === 0)
+    const indicadores: WpIndicador[] = await resp.json();
+    if (!Array.isArray(indicadores) || indicadores.length === 0)
       throw new Error("Resposta do WebPilot vazia ou inválida");
 
-    // 2. Identificar quais cd_ativo_indicador já existem no banco
-    const { data: existentes } = await supabase
-      .from("indicadores_ativos")
-      .select("cd_ativo_indicador");
+    // 2. Ordenar por dh_leitura ASC para calcular porto corretamente
+    indicadores.sort((a, b) => a.DH_LEITURA.localeCompare(b.DH_LEITURA));
 
-    const jaSalvos = new Set<number>(
-      (existentes ?? []).map((r: { cd_ativo_indicador: number }) => r.cd_ativo_indicador)
-    );
+    // 3. Processar cada indicador com lógica de porto
+    // Map<cd_lancha, porto_atual> — rastreia onde cada lancha está
+    const portoPorLancha = new Map<string, string | null>();
 
-    // 3. Filtrar apenas registros novos e ordenar cronologicamente
-    const novos = todos
-      .filter((i) => !jaSalvos.has(Number(i.CD_ATIVO_INDICADOR)))
-      .sort((a, b) => a.DH_LEITURA.localeCompare(b.DH_LEITURA));
-
-    if (novos.length === 0) {
-      const detalhe = "Nenhum registro novo encontrado.";
-      await supabase.from("sync_log").insert({
-        status: "sucesso",
-        lanchas_atualizadas: 0,
-        eventos_importados: 0,
-        detalhe,
-      });
-      return new Response(
-        JSON.stringify({ sucesso: true, registros_inseridos: 0, detalhe }),
-        { headers: { "Content-Type": "application/json", ...CORS } },
-      );
-    }
-
-    // 4. Semear portoPorLancha com o último porto conhecido no banco
-    //    (fallback para PORTO_INICIAL se lancha ainda não tiver dados)
-    const portoPorLancha = new Map<string, string | null>(
-      Object.entries(PORTO_INICIAL)
-    );
-
-    const { data: ultimosPortos } = await supabase
-      .from("indicadores_ativos")
-      .select("cd_lancha, porto")
-      .not("porto", "is", null)
-      .order("dh_leitura", { ascending: false })
-      .limit(10000);
-
-    if (ultimosPortos) {
-      const visto = new Set<string>();
-      for (const row of ultimosPortos as { cd_lancha: number; porto: string }[]) {
-        const k = String(row.cd_lancha);
-        if (!visto.has(k)) {
-          portoPorLancha.set(k, row.porto);
-          visto.add(k);
-        }
-      }
-    }
-
-    // 5. Processar e inserir apenas os registros novos
-    for (const ind of novos) {
+    for (const ind of indicadores) {
       const cdLancha = String(ind.CD_LANCHA);
 
+      // porto_base = último porto conhecido antes desta leitura
       const porto_base = portoPorLancha.get(cdLancha) ?? null;
 
+      // Se é Faina de Lancha, a lancha cruzou para o porto oposto
       const isFaina =
         typeof ind.DS_ORIGEM === "string" && ind.DS_ORIGEM.startsWith("Faina de Lancha");
+      const porto = isFaina ? portoOposto(porto_base) : porto_base;
 
-      const porto = isFaina
-        ? (porto_base === "Mucuripe" ? "Pecém" : porto_base === "Pecém" ? "Mucuripe" : null)
-        : porto_base;
-
+      // Atualizar mapa com porto atual
       portoPorLancha.set(cdLancha, porto);
 
       const { error } = await supabase
         .from("indicadores_ativos")
-        .insert({
-          cd_ativo_indicador: Number(ind.CD_ATIVO_INDICADOR),
-          cd_lancha: Number(ind.CD_LANCHA),
-          ds_lancha: ind.DS_LANCHA,
-          dh_leitura: ind.DH_LEITURA,
-          dc_horimetro_bb: ind.DC_HORIMETRO_BB ?? null,
-          dc_dif_bb: ind.DC_DIF_BB ?? null,
-          dc_horimetro_be: ind.DC_HORIMETRO_BE ?? null,
-          dc_dif_be: ind.DC_DIF_BE ?? null,
-          dc_horimetro_gerador: ind.DC_HORIMETRO_GERADOR ?? null,
-          dc_dif_gerador: ind.DC_DIF_GERADOR ?? null,
-          ds_origem: ind.DS_ORIGEM ?? null,
-          porto_base,
-          porto,
-        });
+        .upsert(
+          {
+            cd_ativo_indicador: Number(ind.CD_ATIVO_INDICADOR),
+            cd_lancha: Number(ind.CD_LANCHA),
+            ds_lancha: ind.DS_LANCHA,
+            dh_leitura: ind.DH_LEITURA,
+            dc_horimetro_bb: ind.DC_HORIMETRO_BB ?? null,
+            dc_dif_bb: ind.DC_DIF_BB ?? null,
+            dc_horimetro_be: ind.DC_HORIMETRO_BE ?? null,
+            dc_dif_be: ind.DC_DIF_BE ?? null,
+            dc_horimetro_gerador: ind.DC_HORIMETRO_GERADOR ?? null,
+            dc_dif_gerador: ind.DC_DIF_GERADOR ?? null,
+            ds_origem: ind.DS_ORIGEM ?? null,
+            porto_base,
+            porto,
+          },
+          { onConflict: "cd_ativo_indicador", ignoreDuplicates: true },
+        );
 
       if (!error) registrosInseridos++;
       else console.error(`Erro ao inserir cd_ativo_indicador ${ind.CD_ATIVO_INDICADOR}:`, error);
     }
 
-    const detalhe = `Registros novos inseridos: ${registrosInseridos} de ${novos.length} (total API: ${todos.length})`;
+    const detalhe = `Indicadores inseridos: ${registrosInseridos} de ${indicadores.length}`;
 
     await supabase.from("sync_log").insert({
-      status: registrosInseridos > 0 || novos.length === 0 ? "sucesso" : "parcial",
+      status: registrosInseridos > 0 ? "sucesso" : "parcial",
       lanchas_atualizadas: 0,
       eventos_importados: registrosInseridos,
       detalhe,
