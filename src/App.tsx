@@ -16,6 +16,7 @@ import NotFound from "@/pages/NotFound";
 import ProvasMarRegistrar from "@/pages/ProvasMarRegistrar";
 import ProvasMarHistorico from "@/pages/ProvasMarHistorico";
 import ProvasMarEstatisticas from "@/pages/ProvasMarEstatisticas";
+import OperacoesPage from "@/pages/OperacoesPage";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +55,7 @@ const App = () => (
                       <Route path="/historico" element={<HistoryPage />} />
                       <Route path="/calendario" element={<CalendarPage />} />
                       <Route path="/configuracoes" element={<SettingsPage />} />
+                      <Route path="/operacoes" element={<OperacoesPage />} />
                       <Route path="/provas-mar/registrar" element={<ProvasMarRegistrar />} />
                       <Route path="/provas-mar/historico" element={<ProvasMarHistorico />} />
                       <Route path="/provas-mar/estatisticas" element={<ProvasMarEstatisticas />} />
