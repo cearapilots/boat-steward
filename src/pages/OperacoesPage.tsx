@@ -37,7 +37,11 @@ const FAINA_BUCKETS = [
   { label: "2h45–3h",   min: 2.75,  max: 3        },
   { label: "3h–3h15",   min: 3,     max: 3.25     },
   { label: "3h15–3h30", min: 3.25,  max: 3.5      },
-  { label: "3h30–3h45", min: 3.5,   max: Infinity },
+  { label: "3h30–3h45", min: 3.5,   max: 3.75     },
+  { label: "3h45–4h",   min: 3.75,  max: 4        },
+  { label: "4h–4h15",   min: 4,     max: 4.25     },
+  { label: "4h15–4h30", min: 4.25,  max: 4.5      },
+  { label: ">4h30",     min: 4.5,   max: Infinity },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -129,7 +133,7 @@ export default function OperacoesPage() {
     const d = (i.dh_leitura ?? "").slice(0, 10);
     if (filterDe  && d < filterDe)  return false;
     if (filterAte && d > filterAte) return false;
-    if (filterPorto !== "Todos" && i.porto != null && i.porto !== filterPorto) return false;
+    if (filterPorto !== "Todos" && i.porto !== filterPorto) return false;
     return true;
   }), [indicadores, selectedLanchas, filterDe, filterAte, filterPorto]);
 
