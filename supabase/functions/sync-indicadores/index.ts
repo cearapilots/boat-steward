@@ -109,9 +109,7 @@ Deno.serve(async (req) => {
       const porto_base = portoPorLancha.get(cdLancha) ?? null;
 
       const isFaina =
-        typeof ind.DS_ORIGEM === "string" &&
-        (ind.DS_ORIGEM.startsWith("Faina de Lancha") ||
-          ind.DS_ORIGEM.startsWith("Mudança do Local da Lancha"));
+        typeof ind.DS_ORIGEM === "string" && ind.DS_ORIGEM.startsWith("Faina de Lancha");
 
       const porto = isFaina
         ? (porto_base === "Mucuripe" ? "Pecém" : porto_base === "Pecém" ? "Mucuripe" : null)
