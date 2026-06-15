@@ -28,14 +28,20 @@ const LANCHAS = [
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const FAINA_BUCKETS = [
-  { label: "<45min",   min: 0,    max: 0.75     },
-  { label: "45–60min", min: 0.75, max: 1        },
-  { label: "1h–1h30",  min: 1,    max: 1.5      },
-  { label: "1h30–2h",  min: 1.5,  max: 2        },
-  { label: "2h–2h30",  min: 2,    max: 2.5      },
-  { label: "2h30–3h",  min: 2.5,  max: 3        },
-  { label: "3h–4h",    min: 3,    max: 4        },
-  { label: ">4h",      min: 4,    max: Infinity },
+  { label: "<1h30",     min: 0,     max: 1.5      },
+  { label: "1h30–1h45", min: 1.5,   max: 1.75     },
+  { label: "1h45–2h",   min: 1.75,  max: 2        },
+  { label: "2h–2h15",   min: 2,     max: 2.25     },
+  { label: "2h15–2h30", min: 2.25,  max: 2.5      },
+  { label: "2h30–2h45", min: 2.5,   max: 2.75     },
+  { label: "2h45–3h",   min: 2.75,  max: 3        },
+  { label: "3h–3h15",   min: 3,     max: 3.25     },
+  { label: "3h15–3h30", min: 3.25,  max: 3.5      },
+  { label: "3h30–3h45", min: 3.5,   max: 3.75     },
+  { label: "3h45–4h",   min: 3.75,  max: 4        },
+  { label: "4h–4h15",   min: 4,     max: 4.25     },
+  { label: "4h15–4h30", min: 4.25,  max: 4.5      },
+  { label: ">4h30",     min: 4.5,   max: Infinity },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -353,6 +359,7 @@ export default function OperacoesPage() {
   const pctMuc = kpis.cntMuc + kpis.cntPec > 0
     ? Math.round((kpis.cntMuc / (kpis.cntMuc + kpis.cntPec)) * 100)
     : null;
+  const pctPec = pctMuc != null ? 100 - pctMuc : null;
 
   return (
     <div className="space-y-6">
@@ -439,7 +446,9 @@ export default function OperacoesPage() {
             <p className="text-xs text-muted-foreground">Mucuripe vs Pecém</p>
             {pctMuc != null ? (
               <>
-                <p className="text-2xl font-bold font-mono tabular-nums">{pctMuc}%</p>
+                <p className="text-base font-bold font-mono tabular-nums leading-snug">
+                  Muc {pctMuc}% · Pec {pctPec}%
+                </p>
                 <p className="text-xs text-muted-foreground mt-0.5">{kpis.cntMuc} Muc · {kpis.cntPec} Pec</p>
               </>
             ) : <p className="text-2xl font-bold">—</p>}
@@ -529,7 +538,7 @@ export default function OperacoesPage() {
                 <PieChart>
                   <Pie data={distribuicaoManobras} cx="50%" cy="50%" innerRadius={60} outerRadius={95}
                     dataKey="value" nameKey="name"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`} labelLine>
+                    label={({ name, value, percent }) => `${name} ${value} (${(percent * 100).toFixed(1)}%)`} labelLine>
                     {distribuicaoManobras.map(entry => (
                       <Cell key={entry.cd} fill={LANCHA_COR[entry.cd]} />
                     ))}
@@ -560,7 +569,19 @@ export default function OperacoesPage() {
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {selectedLanchas.map(cd => (
-                  <Bar key={cd} dataKey={LANCHA_NOME[cd]} fill={LANCHA_COR[cd]} />
+                  <Bar key={cd} dataKey={LANCHA_NOME[cd]} fill={LANCHA_COR[cd]}>
+                    <LabelList dataKey={LANCHA_NOME[cd]} position="inside"
+                      content={(props: any) => {
+                        const { x, y, width, height, value } = props;
+                        if (!value || Number(value) < 5) return null;
+                        return (
+                          <text x={x + width / 2} y={y + height / 2} fill="#fff"
+                            textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={600}>
+                            {value}
+                          </text>
+                        );
+                      }} />
+                  </Bar>
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -682,10 +703,21 @@ export default function OperacoesPage() {
               <p className="text-center text-muted-foreground py-8 text-sm">Sem fainas no período</p>
             ) : (
               <>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={histogramaFainas.data} margin={{ top: 16, right: 20, bottom: 5, left: 0 }}>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={histogramaFainas.data} margin={{ top: 16, right: 20, bottom: 60, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <XAxis
+                      dataKey="label"
+                      interval={0}
+                      tick={({ x, y, payload }) => (
+                        <g transform={`translate(${x},${y})`}>
+                          <text x={0} y={0} dy={4} textAnchor="end" fill="hsl(var(--muted-foreground))"
+                            fontSize={9} transform="rotate(-40)">
+                            {payload.value}
+                          </text>
+                        </g>
+                      )}
+                    />
                     <YAxis tick={{ fontSize: 10 }}
                       label={{ value: "qtd", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }} />
                     <Tooltip formatter={(v: any) => [`${v} fainas`, "Quantidade"]} />
