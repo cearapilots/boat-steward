@@ -28,13 +28,14 @@ const LANCHAS = [
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const FAINA_BUCKETS = [
-  { label: "<15min",   min: 0,    max: 0.25     },
-  { label: "15-30min", min: 0.25, max: 0.5      },
-  { label: "30-60min", min: 0.5,  max: 1        },
-  { label: "1-2h",     min: 1,    max: 2        },
-  { label: "2-4h",     min: 2,    max: 4        },
-  { label: "4-8h",     min: 4,    max: 8        },
-  { label: ">8h",      min: 8,    max: Infinity },
+  { label: "<45min",   min: 0,    max: 0.75     },
+  { label: "45–60min", min: 0.75, max: 1        },
+  { label: "1h–1h30",  min: 1,    max: 1.5      },
+  { label: "1h30–2h",  min: 1.5,  max: 2        },
+  { label: "2h–2h30",  min: 2,    max: 2.5      },
+  { label: "2h30–3h",  min: 2.5,  max: 3        },
+  { label: "3h–4h",    min: 3,    max: 4        },
+  { label: ">4h",      min: 4,    max: Infinity },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -301,24 +302,6 @@ export default function OperacoesPage() {
     return { data, mediana, p90, medianaLabel, p90Label, total: horas.length };
   }, [filteredFainas]);
 
-  // ── Ranking de rotas ──────────────────────────────────────────────────────
-
-  const rankingRotas = useMemo(() => {
-    const map = new Map<string, { count: number; totalH: number }>();
-    for (const f of filteredFainas as any[]) {
-      const orig = (f.ds_local_orig ?? "").trim();
-      const dest = (f.ds_local_dest ?? "").trim();
-      if (!orig && !dest) continue;
-      const key = `${orig || "?"} → ${dest || "?"}`;
-      const h = Number(f.dc_horas);
-      const prev = map.get(key) ?? { count: 0, totalH: 0 };
-      map.set(key, { count: prev.count + 1, totalH: prev.totalH + (isNaN(h) ? 0 : h) });
-    }
-    return [...map.entries()]
-      .map(([rota, { count, totalH }]) => ({ rota, count, mediaH: count > 0 ? totalH / count : 0 }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
-  }, [filteredFainas]);
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
 
@@ -689,72 +672,43 @@ export default function OperacoesPage() {
           ))}
         </div>
 
-        {/* Histograma + Ranking lado a lado */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-          {/* Histograma */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Distribuição de Duração das Fainas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {histogramaFainas.total === 0 ? (
-                <p className="text-center text-muted-foreground py-8 text-sm">Sem fainas no período</p>
-              ) : (
-                <>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={histogramaFainas.data} margin={{ top: 16, right: 10, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }}
-                        label={{ value: "qtd", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }} />
-                      <Tooltip formatter={(v: any) => [`${v} fainas`, "Quantidade"]} />
-                      <Bar dataKey="count" fill="#6366f1" name="Fainas" radius={[3, 3, 0, 0]}>
-                        <LabelList dataKey="count" position="top" style={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                      </Bar>
-                      {histogramaFainas.medianaLabel && (
-                        <ReferenceLine x={histogramaFainas.medianaLabel} stroke="#f59e0b" strokeDasharray="4 2"
-                          label={{ value: `Md ${histogramaFainas.mediana?.toFixed(1)}h`, position: "insideTopRight", fontSize: 9, fill: "#f59e0b" }} />
-                      )}
-                      {histogramaFainas.p90Label && histogramaFainas.p90Label !== histogramaFainas.medianaLabel && (
-                        <ReferenceLine x={histogramaFainas.p90Label} stroke="#ef4444" strokeDasharray="4 2"
-                          label={{ value: `P90 ${histogramaFainas.p90?.toFixed(1)}h`, position: "insideTopRight", fontSize: 9, fill: "#ef4444" }} />
-                      )}
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <p className="text-[10px] text-muted-foreground text-right mt-1">
-                    {histogramaFainas.total} fainas · Mediana {histogramaFainas.mediana?.toFixed(2)}h · P90 {histogramaFainas.p90?.toFixed(2)}h
-                  </p>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Ranking de rotas */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Top 10 Rotas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {rankingRotas.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8 text-sm">Sem fainas no período</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={rankingRotas} layout="vertical" margin={{ top: 0, right: 50, bottom: 0, left: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis type="category" dataKey="rota" tick={{ fontSize: 9 }} width={135} />
-                    <Tooltip formatter={(v: any, _: string, props: any) =>
-                      [`${v} fainas · média ${props.payload.mediaH.toFixed(2)}h`, "Rota"]} />
-                    <Bar dataKey="count" fill="#2563EB" radius={[0, 3, 3, 0]}>
-                      <LabelList dataKey="count" position="right" style={{ fontSize: 10 }} />
+        {/* Histograma */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Distribuição de Duração das Fainas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {histogramaFainas.total === 0 ? (
+              <p className="text-center text-muted-foreground py-8 text-sm">Sem fainas no período</p>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={histogramaFainas.data} margin={{ top: 16, right: 20, bottom: 5, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 10 }}
+                      label={{ value: "qtd", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }} />
+                    <Tooltip formatter={(v: any) => [`${v} fainas`, "Quantidade"]} />
+                    <Bar dataKey="count" fill="#6366f1" name="Fainas" radius={[3, 3, 0, 0]}>
+                      <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                     </Bar>
+                    {histogramaFainas.medianaLabel && (
+                      <ReferenceLine x={histogramaFainas.medianaLabel} stroke="#f59e0b" strokeDasharray="4 2"
+                        label={{ value: `Md ${histogramaFainas.mediana?.toFixed(1)}h`, position: "insideTopRight", fontSize: 10, fill: "#f59e0b" }} />
+                    )}
+                    {histogramaFainas.p90Label && histogramaFainas.p90Label !== histogramaFainas.medianaLabel && (
+                      <ReferenceLine x={histogramaFainas.p90Label} stroke="#ef4444" strokeDasharray="4 2"
+                        label={{ value: `P90 ${histogramaFainas.p90?.toFixed(1)}h`, position: "insideTopRight", fontSize: 10, fill: "#ef4444" }} />
+                    )}
                   </BarChart>
                 </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                <p className="text-[10px] text-muted-foreground text-right mt-1">
+                  {histogramaFainas.total} fainas · Mediana {histogramaFainas.mediana?.toFixed(2)}h · P90 {histogramaFainas.p90?.toFixed(2)}h
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Tabela últimas fainas */}
         <Card>
