@@ -810,3 +810,49 @@ export function useUpdateProvaMar() {
     },
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Operações (WebPilot)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useManobras() {
+  return useQuery({
+    queryKey: ["manobras"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("manobras_lanchas")
+        .select("cd_manobra, cd_lancha, ds_lancha, dh_manobra, ds_porto")
+        .order("dh_manobra", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+export function useIndicadoresOp() {
+  return useQuery({
+    queryKey: ["indicadores_op"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("indicadores_ativos")
+        .select("cd_ativo_indicador, cd_lancha, ds_lancha, dh_leitura, dc_dif_be, ds_origem, porto")
+        .order("dh_leitura", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+export function useFainas() {
+  return useQuery({
+    queryKey: ["fainas"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("fainas_deslocamentos")
+        .select("cd_faina_lancha, cd_lancha, ds_lancha, ds_local_orig, ds_local_dest, dh_inicio, dh_fim, nr_minutos, dc_horas")
+        .order("dh_inicio", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
