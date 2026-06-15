@@ -133,7 +133,7 @@ export default function OperacoesPage() {
     const d = (i.dh_leitura ?? "").slice(0, 10);
     if (filterDe  && d < filterDe)  return false;
     if (filterAte && d > filterAte) return false;
-    if (filterPorto !== "Todos" && i.porto !== filterPorto) return false;
+    if (filterPorto !== "Todos" && i.porto != null && i.porto !== filterPorto) return false;
     return true;
   }), [indicadores, selectedLanchas, filterDe, filterAte, filterPorto]);
 
