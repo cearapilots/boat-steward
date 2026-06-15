@@ -49,6 +49,14 @@ function avgArr(arr: number[]): number | null {
   return arr.reduce((s, v) => s + v, 0) / arr.length;
 }
 
+function fmtPeriodo(de: string, ate: string): string {
+  const fmt = (s: string) => s.split("-").reverse().join("/");
+  if (de && ate) return `${fmt(de)} — ${fmt(ate)}`;
+  if (de) return `a partir de ${fmt(de)}`;
+  if (ate) return `até ${fmt(ate)}`;
+  return "todo o período";
+}
+
 const todayStr = new Date().toISOString().slice(0, 10);
 const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
@@ -210,10 +218,7 @@ export default function OperacoesPage() {
     const all = (filteredFainas as any[])
       .map(f => Number(f.dc_horas)).filter(h => !isNaN(h) && h > 0);
     const pecem2muc = (filteredFainas as any[])
-      .filter(f => {
-        const orig = (f.ds_local_orig ?? "").toLowerCase();
-        return orig.includes("pec") && (orig.includes("m") || orig.includes("pecem") || orig.includes("pecém"));
-      })
+      .filter(f => (f.ds_local_orig ?? "").toLowerCase().includes("pec"))
       .map(f => Number(f.dc_horas)).filter(h => !isNaN(h) && h > 0);
     const muc2pecem = (filteredFainas as any[])
       .filter(f => (f.ds_local_orig ?? "").toLowerCase().includes("mucuripe"))
@@ -319,7 +324,7 @@ export default function OperacoesPage() {
         <CardContent>
           {manobrasPorMes.length === 0 ? (
             <p className="text-center text-muted-foreground py-10 text-sm">
-              Nenhuma manobra no período selecionado
+              Sem dados de manobras para {fmtPeriodo(filterDe, filterAte)}
             </p>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
@@ -463,7 +468,10 @@ export default function OperacoesPage() {
 
       {/* Deslocamentos */}
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-foreground">Deslocamentos</h2>
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Deslocamentos</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Período: {fmtPeriodo(filterDe, filterAte)}</p>
+        </div>
 
         {/* Cards de média */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -486,7 +494,10 @@ export default function OperacoesPage() {
         {/* Tabela últimas fainas */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Últimas 10 Fainas</CardTitle>
+            <CardTitle className="text-sm flex items-baseline gap-2">
+              Últimas 10 Fainas
+              <span className="text-xs text-muted-foreground font-normal">{fmtPeriodo(filterDe, filterAte)}</span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
