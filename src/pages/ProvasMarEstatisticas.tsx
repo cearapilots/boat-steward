@@ -500,14 +500,17 @@ export default function ProvasMarEstatisticas() {
     });
   }, [ciclosByLancha, selectedLanchas]);
 
-  // Degradação chart: scoped by degradScope
+  // Degradação chart: scoped by degradScope — apenas ciclos completos (posDocagem + preSeguinte)
   const degradacaoData = useMemo(() =>
     DEGRAD_STAGES.map(stage => {
       const pt: Record<string, unknown> = { desc: stage.label };
       for (const l of selectedLanchas) {
-        let ciclos = ciclosByLancha[l] ?? [];
-        if (degradScope === "last5") ciclos = ciclos.slice(-5);
-        else if (degradScope === "last1") ciclos = ciclos.slice(-1);
+        const ciclosCompletos = (ciclosByLancha[l] ?? []).filter(
+          c => c.posDocagem?.velocidade != null && c.preSeguinte?.velocidade != null
+        );
+        let ciclos = ciclosCompletos;
+        if (degradScope === "last5") ciclos = ciclosCompletos.slice(-5);
+        else if (degradScope === "last1") ciclos = ciclosCompletos.slice(-1);
         const vels = ciclos.map(c => c[stage.key]?.velocidade).filter((v): v is number => v != null);
         pt[l] = avg(vels);
       }
@@ -674,6 +677,84 @@ export default function ProvasMarEstatisticas() {
             </div>
           )}
 
+          {/* Ganho de Velocidade por Docagem + Curva de Degradação — lado a lado */}
+          <div className="grid grid-cols-2 gap-4">
+            {ganhoChartData.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Ganho de Velocidade por Docagem (Pós − Pré)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={ganhoChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                      <YAxis
+                        tick={{ fontSize: 10 }} domain={["auto", "auto"]}
+                        tickFormatter={v => `${v >= 0 ? "+" : ""}${fmtNum(v)}`}
+                        label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
+                      />
+                      <ReferenceLine y={0} stroke="#9CA3AF" strokeDasharray="3 3" />
+                      <Tooltip content={<GanhoTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      {selectedLanchas.map(l => (
+                        <Line
+                          key={l} type="monotone" dataKey={l} stroke={lanchaColor[l]}
+                          strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }}
+                          name={l} connectNulls
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+
+            {degradacaoData.some(pt => selectedLanchas.some(l => pt[l] != null)) && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm">Curva de Degradação Média entre Docagens</CardTitle>
+                  <div className="flex gap-1">
+                    {DEGRAD_SCOPE_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setDegradScope(opt.value)}
+                        className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                          degradScope === opt.value
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border bg-transparent text-muted-foreground hover:border-foreground/50 hover:text-foreground"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={degradacaoData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="desc" tick={{ fontSize: 11 }} />
+                      <YAxis
+                        tick={{ fontSize: 10 }} domain={["auto", "auto"]}
+                        label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
+                      />
+                      <Tooltip formatter={(value: number, name: string) => [`${fmtNum(value)} nós`, name]} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      {selectedLanchas.map(l => (
+                        <Line
+                          key={l} type="monotone" dataKey={l} stroke={lanchaColor[l]}
+                          strokeWidth={2} dot={{ r: 5 }} activeDot={{ r: 7 }}
+                          name={l} connectNulls
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
           {/* Per-lancha cycle charts */}
           {selectedLanchas.map(lancha => {
             const pts = cicloPointsByLancha[lancha] ?? [];
@@ -768,84 +849,6 @@ export default function ProvasMarEstatisticas() {
             );
           })}
 
-          {/* Ganho de Velocidade por Docagem */}
-          {ganhoChartData.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Ganho de Velocidade por Docagem (Pós − Pré)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={ganhoChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                    <YAxis
-                      tick={{ fontSize: 10 }} domain={["auto", "auto"]}
-                      tickFormatter={v => `${v >= 0 ? "+" : ""}${fmtNum(v)}`}
-                      label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
-                    />
-                    <ReferenceLine y={0} stroke="#9CA3AF" strokeDasharray="3 3" />
-                    <Tooltip content={<GanhoTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {selectedLanchas.map(l => (
-                      <Line
-                        key={l} type="monotone" dataKey={l} stroke={lanchaColor[l]}
-                        strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }}
-                        name={l} connectNulls
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Curva de Degradação Média entre Docagens */}
-          {degradacaoData.some(pt => selectedLanchas.some(l => pt[l] != null)) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2 flex-wrap">
-                  Curva de Degradação Média entre Docagens
-                  <div className="ml-auto flex gap-1">
-                    {DEGRAD_SCOPE_OPTIONS.map(opt => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setDegradScope(opt.value)}
-                        className={`px-2 py-0.5 text-xs rounded border transition-colors ${
-                          degradScope === opt.value
-                            ? "border-foreground bg-foreground text-background"
-                            : "border-border bg-transparent text-muted-foreground hover:border-foreground/50 hover:text-foreground"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={degradacaoData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="desc" tick={{ fontSize: 11 }} />
-                    <YAxis
-                      tick={{ fontSize: 10 }} domain={["auto", "auto"]}
-                      label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
-                    />
-                    <Tooltip formatter={(value: number, name: string) => [`${fmtNum(value)} nós`, name]} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {selectedLanchas.map(l => (
-                      <Line
-                        key={l} type="monotone" dataKey={l} stroke={lanchaColor[l]}
-                        strokeWidth={2} dot={{ r: 5 }} activeDot={{ r: 7 }}
-                        name={l} connectNulls
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
         </>
       )}
 
