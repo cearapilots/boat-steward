@@ -4,6 +4,7 @@ import { useSituacaoAtual, SituacaoRow, useManutencoesPeriodicas, ManutencaoPeri
 import { MaintenanceModal } from "@/components/MaintenanceModal";
 import { PeriodicMaintenanceModal } from "@/components/PeriodicMaintenanceModal";
 import { AtivoDetalhesModal } from "@/components/AtivoDetalhesModal";
+import { AlertasProvasMar } from "@/components/AlertasProvasMar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusIndicator } from "@/components/StatusIndicator";
@@ -291,6 +292,9 @@ export default function Dashboard() {
         </div>
       )}
 
+      <div className="mt-6">
+        <AlertasProvasMar />
+      </div>
 
       <MaintenanceModal
         open={modal.open}
