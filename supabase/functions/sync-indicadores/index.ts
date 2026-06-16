@@ -22,9 +22,16 @@ type WpIndicador = {
   DS_ORIGEM: string | null;
 };
 
-function portoOposto(porto: string | null): string | null {
-  if (porto === "Mucuripe") return "Pecém";
+type PortoState = { porto_base: string | null; porto: string | null; last_origem: string };
+
+function isMudanca(origem: string): boolean {
+  // "Faina de Lancha XXX" = mudança de porto (exceto resgate)
+  return origem.startsWith("Faina de Lancha") || origem === "Mudança do Local da Lancha";
+}
+
+function oposto(porto: string | null): string | null {
   if (porto === "Pecém") return "Mucuripe";
+  if (porto === "Mucuripe") return "Pecém";
   return null;
 }
 
@@ -52,23 +59,45 @@ Deno.serve(async (req) => {
     // 2. Ordenar por dh_leitura ASC para calcular porto corretamente
     indicadores.sort((a, b) => a.DH_LEITURA.localeCompare(b.DH_LEITURA));
 
-    // 3. Processar cada indicador com lógica de porto
-    // Map<cd_lancha, porto_atual> — rastreia onde cada lancha está
-    const portoPorLancha = new Map<string, string | null>();
+    // 3. Inicializar portoState com o registro imediatamente anterior à janela da API
+    const portoState: Record<number, PortoState> = {};
 
+    const dhMaisAntigo = indicadores[0].DH_LEITURA; // já ordenado ASC no passo 2
+
+    const { data: ultimos } = await supabase
+      .from("indicadores_ativos")
+      .select("cd_lancha, porto_base, porto, ds_origem, dh_leitura")
+      .not("porto_base", "is", null)
+      .lt("dh_leitura", dhMaisAntigo) // apenas antes da janela da API
+      .order("dh_leitura", { ascending: false })
+      .limit(10000);
+
+    if (ultimos) {
+      const visto = new Set<number>();
+      for (const row of ultimos as {
+        cd_lancha: number; porto_base: string; porto: string; ds_origem: string | null;
+      }[]) {
+        if (!visto.has(row.cd_lancha)) {
+          portoState[row.cd_lancha] = {
+            porto_base: row.porto_base,
+            porto: row.porto,
+            last_origem: row.ds_origem ?? "",
+          };
+          visto.add(row.cd_lancha);
+        }
+      }
+    }
+
+    // 4. Processar cada indicador com lógica de porto (replica fórmula do Excel)
     for (const ind of indicadores) {
-      const cdLancha = String(ind.CD_LANCHA);
+      const cdLancha = Number(ind.CD_LANCHA);
+      const origem = ind.DS_ORIGEM ?? "";
 
-      // porto_base = último porto conhecido antes desta leitura
-      const porto_base = portoPorLancha.get(cdLancha) ?? null;
+      const s = portoState[cdLancha];
+      const porto_base = s ? (isMudanca(origem) ? oposto(s.porto_base) : s.porto_base) : null;
+      const porto = s ? (isMudanca(s.last_origem) ? s.porto_base : s.porto) : null;
 
-      // Se é Faina de Lancha, a lancha cruzou para o porto oposto
-      const isFaina =
-        typeof ind.DS_ORIGEM === "string" && ind.DS_ORIGEM.startsWith("Faina de Lancha");
-      const porto = isFaina ? portoOposto(porto_base) : porto_base;
-
-      // Atualizar mapa com porto atual
-      portoPorLancha.set(cdLancha, porto);
+      portoState[cdLancha] = { porto_base, porto, last_origem: origem };
 
       const { error } = await supabase
         .from("indicadores_ativos")
