@@ -822,10 +822,12 @@ export function useManobras() {
       const { data, error } = await (supabase as any)
         .from("manobras_lanchas")
         .select("cd_manobra, cd_lancha, ds_lancha, dh_manobra, ds_porto")
-        .order("dh_manobra", { ascending: false });
+        .order("dh_manobra", { ascending: false })
+        .limit(100000);
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -836,10 +838,12 @@ export function useIndicadoresOp() {
       const { data, error } = await (supabase as any)
         .from("indicadores_ativos")
         .select("cd_ativo_indicador, cd_lancha, ds_lancha, dh_leitura, dc_dif_be, ds_origem, porto")
-        .order("dh_leitura", { ascending: false });
+        .order("dh_leitura", { ascending: false })
+        .limit(100000);
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -850,9 +854,27 @@ export function useFainas() {
       const { data, error } = await (supabase as any)
         .from("fainas_deslocamentos")
         .select("cd_faina_lancha, cd_lancha, ds_lancha, ds_local_orig, ds_local_dest, dh_inicio, dh_fim, nr_minutos, dc_horas")
-        .order("dh_inicio", { ascending: false });
+        .order("dh_inicio", { ascending: false })
+        .limit(100000);
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useOcorrencias() {
+  return useQuery({
+    queryKey: ["ocorrencias"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("ocorrencias_webpilot")
+        .select("cd_ocorrencia, lancha_id, data_inicio, data_fim, duracao_horas, tipo_ocorrencia, efeito, lanchas(nome)")
+        .order("data_inicio", { ascending: false })
+        .limit(100000);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }
