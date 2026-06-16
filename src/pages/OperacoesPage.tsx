@@ -11,7 +11,7 @@ import {
   LineChart, Line,
   PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, LabelList, ReferenceLine,
+  ResponsiveContainer, LabelList, ReferenceLine, ReferenceArea,
 } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -40,11 +40,7 @@ const FAINA_BUCKETS = [
   { label: "2h45–3h",   min: 2.75,  max: 3        },
   { label: "3h–3h15",   min: 3,     max: 3.25     },
   { label: "3h15–3h30", min: 3.25,  max: 3.5      },
-  { label: "3h30–3h45", min: 3.5,   max: 3.75     },
-  { label: "3h45–4h",   min: 3.75,  max: 4        },
-  { label: "4h–4h15",   min: 4,     max: 4.25     },
-  { label: "4h15–4h30", min: 4.25,  max: 4.5      },
-  { label: ">4h30",     min: 4.5,   max: Infinity },
+  { label: ">3h30", min: 3.5,   max: Infinity },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -262,11 +258,13 @@ export default function OperacoesPage() {
     const de  = filterDe  || oneYearAgo;
     const ate = filterAte || todayStr;
     const months: string[] = [];
-    let cur = new Date(de.slice(0, 7) + "-01");
-    const end = new Date(ate.slice(0, 7) + "-01");
-    while (cur <= end) {
-      months.push(cur.toISOString().slice(0, 7));
-      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    const [startY, startM] = de.slice(0, 7).split("-").map(Number);
+    const [endY,   endM  ] = ate.slice(0, 7).split("-").map(Number);
+    let y = startY, m = startM;
+    while (y < endY || (y === endY && m <= endM)) {
+      months.push(`${y}-${String(m).padStart(2, "0")}`);
+      m++;
+      if (m > 12) { m = 1; y++; }
     }
     return months.map(month => {
       const [y, m] = month.split("-").map(Number);
@@ -286,6 +284,13 @@ export default function OperacoesPage() {
       return pt;
     });
   }, [ocorrencias, filterDe, filterAte, selectedLanchas]);
+
+  const yMinDisp = useMemo(() => {
+    const vals = disponibilidadeMensal.flatMap(pt =>
+      selectedLanchas.map(cd => pt[LANCHA_NOME[cd]] as number).filter(v => v != null && !isNaN(v))
+    );
+    return vals.length > 0 ? Math.max(40, Math.floor(Math.min(...vals) / 5) * 5 - 5) : 40;
+  }, [disponibilidadeMensal, selectedLanchas]);
 
   // ── Gráfico 5: Eficiência (horas / manobra) ───────────────────────────────
 
@@ -643,7 +648,7 @@ export default function OperacoesPage() {
                       <span className="text-xs font-medium">{l.nome}</span>
                       <span className="text-xs text-muted-foreground ml-auto">{total} man.</span>
                     </div>
-                    <div className="flex h-2 rounded-full overflow-hidden bg-muted">
+                    <div className="flex h-3 rounded-full overflow-hidden bg-muted">
                       <div style={{ width: `${total ? (mucuripe / total) * 100 : 0}%`, backgroundColor: "#0891B2" }} />
                       <div style={{ width: `${total ? (pecem / total) * 100 : 0}%`, backgroundColor: "#7C3AED" }} />
                     </div>
@@ -664,20 +669,36 @@ export default function OperacoesPage() {
                 Disponibilidade
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-4">
               {disponibilidadePorLancha.map(d => {
-                const cor = d.disp >= 95 ? "#16A34A" : "#DC2626";
+                const cor = d.disp >= 95 ? "#16A34A" : d.disp >= 85 ? "#F97316" : "#DC2626";
                 return (
-                  <div key={d.cd} className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
-                    <span className="text-xs flex-1">{d.nome}</span>
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor }} />
-                    <span className="text-xs font-mono font-semibold" style={{ color: cor }}>
-                      {d.disp.toFixed(1)}%
-                    </span>
+                  <div key={d.cd} className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
+                        <span className="text-xs font-medium">{d.nome}</span>
+                      </div>
+                      <span className="text-sm font-bold font-mono" style={{ color: cor }}>
+                        {d.disp.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full transition-all"
+                        style={{ width: `${d.disp}%`, backgroundColor: cor }} />
+                    </div>
                   </div>
                 );
               })}
+              {(() => {
+                const media = disponibilidadePorLancha.reduce((s, d) => s + d.disp, 0) / Math.max(1, disponibilidadePorLancha.length);
+                return (
+                  <div className="pt-2 border-t border-border flex justify-between items-center">
+                    <span className="text-[10px] text-muted-foreground">Média frota</span>
+                    <span className="text-xs font-mono font-semibold text-muted-foreground">{media.toFixed(1)}%</span>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>
@@ -695,8 +716,12 @@ export default function OperacoesPage() {
                 <LineChart data={disponibilidadeMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                  <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
-                  <ReferenceLine y={95} stroke="#9CA3AF" strokeDasharray="3 3" />
+                  <YAxis domain={[yMinDisp, 100]}
+                    ticks={Array.from({ length: Math.ceil((100 - yMinDisp) / 5) + 1 }, (_, i) => yMinDisp + i * 5)}
+                    tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
+                  <ReferenceArea y1={yMinDisp} y2={95} fill="#FEF3C7" fillOpacity={0.25} />
+                  <ReferenceLine y={95} stroke="#9CA3AF" strokeDasharray="3 3"
+                    label={{ value: "95%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
                   <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   {selectedLanchas.map(cd => (
