@@ -313,8 +313,8 @@ export default function Dashboard() {
 }
 
 function periodicStatusLevel(s: ManutencaoPeriodicaStatus["status_semaforo"]) {
-  if (s === "vencido" || s === "critico") return "danger" as const;
-  if (s === "atencao") return "warn" as const;
+  if (s === "vencido") return "danger" as const; // prazo já vencido (dias_restantes < 0)
+  if (s === "critico" || s === "atencao") return "warn" as const; // próximo do vencimento
   if (s === "ok") return "ok" as const;
   return null; // sem_registro
 }
