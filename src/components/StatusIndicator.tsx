@@ -5,7 +5,7 @@ export type StatusLevel = "ok" | "warn" | "danger";
 const statusConfig: Record<StatusLevel, { bg: string; dot: string; label: string }> = {
   ok: { bg: "bg-status-ok-bg", dot: "bg-status-ok", label: "OK" },
   warn: { bg: "bg-status-warn-bg", dot: "bg-status-warn", label: "Atenção" },
-  danger: { bg: "bg-status-danger-bg", dot: "bg-status-danger animate-pulse-soft", label: "Crítico" },
+  danger: { bg: "bg-status-danger-bg", dot: "bg-status-danger animate-pulse-soft", label: "Alerta" },
 };
 
 export function StatusIndicator({ status, showLabel = false }: { status: StatusLevel; showLabel?: boolean }) {
