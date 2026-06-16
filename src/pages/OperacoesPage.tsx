@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useManobras, useIndicadoresOp, useFainas } from "@/hooks/useFleetData";
+import { useManobras, useIndicadoresOp, useFainas, useOcorrencias } from "@/hooks/useFleetData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -24,6 +24,9 @@ const LANCHAS = [
   { cd: 1003, nome: "Fortim"    },
   { cd: 117,  nome: "Taíba"     },
 ];
+const NOME_TO_CD: Record<string, number> = Object.fromEntries(
+  Object.entries(LANCHA_NOME).map(([cd, nome]) => [nome, Number(cd)])
+);
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -75,6 +78,19 @@ function fmtPeriodo(de: string, ate: string): string {
   return "todo o período";
 }
 
+function isOcorrenciaInoperante(o: any): boolean {
+  return (
+    (o.efeito ?? "").toLowerCase().includes("inopera") ||
+    (o.tipo_ocorrencia ?? "").toLowerCase().includes("docagem") ||
+    (o.tipo_ocorrencia ?? "").toLowerCase().includes("manutenção") ||
+    (o.tipo_ocorrencia ?? "").toLowerCase().includes("manutencao")
+  );
+}
+
+function ocorrenciaCdLancha(o: any): number | null {
+  return NOME_TO_CD[o.lanchas?.nome] ?? null;
+}
+
 const todayStr    = new Date().toISOString().slice(0, 10);
 const oneYearAgo  = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
@@ -103,6 +119,7 @@ export default function OperacoesPage() {
   const { data: manobras,    isLoading: loadingM } = useManobras();
   const { data: indicadores, isLoading: loadingI } = useIndicadoresOp();
   const { data: fainas,      isLoading: loadingF } = useFainas();
+  const { data: ocorrencias } = useOcorrencias();
 
   const [selectedLanchas, setSelectedLanchas] = useState<number[]>([121, 1003, 117]);
   const [filterDe,   setFilterDe]   = useState(oneYearAgo);
@@ -220,6 +237,55 @@ export default function OperacoesPage() {
       return pt;
     });
   }, [filteredManobras, selectedLanchas]);
+
+  // ── Disponibilidade ────────────────────────────────────────────────────────
+
+  const disponibilidadePorLancha = useMemo(() => {
+    return LANCHAS.map(l => {
+      const ocorr = (ocorrencias ?? []).filter((o: any) =>
+        ocorrenciaCdLancha(o) === l.cd &&
+        isOcorrenciaInoperante(o) &&
+        (!filterDe  || (o.data_inicio ?? "") >= filterDe) &&
+        (!filterAte || (o.data_inicio ?? "") <= filterAte)
+      );
+      const horasInop = ocorr.reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
+      const diasPeriodo = filterDe && filterAte
+        ? Math.max(1, (new Date(filterAte).getTime() - new Date(filterDe).getTime()) / 86400000)
+        : 365;
+      const horasPeriodo = diasPeriodo * 24;
+      const disp = Math.max(0, ((horasPeriodo - horasInop) / horasPeriodo) * 100);
+      return { cd: l.cd, nome: l.nome, disp };
+    });
+  }, [ocorrencias, filterDe, filterAte]);
+
+  const disponibilidadeMensal = useMemo(() => {
+    const de  = filterDe  || oneYearAgo;
+    const ate = filterAte || todayStr;
+    const months: string[] = [];
+    let cur = new Date(de.slice(0, 7) + "-01");
+    const end = new Date(ate.slice(0, 7) + "-01");
+    while (cur <= end) {
+      months.push(cur.toISOString().slice(0, 7));
+      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    }
+    return months.map(month => {
+      const [y, m] = month.split("-").map(Number);
+      const horasMes = new Date(y, m, 0).getDate() * 24;
+      const pt: Record<string, any> = { mes: fmtMonth(month) };
+      for (const cd of selectedLanchas) {
+        const horasInop = (ocorrencias ?? [])
+          .filter((o: any) =>
+            ocorrenciaCdLancha(o) === cd &&
+            isOcorrenciaInoperante(o) &&
+            (o.data_inicio ?? "").slice(0, 7) === month
+          )
+          .reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
+        const disp = Math.max(0, ((horasMes - horasInop) / horasMes) * 100);
+        pt[LANCHA_NOME[cd]] = Math.round(disp * 10) / 10;
+      }
+      return pt;
+    });
+  }, [ocorrencias, filterDe, filterAte, selectedLanchas]);
 
   // ── Gráfico 5: Eficiência (horas / manobra) ───────────────────────────────
 
@@ -550,6 +616,102 @@ export default function OperacoesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── SEÇÃO: Manobras resumo + Disponibilidade ───────────── */}
+      <div className="grid grid-cols-4 gap-4" style={{ minHeight: 340 }}>
+
+        {/* Coluna esquerda (25%) — 2 cards empilhados */}
+        <div className="col-span-1 flex flex-col gap-4">
+
+          {/* Card 1: Manobras por porto (compacto) */}
+          <Card className="flex-1">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
+                Manobras por Porto
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {LANCHAS.filter(l => selectedLanchas.includes(l.cd)).map(l => {
+                const man = (filteredManobras as any[]).filter(m => Number(m.cd_lancha) === l.cd);
+                const mucuripe = man.filter(m => m.ds_porto === "Mucuripe").length;
+                const pecem    = man.filter(m => (m.ds_porto ?? "").includes("Pec")).length;
+                const total    = man.length;
+                return (
+                  <div key={l.cd} className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[l.cd] }} />
+                      <span className="text-xs font-medium">{l.nome}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">{total} man.</span>
+                    </div>
+                    <div className="flex h-2 rounded-full overflow-hidden bg-muted">
+                      <div style={{ width: `${total ? (mucuripe / total) * 100 : 0}%`, backgroundColor: "#0891B2" }} />
+                      <div style={{ width: `${total ? (pecem / total) * 100 : 0}%`, backgroundColor: "#7C3AED" }} />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>Mucuripe {total ? Math.round((mucuripe / total) * 100) : 0}%</span>
+                      <span>Pecém {total ? Math.round((pecem / total) * 100) : 0}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Disponibilidade das 3 lanchas */}
+          <Card className="flex-1">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
+                Disponibilidade
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {disponibilidadePorLancha.map(d => {
+                const cor = d.disp >= 95 ? "#16A34A" : "#DC2626";
+                return (
+                  <div key={d.cd} className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
+                    <span className="text-xs flex-1">{d.nome}</span>
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor }} />
+                    <span className="text-xs font-mono font-semibold" style={{ color: cor }}>
+                      {d.disp.toFixed(1)}%
+                    </span>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Coluna direita (75%) — Série temporal disponibilidade */}
+        <Card className="col-span-3">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Disponibilidade por Período (%)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {disponibilidadeMensal.length === 0 ? (
+              <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={290}>
+                <LineChart data={disponibilidadeMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                  <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
+                  <ReferenceLine y={95} stroke="#9CA3AF" strokeDasharray="3 3" />
+                  <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {selectedLanchas.map(cd => (
+                    <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
+                      stroke={LANCHA_COR[cd]} strokeWidth={2}
+                      dot={{ r: 3 }} activeDot={{ r: 5 }}
+                      connectNulls />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+      {/* ── FIM SEÇÃO Disponibilidade ─────────────────────────── */}
 
       {/* Gráfico 4 — Manobras por porto */}
       <Card>
