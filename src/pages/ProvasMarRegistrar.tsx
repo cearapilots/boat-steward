@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useLanchas, useCreateProvaMar } from "@/hooks/useFleetData";
 import { DESCRICOES_PROVA } from "@/lib/provas-mar";
+import { AlertasProvasMar } from "@/components/AlertasProvasMar";
 
 const PORTOS = ["Mucuripe", "Pecém"];
 
@@ -85,6 +86,8 @@ export default function ProvasMarRegistrar() {
         <h1 className="text-2xl font-bold text-foreground">Registrar Prova de Mar</h1>
         <p className="text-sm text-accent">Registre os dados de uma corrida de velocidade</p>
       </div>
+
+      <AlertasProvasMar />
 
       <form onSubmit={handleSubmit}>
         <Card>
