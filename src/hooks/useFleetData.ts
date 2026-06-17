@@ -325,7 +325,7 @@ export type OcorrenciaWebpilot = {
   lanchas: { nome: string } | null;
 };
 
-export function useOcorrencias() {
+export function useOcorrenciasWebpilot() {
   return useQuery({
     queryKey: ["ocorrencias_webpilot"],
     queryFn: async () => {
