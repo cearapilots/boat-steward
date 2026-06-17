@@ -325,7 +325,7 @@ export type OcorrenciaWebpilot = {
   lanchas: { nome: string } | null;
 };
 
-export function useOcorrenciasWebpilot() {
+export function useOcorrencias() {
   return useQuery({
     queryKey: ["ocorrencias_webpilot"],
     queryFn: async () => {
@@ -870,7 +870,7 @@ const LANCHA_UUID_TO_CD: Record<string, number> = {
   "a0000000-0000-0000-0000-000000000003": 117,   // Taíba
 };
 
-export function useOcorrenciasWebpilot() {
+export function useOcorrencias() {
   return useQuery({
     queryKey: ["ocorrencias"],
     queryFn: async () => {
