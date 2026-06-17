@@ -25,6 +25,23 @@ type PosicaoRow = {
   ativos: { id: string; nome: string; tipo: string } | null;
 };
 
+type SkipReason =
+  | "lancha_nao_encontrada"
+  | "equipamento_desconhecido"
+  | "erro_posicoes"
+  | "sem_ativo_na_data"
+  | "duplicata"
+  | "erro_insert";
+
+type SkipEntry = {
+  cd_abastecimento: number | string;
+  lancha: string;
+  equipamento: string;
+  data: string;
+  motivo: SkipReason;
+  detalhe?: string;
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS });
@@ -37,6 +54,7 @@ Deno.serve(async (req) => {
 
   let trocasRegistradas = 0;
   const contagemPorLancha = new Map<string, number>();
+  const skips: SkipEntry[] = [];
 
   try {
     // ── 1. Buscar registros do WebPilot ──────────────────────────────────────
@@ -55,10 +73,25 @@ Deno.serve(async (req) => {
 
     if (errLanchas) throw new Error(`Erro ao buscar lanchas: ${errLanchas.message}`);
 
+    // IDs disponíveis no banco (para diagnóstico)
+    const idWebpilotDisponiveis = (lanchasBanco ?? []).map((l: { nome: string; id_webpilot: string | null }) => `${l.nome}=${l.id_webpilot}`).join(", ");
+
     // ── 3. Processar cada registro ───────────────────────────────────────────
     for (const troca of trocas) {
-      const lancha = lanchasBanco?.find((l) => l.id_webpilot === String(troca.CD_LANCHA));
-      if (!lancha) continue;
+      const cdLanchaStr = String(troca.CD_LANCHA);
+      const lancha = lanchasBanco?.find((l) => l.id_webpilot === cdLanchaStr);
+
+      if (!lancha) {
+        skips.push({
+          cd_abastecimento: troca.CD_ABASTECIMENTO,
+          lancha: `CD_LANCHA=${cdLanchaStr} (${troca.DS_LANCHA})`,
+          equipamento: troca.DS_EQUIPAMENTO,
+          data: troca.DH_ABASTECIMENTO,
+          motivo: "lancha_nao_encontrada",
+          detalhe: `id_webpilot "${cdLanchaStr}" não encontrado no banco. Disponíveis: ${idWebpilotDisponiveis}`,
+        });
+        continue;
+      }
 
       // Determinar tipo de ativo e posições esperadas
       let tipoAtivo: string;
@@ -76,7 +109,15 @@ Deno.serve(async (req) => {
         posicoesAlvo = [];
         isGerador = true;
       } else {
-        continue; // DS_EQUIPAMENTO desconhecido — pular
+        skips.push({
+          cd_abastecimento: troca.CD_ABASTECIMENTO,
+          lancha: lancha.nome,
+          equipamento: troca.DS_EQUIPAMENTO,
+          data: troca.DH_ABASTECIMENTO,
+          motivo: "equipamento_desconhecido",
+          detalhe: `DS_EQUIPAMENTO="${troca.DS_EQUIPAMENTO}" não é "Motores", "Reversores" ou "Gerador"`,
+        });
+        continue;
       }
 
       const observacao = `Troca de óleo e filtro dos ${troca.DS_EQUIPAMENTO}`;
@@ -91,7 +132,17 @@ Deno.serve(async (req) => {
         .lte("data_instalacao", dataAbastecimento)
         .or(`data_remocao.is.null,data_remocao.gt.${dataAbastecimento}`);
 
-      if (errPos || !posicoes) continue;
+      if (errPos || !posicoes) {
+        skips.push({
+          cd_abastecimento: troca.CD_ABASTECIMENTO,
+          lancha: lancha.nome,
+          equipamento: troca.DS_EQUIPAMENTO,
+          data: troca.DH_ABASTECIMENTO,
+          motivo: "erro_posicoes",
+          detalhe: errPos?.message ?? "posicoes retornou null",
+        });
+        continue;
+      }
 
       // Filtrar pelo tipo e posição esperados
       const alvo = (posicoes as PosicaoRow[]).filter((p) => {
@@ -100,7 +151,20 @@ Deno.serve(async (req) => {
         return true;
       });
 
-      if (alvo.length === 0) continue;
+      if (alvo.length === 0) {
+        const tiposEncontrados = (posicoes as PosicaoRow[]).map((p: PosicaoRow) =>
+          `${(p.ativos as any)?.tipo ?? "?"}@${p.posicao ?? "?"}`
+        ).join(", ") || "nenhum";
+        skips.push({
+          cd_abastecimento: troca.CD_ABASTECIMENTO,
+          lancha: lancha.nome,
+          equipamento: troca.DS_EQUIPAMENTO,
+          data: troca.DH_ABASTECIMENTO,
+          motivo: "sem_ativo_na_data",
+          detalhe: `Procurado tipo="${tipoAtivo}" posições=${JSON.stringify(posicoesAlvo)} em ${dataAbastecimento}. Ativos instalados na data: [${tiposEncontrados}]`,
+        });
+        continue;
+      }
 
       for (const pos of alvo) {
         const ativoId = pos.ativo_id;
@@ -113,14 +177,22 @@ Deno.serve(async (req) => {
           .eq("ativo_id", ativoId)
           .eq("data_manutencao", dhAbastecimento)
           .eq("tipo", "troca_oleo")
-          .neq("origem", "manual") // nunca sobrescrever registros manuais
+          .neq("origem", "manual")
           .maybeSingle();
 
-        if (existeMut) continue; // já importado anteriormente
+        if (existeMut) {
+          skips.push({
+            cd_abastecimento: troca.CD_ABASTECIMENTO,
+            lancha: lancha.nome,
+            equipamento: troca.DS_EQUIPAMENTO,
+            data: troca.DH_ABASTECIMENTO,
+            motivo: "duplicata",
+            detalhe: `manutencao id=${existeMut.id} já existe para ativo_id=${ativoId}`,
+          });
+          continue;
+        }
 
         // ── INSERT em manutencoes ────────────────────────────────────────────
-        // O trigger trigger_atualizar_ativo_apos_manutencao atualiza
-        // ativos.ultima_troca_horimetro e ativos.ultima_troca_data automaticamente.
         const { error: errMut } = await supabase.from("manutencoes").insert({
           ativo_id: ativoId,
           lancha_id: lancha.id,
@@ -132,7 +204,17 @@ Deno.serve(async (req) => {
           origem: "webpilot_sync",
         });
 
-        if (errMut) continue;
+        if (errMut) {
+          skips.push({
+            cd_abastecimento: troca.CD_ABASTECIMENTO,
+            lancha: lancha.nome,
+            equipamento: troca.DS_EQUIPAMENTO,
+            data: troca.DH_ABASTECIMENTO,
+            motivo: "erro_insert",
+            detalhe: errMut.message,
+          });
+          continue;
+        }
 
         // ── INSERT espelhado em historico ────────────────────────────────────
         const { data: existeHist } = await supabase
@@ -165,21 +247,36 @@ Deno.serve(async (req) => {
     }
 
     // ── 4. Gravar no sync_log ────────────────────────────────────────────────
-    const detalhe = contagemPorLancha.size > 0
-      ? [...contagemPorLancha.entries()]
+    const partes: string[] = [];
+    if (contagemPorLancha.size > 0) {
+      partes.push(
+        [...contagemPorLancha.entries()]
           .map(([nome, qtd]) => `${nome}: ${qtd} troca${qtd > 1 ? "s" : ""}`)
-          .join(" | ")
-      : "Nenhuma troca nova encontrada";
+          .join(" | "),
+      );
+    }
+    if (skips.length > 0) {
+      const resumoSkips = skips
+        .map((s) => `[SKIP cd=${s.cd_abastecimento} ${s.lancha} ${s.equipamento}: ${s.motivo} — ${s.detalhe}]`)
+        .join(" | ");
+      partes.push(resumoSkips);
+    }
+    const detalhe = partes.length > 0 ? partes.join(" || ") : "Nenhuma troca nova encontrada";
 
     await supabase.from("sync_log").insert({
-      status: trocasRegistradas > 0 ? "sucesso" : "parcial",
+      status: trocasRegistradas > 0 ? "sucesso" : skips.length > 0 ? "parcial" : "parcial",
       lanchas_atualizadas: contagemPorLancha.size,
       eventos_importados: trocasRegistradas,
       detalhe,
     });
 
     return new Response(
-      JSON.stringify({ sucesso: true, trocas_registradas: trocasRegistradas, detalhe }),
+      JSON.stringify({
+        sucesso: true,
+        trocas_registradas: trocasRegistradas,
+        detalhe,
+        skips,
+      }),
       { headers: { "Content-Type": "application/json", ...CORS } },
     );
   } catch (erro) {
