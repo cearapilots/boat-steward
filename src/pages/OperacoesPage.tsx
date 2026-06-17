@@ -24,9 +24,6 @@ const LANCHAS = [
   { cd: 1003, nome: "Fortim"    },
   { cd: 117,  nome: "Taíba"     },
 ];
-const NOME_TO_CD: Record<string, number> = Object.fromEntries(
-  Object.entries(LANCHA_NOME).map(([cd, nome]) => [nome, Number(cd)])
-);
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -74,17 +71,53 @@ function fmtPeriodo(de: string, ate: string): string {
   return "todo o período";
 }
 
-function isOcorrenciaInoperante(o: any): boolean {
-  return (
-    (o.efeito ?? "").toLowerCase().includes("inopera") ||
-    (o.tipo_ocorrencia ?? "").toLowerCase().includes("docagem") ||
-    (o.tipo_ocorrencia ?? "").toLowerCase().includes("manutenção") ||
-    (o.tipo_ocorrencia ?? "").toLowerCase().includes("manutencao")
-  );
+function shouldCountAsDowntime(efeito: string | null | undefined): boolean {
+  const e = (efeito ?? "").trim();
+  return e === "Inoperante" || e === "Operante com Restrições";
 }
 
-function ocorrenciaCdLancha(o: any): number | null {
-  return NOME_TO_CD[o.lanchas?.nome] ?? null;
+function mergeIntervals(
+  intervals: Array<{ start: Date; end: Date }>
+): Array<{ start: Date; end: Date }> {
+  if (!intervals.length) return [];
+  const sorted = [...intervals].sort((a, b) => a.start.getTime() - b.start.getTime());
+  const merged: Array<{ start: Date; end: Date }> = [{ ...sorted[0] }];
+  for (const curr of sorted.slice(1)) {
+    const last = merged[merged.length - 1];
+    if (curr.start <= last.end) {
+      if (curr.end > last.end) last.end = curr.end;
+    } else {
+      merged.push({ ...curr });
+    }
+  }
+  return merged;
+}
+
+function calcDowntimeHours(
+  ocorrencias: any[],
+  cdLancha: number,
+  periodStart: Date,
+  periodEnd: Date
+): number {
+  const intervalos = ocorrencias
+    .filter(o =>
+      Number(o.cd_lancha) === cdLancha &&
+      shouldCountAsDowntime(o.efeito) &&
+      o.data_inicio
+    )
+    .map(o => {
+      const s = new Date(o.data_inicio);
+      const e = o.data_fim ? new Date(o.data_fim) : periodEnd;
+      return {
+        start: s < periodStart ? periodStart : s,
+        end:   e > periodEnd   ? periodEnd   : e,
+      };
+    })
+    .filter(i => i.start < i.end);
+  const merged = mergeIntervals(intervalos);
+  return merged.reduce((sum, i) =>
+    sum + (i.end.getTime() - i.start.getTime()) / 3_600_000, 0
+  );
 }
 
 const todayStr    = new Date().toISOString().slice(0, 10);
@@ -237,20 +270,13 @@ export default function OperacoesPage() {
   // ── Disponibilidade ────────────────────────────────────────────────────────
 
   const disponibilidadePorLancha = useMemo(() => {
+    const de  = filterDe  ? new Date(filterDe  + "T00:00:00") : new Date(oneYearAgo + "T00:00:00");
+    const ate = filterAte ? new Date(filterAte + "T23:59:59") : new Date(todayStr   + "T23:59:59");
+    const totalH = (ate.getTime() - de.getTime()) / 3_600_000;
     return LANCHAS.map(l => {
-      const ocorr = (ocorrencias ?? []).filter((o: any) =>
-        ocorrenciaCdLancha(o) === l.cd &&
-        isOcorrenciaInoperante(o) &&
-        (!filterDe  || (o.data_inicio ?? "") >= filterDe) &&
-        (!filterAte || (o.data_inicio ?? "") <= filterAte)
-      );
-      const horasInop = ocorr.reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
-      const diasPeriodo = filterDe && filterAte
-        ? Math.max(1, (new Date(filterAte).getTime() - new Date(filterDe).getTime()) / 86400000)
-        : 365;
-      const horasPeriodo = diasPeriodo * 24;
-      const disp = Math.max(0, ((horasPeriodo - horasInop) / horasPeriodo) * 100);
-      return { cd: l.cd, nome: l.nome, disp };
+      const downtimeH = calcDowntimeHours(ocorrencias ?? [], l.cd, de, ate);
+      const disp = Math.max(0, Math.min(100, (totalH - downtimeH) / totalH * 100));
+      return { cd: l.cd, nome: l.nome, disp, downtimeH };
     });
   }, [ocorrencias, filterDe, filterAte]);
 
@@ -263,23 +289,17 @@ export default function OperacoesPage() {
     let y = startY, m = startM;
     while (y < endY || (y === endY && m <= endM)) {
       months.push(`${y}-${String(m).padStart(2, "0")}`);
-      m++;
-      if (m > 12) { m = 1; y++; }
+      m++; if (m > 12) { m = 1; y++; }
     }
     return months.map(month => {
-      const [y, m] = month.split("-").map(Number);
-      const horasMes = new Date(y, m, 0).getDate() * 24;
+      const [my, mm] = month.split("-").map(Number);
+      const monthStart = new Date(my, mm - 1, 1);
+      const monthEnd   = new Date(my, mm,     1);
+      const totalH = (monthEnd.getTime() - monthStart.getTime()) / 3_600_000;
       const pt: Record<string, any> = { mes: fmtMonth(month) };
       for (const cd of selectedLanchas) {
-        const horasInop = (ocorrencias ?? [])
-          .filter((o: any) =>
-            ocorrenciaCdLancha(o) === cd &&
-            isOcorrenciaInoperante(o) &&
-            (o.data_inicio ?? "").slice(0, 7) === month
-          )
-          .reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
-        const disp = Math.max(0, ((horasMes - horasInop) / horasMes) * 100);
-        pt[LANCHA_NOME[cd]] = Math.round(disp * 10) / 10;
+        const downtimeH = calcDowntimeHours(ocorrencias ?? [], cd, monthStart, monthEnd);
+        pt[LANCHA_NOME[cd]] = Math.round(Math.max(0, (totalH - downtimeH) / totalH * 100) * 10) / 10;
       }
       return pt;
     });
@@ -687,6 +707,7 @@ export default function OperacoesPage() {
                       <div className="h-full rounded-full transition-all"
                         style={{ width: `${d.disp}%`, backgroundColor: cor }} />
                     </div>
+                    <span className="text-[10px] text-muted-foreground">{d.downtimeH.toFixed(1)}h inop.</span>
                   </div>
                 );
               })}
@@ -883,7 +904,7 @@ export default function OperacoesPage() {
         {/* Histograma */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Distribuição de Duração dos Deslocamentos</CardTitle>
+            <CardTitle className="text-sm">Distribuição de Duração das Fainas</CardTitle>
           </CardHeader>
           <CardContent>
             {histogramaFainas.total === 0 ? (
@@ -933,7 +954,7 @@ export default function OperacoesPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-baseline gap-2">
-              Últimos 10 Deslocamentos
+              Últimas 10 Fainas
               <span className="text-xs text-muted-foreground font-normal">{fmtPeriodo(filterDe, filterAte)}</span>
             </CardTitle>
           </CardHeader>
