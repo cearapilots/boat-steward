@@ -870,7 +870,7 @@ const LANCHA_UUID_TO_CD: Record<string, number> = {
   "a0000000-0000-0000-0000-000000000003": 117,   // Taíba
 };
 
-export function useOcorrencias() {
+export function useOcorrenciasWebpilot() {
   return useQuery({
     queryKey: ["ocorrencias"],
     queryFn: async () => {
