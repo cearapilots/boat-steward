@@ -883,7 +883,7 @@ export default function OperacoesPage() {
         {/* Histograma */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Distribuição de Duração das Fainas</CardTitle>
+            <CardTitle className="text-sm">Distribuição de Duração dos Deslocamentos</CardTitle>
           </CardHeader>
           <CardContent>
             {histogramaFainas.total === 0 ? (
@@ -933,7 +933,7 @@ export default function OperacoesPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-baseline gap-2">
-              Últimas 10 Fainas
+              Últimos 10 Deslocamentos
               <span className="text-xs text-muted-foreground font-normal">{fmtPeriodo(filterDe, filterAte)}</span>
             </CardTitle>
           </CardHeader>
