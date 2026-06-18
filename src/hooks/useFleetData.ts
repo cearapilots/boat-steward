@@ -863,17 +863,27 @@ export function useFainas() {
   });
 }
 
+// Mapeamento confirmado pelo export da tabela ativos (junho/2026)
+const LANCHA_UUID_TO_CD: Record<string, number> = {
+  "a0000000-0000-0000-0000-000000000001": 121,   // Flexeiras
+  "a0000000-0000-0000-0000-000000000002": 1003,  // Fortim
+  "a0000000-0000-0000-0000-000000000003": 117,   // Taíba
+};
+
 export function useOcorrencias() {
   return useQuery({
     queryKey: ["ocorrencias"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("ocorrencias_webpilot")
-        .select("cd_ocorrencia, lancha_id, data_inicio, data_fim, duracao_horas, tipo_ocorrencia, efeito, lanchas(nome)")
+        .select("cd_ocorrencia, lancha_id, data_inicio, data_fim, duracao_horas, tipo_ocorrencia, efeito")
         .order("data_inicio", { ascending: false })
         .limit(100000);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []).map((o: any) => ({
+        ...o,
+        cd_lancha: LANCHA_UUID_TO_CD[o.lancha_id] ?? null,
+      }));
     },
     staleTime: 5 * 60 * 1000,
   });
