@@ -98,18 +98,22 @@ function calcDowntimeHours(
   const intervals = (ocorrencias ?? [])
     .filter(o => Number(o.cd_lancha) === cdLancha && isInoperante(o.efeito) && o.data_inicio)
     .map(o => {
-      const s = new Date(o.data_inicio).getTime();
-      let endMs: number;
-      if (o.data_fim) {
-        endMs = new Date(o.data_fim).getTime();
-      } else if (o.duracao_horas != null && Number(o.duracao_horas) > 0) {
-        endMs = s + Number(o.duracao_horas) * 3_600_000;
-      } else {
-        endMs = pe;
-      }
-      return { s: Math.max(s, ps), e: Math.min(endMs, pe) };
-    })
-    .filter(i => i.s < i.e);
+    const s = new Date(o.data_inicio).getTime();
+    let endMs: number;
+    if (o.data_fim) {
+      // Evento fechado: usar data_fim
+      endMs = new Date(o.data_fim).getTime();
+    } else if (o.duracao_horas != null && Number(o.duracao_horas) > 0) {
+      // Sem data_fim mas com duração da API: calcular fim
+      endMs = s + Number(o.duracao_horas) * 3_600_000;
+    } else {
+      // Sem data_fim e sem duração = evento órfão (nunca fechado no sistema)
+      // Não contar: retornar intervalo nulo que será filtrado
+      return { s: 0, e: 0 };
+    }
+    return { s: Math.max(s, ps), e: Math.min(endMs, pe) };
+  })
+  .filter(i => i.s < i.e)  // ← já existe, filtra os { s:0, e:0 } também
   return mergeIntervals(intervals).reduce((sum, i) => sum + (i.e - i.s) / 3_600_000, 0);
 }
 
