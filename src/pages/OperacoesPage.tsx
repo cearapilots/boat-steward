@@ -73,7 +73,7 @@ function fmtPeriodo(de: string, ate: string): string {
 
 function shouldCountAsDowntime(efeito: string | null | undefined): boolean {
   const e = (efeito ?? "").trim();
-  return e === "Inoperante" || e === "Operante com Restrições";
+  return e === "Inoperante";
 }
 
 const todayStr    = new Date().toISOString().slice(0, 10);
