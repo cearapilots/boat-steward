@@ -254,5 +254,6 @@ export default function CustosDetalhesPage() {
         </TabsContent>
       </Tabs>
     </div>
+    
   );
 }
