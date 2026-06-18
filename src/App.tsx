@@ -17,6 +17,8 @@ import ProvasMarRegistrar from "@/pages/ProvasMarRegistrar";
 import ProvasMarHistorico from "@/pages/ProvasMarHistorico";
 import ProvasMarEstatisticas from "@/pages/ProvasMarEstatisticas";
 import OperacoesPage from "@/pages/OperacoesPage";
+import CustosPage from "@/pages/CustosPage";
+import CustosDetalhesPage from "@/pages/CustosDetalhesPage";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +58,8 @@ const App = () => (
                       <Route path="/calendario" element={<CalendarPage />} />
                       <Route path="/configuracoes" element={<SettingsPage />} />
                       <Route path="/operacoes" element={<OperacoesPage />} />
+                      <Route path="/custos" element={<CustosPage />} />
+                      <Route path="/custos/detalhes" element={<CustosDetalhesPage />} />
                       <Route path="/provas-mar/registrar" element={<ProvasMarRegistrar />} />
                       <Route path="/provas-mar/historico" element={<ProvasMarHistorico />} />
                       <Route path="/provas-mar/estatisticas" element={<ProvasMarEstatisticas />} />
