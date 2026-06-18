@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Wrench, History, Settings, Menu, X, Calendar, LogOut, Anchor, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Wrench, History, Settings, Menu, X, Calendar, LogOut, Anchor, ChevronDown, ChevronUp, BarChart3, DollarSign, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
 import cemapiLogo from "@/assets/cemapi-logo.png";
@@ -12,6 +12,8 @@ const navItemsTop = [
   { to: "/historico", label: "Histórico", icon: History },
   { to: "/calendario", label: "Calendário", icon: Calendar },
   { to: "/operacoes", label: "Operações", icon: BarChart3 },
+  { to: "/custos", label: "Custos", icon: DollarSign },
+  { to: "/custos/detalhes", label: "Custos Detalhes", icon: List },
 ];
 
 const navItemsBottom = [
