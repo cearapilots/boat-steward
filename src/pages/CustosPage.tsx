@@ -369,12 +369,9 @@ export default function CustosPage() {
           <p className="text-sm text-accent">Análise de despesas operacionais e faturamento</p>
         </div>
         <Button
-          size="sm"
-          variant="outline"
           onClick={() => { setUploadResult(null); setFileFat(null); setFileDesp(null); setModalOpen(true); }}
-          className="gap-1.5"
         >
-          <Upload className="h-3.5 w-3.5" />
+          <Upload className="h-4 w-4 mr-2" />
           Atualizar Dados
         </Button>
       </div>
@@ -383,26 +380,35 @@ export default function CustosPage() {
       <Card>
         <CardContent className="pt-4 pb-4">
           <div className="flex flex-wrap gap-3 items-center">
-            <Select value={filterTipo} onValueChange={setFilterTipo}>
-              <SelectTrigger className="h-9 w-56 text-sm"><SelectValue placeholder="Tipo de Despesa" /></SelectTrigger>
-              <SelectContent>
-                {todosTipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Tipo de Despesa</span>
+              <Select value={filterTipo} onValueChange={setFilterTipo}>
+                <SelectTrigger className="h-9 w-56 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {todosTipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <Select value={filterLancha} onValueChange={setFilterLancha}>
-              <SelectTrigger className="h-9 w-44 text-sm"><SelectValue placeholder="Lancha" /></SelectTrigger>
-              <SelectContent>
-                {ALL_CENTROS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Lancha</span>
+              <Select value={filterLancha} onValueChange={setFilterLancha}>
+                <SelectTrigger className="h-9 w-44 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ALL_CENTROS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <Select value={filterAno} onValueChange={setFilterAno}>
-              <SelectTrigger className="h-9 w-28 text-sm"><SelectValue placeholder="Ano" /></SelectTrigger>
-              <SelectContent>
-                {anos.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Ano</span>
+              <Select value={filterAno} onValueChange={setFilterAno}>
+                <SelectTrigger className="h-9 w-28 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {anos.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
 
             {selectedFornecedor && (
               <button
