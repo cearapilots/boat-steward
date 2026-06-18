@@ -71,39 +71,9 @@ function fmtPeriodo(de: string, ate: string): string {
   return "todo o período";
 }
 
-function isInoperante(efeito: string | null | undefined): boolean {
-  return (efeito ?? "").trim() === "Inoperante";
-}
-
-function mergeIntervals(intervals: { s: number; e: number }[]): { s: number; e: number }[] {
-  if (!intervals.length) return [];
-  const sorted = [...intervals].sort((a, b) => a.s - b.s);
-  const merged = [{ ...sorted[0] }];
-  for (const cur of sorted.slice(1)) {
-    const last = merged[merged.length - 1];
-    if (cur.s <= last.e) { if (cur.e > last.e) last.e = cur.e; }
-    else merged.push({ ...cur });
-  }
-  return merged;
-}
-
-function calcDowntimeHours(
-  ocorrencias: any[],
-  cdLancha: number,
-  periodStart: Date,
-  periodEnd: Date,
-): number {
-  const ps = periodStart.getTime();
-  const pe = periodEnd.getTime();
-  const intervals = (ocorrencias ?? [])
-    .filter(o => Number(o.cd_lancha) === cdLancha && isInoperante(o.efeito) && o.data_inicio)
-    .map(o => {
-      const s = Math.max(new Date(o.data_inicio).getTime(), ps);
-      const e = Math.min(o.data_fim ? new Date(o.data_fim).getTime() : pe, pe);
-      return { s, e };
-    })
-    .filter(i => i.s < i.e);
-  return mergeIntervals(intervals).reduce((sum, i) => sum + (i.e - i.s) / 3_600_000, 0);
+function shouldCountAsDowntime(efeito: string | null | undefined): boolean {
+  const e = (efeito ?? "").trim();
+  return e === "Inoperante";
 }
 
 const todayStr    = new Date().toISOString().slice(0, 10);
@@ -256,12 +226,19 @@ export default function OperacoesPage() {
   // ── Disponibilidade ────────────────────────────────────────────────────────
 
   const disponibilidadePorLancha = useMemo(() => {
-    const de  = new Date((filterDe  || oneYearAgo) + "T00:00:00");
-    const ate = new Date((filterAte || todayStr)   + "T23:59:59");
-    const totalH = (ate.getTime() - de.getTime()) / 3_600_000;
     return LANCHAS.map(l => {
-      const downtimeH = calcDowntimeHours(ocorrencias ?? [], l.cd, de, ate);
-      const disp = Math.max(0, Math.min(100, (totalH - downtimeH) / totalH * 100));
+      const horasInop = (ocorrencias ?? [])
+        .filter((o: any) =>
+          Number(o.cd_lancha) === l.cd &&
+          shouldCountAsDowntime(o.efeito) &&
+          (!filterDe  || (o.data_inicio ?? "") >= filterDe) &&
+          (!filterAte || (o.data_inicio ?? "") <= filterAte)
+        )
+        .reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
+      const horasPeriodo = filterDe && filterAte
+        ? (new Date(filterAte).getTime() - new Date(filterDe).getTime() + 86_400_000) / 3_600_000
+        : 365 * 24;
+      const disp = Math.max(0, ((horasPeriodo - horasInop) / horasPeriodo) * 100);
       return { cd: l.cd, nome: l.nome, disp };
     });
   }, [ocorrencias, filterDe, filterAte]);
@@ -279,14 +256,18 @@ export default function OperacoesPage() {
       if (m > 12) { m = 1; y++; }
     }
     return months.map(month => {
-      const [my, mm] = month.split("-").map(Number);
-      const monthStart = new Date(my, mm - 1, 1);
-      const monthEnd   = new Date(my, mm,     1);
-      const horasMes   = (monthEnd.getTime() - monthStart.getTime()) / 3_600_000;
+      const [y, m] = month.split("-").map(Number);
+      const horasMes = new Date(y, m, 0).getDate() * 24;
       const pt: Record<string, any> = { mes: fmtMonth(month) };
       for (const cd of selectedLanchas) {
-        const downtimeH = calcDowntimeHours(ocorrencias ?? [], cd, monthStart, monthEnd);
-        const disp = Math.max(0, Math.min(100, (horasMes - downtimeH) / horasMes * 100));
+        const horasInop = (ocorrencias ?? [])
+          .filter((o: any) =>
+            Number(o.cd_lancha) === cd &&
+            shouldCountAsDowntime(o.efeito) &&
+            (o.data_inicio ?? "").slice(0, 7) === month
+          )
+          .reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
+        const disp = Math.max(0, ((horasMes - horasInop) / horasMes) * 100);
         pt[LANCHA_NOME[cd]] = Math.round(disp * 10) / 10;
       }
       return pt;
@@ -679,7 +660,7 @@ export default function OperacoesPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {disponibilidadePorLancha.map(d => {
-                const cor = d.disp >= 95 ? "#16A34A" : "#DC2626";
+                const cor = d.disp >= 95 ? "#16A34A" : d.disp >= 85 ? "#F97316" : "#DC2626";
                 return (
                   <div key={d.cd} className="space-y-1.5">
                     <div className="flex items-center justify-between">
