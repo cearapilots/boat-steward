@@ -10,18 +10,16 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Line, XAxis, YAxis, CartesianGrid,
   Treemap,
 } from "recharts";
-import { Upload, ChevronDown } from "lucide-react";
+import { Upload } from "lucide-react";
 
 // ── Constantes exportadas ─────────────────────────────────────────────────────
 
@@ -34,22 +32,47 @@ export const NORM_CENTRO: Record<string, string> = {
 
 export const LANCHAS_OPERACIONAIS = ["Flexeiras", "Fortim", "Taíba"];
 
-const ALL_CENTROS = ["Flexeiras", "Fortim", "Taíba", "Lancha Nova", "Jeri", "Container de Apoio"];
+const ALL_CENTROS = ["Todas", "Flexeiras", "Fortim", "Taíba", "Lancha Nova", "Jeri", "Container de Apoio"];
 
-const COR_CENTRO: Record<string, string> = {
-  Flexeiras:            "#2563EB",
-  Fortim:               "#16A34A",
-  Taíba:                "#F97316",
-  "Lancha Nova":        "#8B5CF6",
-  Jeri:                 "#06B6D4",
-  "Container de Apoio": "#6B7280",
+// cd_lancha para uso no filtro de manobras
+const CENTRO_TO_CD: Record<string, number[]> = {
+  Flexeiras: [121],
+  Fortim:    [1003],
+  Taíba:     [117],
 };
 
-const TIPO_CORES = [
-  "#6366F1", "#EC4899", "#F59E0B", "#10B981",
-  "#3B82F6", "#EF4444", "#8B5CF6", "#14B8A6",
-  "#F97316", "#6B7280", "#84CC16", "#A855F7",
-];
+// ── Grupos do pie tipo ────────────────────────────────────────────────────────
+
+const GRUPOS_TIPO = [
+  "Combustíveis e Lubrificantes",
+  "Imobilizado em Andamento",
+  "Manutenções e Reparos",
+  "Embarcações",
+  "Outros",
+] as const;
+
+const GRUPO_TIPO_COR: Record<string, string> = {
+  "Combustíveis e Lubrificantes": "#F97316",
+  "Imobilizado em Andamento":     "#2563EB",
+  "Manutenções e Reparos":        "#16A34A",
+  "Embarcações":                  "#06B6D4",
+  "Outros":                       "#6B7280",
+};
+
+// Tipos que mapeiam para cada grupo (case-sensitive)
+const TIPO_TO_GRUPO: Record<string, string> = {
+  "Combustíveis e Lubrificantes": "Combustíveis e Lubrificantes",
+  "Imobilizado em Andamento":     "Imobilizado em Andamento",
+  "Manutenções e Reparos":        "Manutenções e Reparos",
+  "Manutenção e Reparos":         "Manutenções e Reparos",
+  "Embarcações":                  "Embarcações",
+};
+
+function grupoTipo(tipo: string | null | undefined): string {
+  return TIPO_TO_GRUPO[(tipo ?? "").trim()] ?? "Outros";
+}
+
+// ── Treemap cores ─────────────────────────────────────────────────────────────
 
 const TREEMAP_CORES = [
   "#2563EB", "#16A34A", "#F97316", "#8B5CF6", "#06B6D4",
@@ -57,9 +80,9 @@ const TREEMAP_CORES = [
   "#3B82F6", "#84CC16",
 ];
 
-const MESES_ABR = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const MESES_ABR = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 
 function fmtMes(yyyymm: string): string {
   const [y, m] = yyyymm.split("-");
@@ -78,27 +101,30 @@ function normCentro(c: string): string {
 
 // ── Treemap custom cell ───────────────────────────────────────────────────────
 
-function TreemapContent(props: any) {
-  const { x, y, width, height, name, size, index } = props;
+function TreemapCell(props: any) {
+  const { x, y, width, height, name, size, index, selected, onSelect } = props;
+  const isSelected = selected === name;
+  const dimmed = selected && !isSelected;
   const color = TREEMAP_CORES[index % TREEMAP_CORES.length];
   if (!width || !height || width < 20 || height < 15) return null;
   return (
-    <g>
-      <rect x={x} y={y} width={width} height={height} fill={color} stroke="#fff" strokeWidth={2} />
+    <g onClick={() => onSelect?.(name)} style={{ cursor: "pointer" }}>
+      <rect
+        x={x} y={y} width={width} height={height}
+        fill={color}
+        stroke={isSelected ? "#fff" : "#fff"}
+        strokeWidth={isSelected ? 3 : 2}
+        opacity={dimmed ? 0.35 : 1}
+      />
       {width > 60 && height > 28 && (
-        <text
-          x={x + width / 2}
-          y={y + height / 2 - (height > 48 ? 8 : 0)}
-          textAnchor="middle" fill="#fff" fontSize={10} fontWeight={600}
-        >
+        <text x={x + width / 2} y={y + height / 2 - (height > 48 ? 8 : 0)}
+          textAnchor="middle" fill="#fff" fontSize={10} fontWeight={600}>
           {name && name.length > 14 ? name.slice(0, 13) + "…" : name}
         </text>
       )}
       {width > 60 && height > 48 && (
-        <text
-          x={x + width / 2} y={y + height / 2 + 10}
-          textAnchor="middle" fill="rgba(255,255,255,0.85)" fontSize={9}
-        >
+        <text x={x + width / 2} y={y + height / 2 + 10}
+          textAnchor="middle" fill="rgba(255,255,255,0.85)" fontSize={9}>
           {fmtBRL(size ?? 0)}
         </text>
       )}
@@ -116,8 +142,9 @@ export default function CustosPage() {
 
   // ── Filtros ───────────────────────────────────────────────────────────────
   const [filterAno, setFilterAno] = useState<string>("Todos");
-  const [filterCentros, setFilterCentros] = useState<string[]>([...ALL_CENTROS]);
-  const [filterTipos, setFilterTipos] = useState<string[] | null>(null);
+  const [filterLancha, setFilterLancha] = useState<string>("Todas");
+  const [filterTipo, setFilterTipo] = useState<string>("Todos");
+  const [selectedFornecedor, setSelectedFornecedor] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
   // Upload state
@@ -137,19 +164,18 @@ export default function CustosPage() {
   const todosTipos = useMemo(() => {
     const s = new Set<string>();
     for (const d of despesas ?? []) if (d.tipo_despesa) s.add(d.tipo_despesa);
-    return [...s].sort();
+    return ["Todos", ...[...s].sort()];
   }, [despesas]);
-
-  const activeTipos = filterTipos ?? todosTipos;
 
   const filteredDespesas = useMemo(() => {
     return (despesas ?? []).filter(d => {
       if (filterAno !== "Todos" && !d.ano_mes?.startsWith(filterAno)) return false;
-      if (!filterCentros.includes(d.centro_resultado)) return false;
-      if (!activeTipos.includes(d.tipo_despesa)) return false;
+      if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
+      if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      if (selectedFornecedor && d.fornecedor !== selectedFornecedor) return false;
       return true;
     });
-  }, [despesas, filterAno, filterCentros, activeTipos]);
+  }, [despesas, filterAno, filterLancha, filterTipo, selectedFornecedor]);
 
   const filtFaturamento = useMemo(() => {
     return (faturamento ?? []).filter(f =>
@@ -163,23 +189,33 @@ export default function CustosPage() {
     const custoTotal = filtFaturamento.reduce((s, f) => s + (Number(f.custo_total) || 0), 0);
     const fat = filtFaturamento.reduce((s, f) => s + (Number(f.faturamento) || 0), 0);
     const pctCustoFat = fat > 0 ? (custosLanchas / fat) * 100 : null;
-    const manobrasNoPeriodo = (manobras ?? []).filter((m: any) =>
-      filterAno === "Todos" || (m.dh_manobra ?? "").startsWith(filterAno)
-    );
+    const manobrasNoPeriodo = (manobras ?? []).filter((m: any) => {
+      if (filterAno !== "Todos" && !(m.dh_manobra ?? "").startsWith(filterAno)) return false;
+      if (filterLancha !== "Todas") {
+        const cds = CENTRO_TO_CD[filterLancha];
+        if (cds && !cds.includes(Number(m.cd_lancha))) return false;
+      }
+      return true;
+    });
     const custoManobra = manobrasNoPeriodo.length > 0 ? custosLanchas / manobrasNoPeriodo.length : null;
     return { custosLanchas, custoTotal, fat, pctCustoFat, custoManobra };
-  }, [filteredDespesas, filtFaturamento, manobras, filterAno]);
+  }, [filteredDespesas, filtFaturamento, manobras, filterAno, filterLancha]);
 
-  // ── Dados dos gráficos ────────────────────────────────────────────────────
+  // ── Chart data ────────────────────────────────────────────────────────────
 
   const donutCentro = useMemo(() => {
+    const COR_CENTRO: Record<string, string> = {
+      Flexeiras: "#2563EB", Fortim: "#16A34A", Taíba: "#F97316",
+      "Lancha Nova": "#8B5CF6", Jeri: "#06B6D4", "Container de Apoio": "#6B7280",
+    };
+    const TIPO_CORES = ["#6366F1","#EC4899","#F59E0B","#10B981","#3B82F6","#EF4444"];
     const map = new Map<string, number>();
     for (const d of filteredDespesas) {
       const c = d.centro_resultado || "Outros";
       map.set(c, (map.get(c) ?? 0) + (Number(d.valor) || 0));
     }
     return [...map.entries()]
-      .map(([name, value]) => ({ name, value }))
+      .map(([name, value], i) => ({ name, value, fill: COR_CENTRO[name] ?? TIPO_CORES[i % TIPO_CORES.length] }))
       .filter(d => d.value > 0)
       .sort((a, b) => b.value - a.value);
   }, [filteredDespesas]);
@@ -187,13 +223,12 @@ export default function CustosPage() {
   const donutTipo = useMemo(() => {
     const map = new Map<string, number>();
     for (const d of filteredDespesas) {
-      const t = d.tipo_despesa || "Sem Tipo";
-      map.set(t, (map.get(t) ?? 0) + (Number(d.valor) || 0));
+      const g = grupoTipo(d.tipo_despesa);
+      map.set(g, (map.get(g) ?? 0) + (Number(d.valor) || 0));
     }
-    return [...map.entries()]
-      .map(([name, value]) => ({ name, value }))
-      .filter(d => d.value > 0)
-      .sort((a, b) => b.value - a.value);
+    return GRUPOS_TIPO
+      .map(g => ({ name: g, value: map.get(g) ?? 0, fill: GRUPO_TIPO_COR[g] }))
+      .filter(d => d.value > 0);
   }, [filteredDespesas]);
 
   const dadosMensais = useMemo(() => {
@@ -205,19 +240,39 @@ export default function CustosPage() {
     for (const f of filtFaturamento) {
       if (f.ano_mes) fatByMes.set(f.ano_mes, { faturamento: f.faturamento, custo_total: f.custo_total });
     }
+    // manobras por mês filtradas
+    const manByMes = new Map<string, number>();
+    for (const m of (manobras ?? []) as any[]) {
+      if (filterAno !== "Todos" && !(m.dh_manobra ?? "").startsWith(filterAno)) continue;
+      if (filterLancha !== "Todas") {
+        const cds = CENTRO_TO_CD[filterLancha];
+        if (cds && !cds.includes(Number(m.cd_lancha))) continue;
+      }
+      const mes = (m.dh_manobra ?? "").slice(0, 7);
+      if (mes) manByMes.set(mes, (manByMes.get(mes) ?? 0) + 1);
+    }
+
     const allMonths = [...new Set([...custoByMes.keys(), ...fatByMes.keys()])].sort();
     return allMonths.map(mes => {
       const custo = custoByMes.get(mes) ?? 0;
       const fat = fatByMes.get(mes);
+      const nMan = manByMes.get(mes) ?? 0;
       const pct_fat = fat?.faturamento ? Math.round((custo / fat.faturamento) * 1000) / 10 : null;
-      const pct_custo_total = fat?.custo_total ? Math.round((custo / fat.custo_total) * 1000) / 10 : null;
-      return { mes: fmtMes(mes), custo, pct_fat, pct_custo_total };
+      const pct_total = fat?.custo_total ? Math.round((custo / fat.custo_total) * 1000) / 10 : null;
+      const custo_manobra = nMan > 0 ? Math.round(custo / nMan) : null;
+      return { mes: fmtMes(mes), pct_fat, pct_total, custo_manobra };
     });
-  }, [filteredDespesas, filtFaturamento]);
+  }, [filteredDespesas, filtFaturamento, manobras, filterAno, filterLancha]);
 
   const treemapData = useMemo(() => {
+    const base = selectedFornecedor ? (despesas ?? []).filter(d => {
+      if (filterAno !== "Todos" && !d.ano_mes?.startsWith(filterAno)) return false;
+      if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
+      if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      return true;
+    }) : filteredDespesas;
     const map = new Map<string, number>();
-    for (const d of filteredDespesas) {
+    for (const d of base) {
       const forn = d.fornecedor || "Desconhecido";
       map.set(forn, (map.get(forn) ?? 0) + (Number(d.valor) || 0));
     }
@@ -225,7 +280,7 @@ export default function CustosPage() {
       .map(([name, size]) => ({ name, size }))
       .sort((a, b) => b.size - a.size)
       .slice(0, 20);
-  }, [filteredDespesas]);
+  }, [despesas, filteredDespesas, filterAno, filterLancha, filterTipo, selectedFornecedor]);
 
   // ── Upload ────────────────────────────────────────────────────────────────
 
@@ -269,9 +324,7 @@ export default function CustosPage() {
             const forn = (r[1] ?? "").toString().trim();
             const centro = normCentro((r[2] ?? "").toString());
             let tipo = (r[3] ?? "").toString().trim();
-            if (!tipo && forn.toUpperCase().includes("BR DISTRIBU")) {
-              tipo = "Combustíveis e Lubrificantes";
-            }
+            if (!tipo && forn.toUpperCase().includes("BR DISTRIBU")) tipo = "Combustíveis e Lubrificantes";
             const valor = Number((r[4] ?? 0).toString().replace(",", "."));
             const hist = (r[5] ?? "").toString().trim();
             return { data, fornecedor: forn, centro_resultado: centro, tipo_despesa: tipo, valor, historico: hist, ano_mes };
@@ -294,16 +347,9 @@ export default function CustosPage() {
     }
   }
 
-  // ── Labels dos popovers ───────────────────────────────────────────────────
-  const centroLabel = filterCentros.length === ALL_CENTROS.length ? "Todos"
-    : filterCentros.length === 0 ? "Nenhum"
-    : filterCentros.length <= 2 ? filterCentros.join(", ")
-    : `${filterCentros.length} centros`;
-
-  const tipoLabel = activeTipos.length === todosTipos.length ? "Todos"
-    : activeTipos.length === 0 ? "Nenhum"
-    : activeTipos.length === 1 ? activeTipos[0]
-    : `${activeTipos.length} tipos`;
+  function handleFornecedorClick(name: string) {
+    setSelectedFornecedor(prev => prev === name ? null : name);
+  }
 
   const KPI_CARDS = [
     { label: "Custo Lanchas",  value: fmtBRL(kpis.custosLanchas) },
@@ -319,11 +365,16 @@ export default function CustosPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Custos</h1>
+          <h1 className="text-2xl font-bold text-foreground">Custos — Estatísticas</h1>
           <p className="text-sm text-accent">Análise de despesas operacionais e faturamento</p>
         </div>
-        <Button onClick={() => { setUploadResult(null); setFileFat(null); setFileDesp(null); setModalOpen(true); }} className="gap-2">
-          <Upload className="h-4 w-4" />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => { setUploadResult(null); setFileFat(null); setFileDesp(null); setModalOpen(true); }}
+          className="gap-1.5"
+        >
+          <Upload className="h-3.5 w-3.5" />
           Atualizar Dados
         </Button>
       </div>
@@ -332,65 +383,35 @@ export default function CustosPage() {
       <Card>
         <CardContent className="pt-4 pb-4">
           <div className="flex flex-wrap gap-3 items-center">
+            <Select value={filterTipo} onValueChange={setFilterTipo}>
+              <SelectTrigger className="h-9 w-56 text-sm"><SelectValue placeholder="Tipo de Despesa" /></SelectTrigger>
+              <SelectContent>
+                {todosTipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            <Select value={filterLancha} onValueChange={setFilterLancha}>
+              <SelectTrigger className="h-9 w-44 text-sm"><SelectValue placeholder="Lancha" /></SelectTrigger>
+              <SelectContent>
+                {ALL_CENTROS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
             <Select value={filterAno} onValueChange={setFilterAno}>
-              <SelectTrigger className="h-9 w-32 text-sm"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 w-28 text-sm"><SelectValue placeholder="Ano" /></SelectTrigger>
               <SelectContent>
                 {anos.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
               </SelectContent>
             </Select>
 
-            <Popover>
-              <PopoverTrigger asChild>
-                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[140px]">
-                  <span className="font-medium">Centro</span>
-                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{centroLabel}</span>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-52 p-2" align="start">
-                <div className="space-y-1">
-                  {ALL_CENTROS.map(c => (
-                    <label key={c} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
-                      <Checkbox
-                        checked={filterCentros.includes(c)}
-                        onCheckedChange={() =>
-                          setFilterCentros(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])
-                        }
-                      />
-                      <span className="text-sm">{c}</span>
-                    </label>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[140px]">
-                  <span className="font-medium">Tipo</span>
-                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{tipoLabel}</span>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-2 max-h-64 overflow-y-auto" align="start">
-                <div className="space-y-1">
-                  {todosTipos.map(t => (
-                    <label key={t} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
-                      <Checkbox
-                        checked={activeTipos.includes(t)}
-                        onCheckedChange={() =>
-                          setFilterTipos(prev => {
-                            const cur = prev ?? todosTipos;
-                            return cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t];
-                          })
-                        }
-                      />
-                      <span className="text-sm">{t}</span>
-                    </label>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
+            {selectedFornecedor && (
+              <button
+                onClick={() => setSelectedFornecedor(null)}
+                className="h-9 px-3 rounded-md border border-orange-300 bg-orange-50 text-orange-700 text-xs font-medium hover:bg-orange-100 transition-colors flex items-center gap-1"
+              >
+                Fornecedor: {selectedFornecedor} ✕
+              </button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -421,8 +442,8 @@ export default function CustosPage() {
                     dataKey="value" nameKey="name"
                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
                     labelLine>
-                    {donutCentro.map((entry, i) => (
-                      <Cell key={entry.name} fill={COR_CENTRO[entry.name] ?? TIPO_CORES[i % TIPO_CORES.length]} />
+                    {donutCentro.map(entry => (
+                      <Cell key={entry.name} fill={entry.fill} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(v: any, name: string) => [fmtBRL(Number(v)), name]} />
@@ -442,22 +463,23 @@ export default function CustosPage() {
                 <ComposedChart data={dadosMensais} margin={{ top: 5, right: 30, bottom: 5, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} tickFormatter={v => fmtBRL(v)}
-                    label={{ value: "R$", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }} />
-                  <YAxis yAxisId="right" orientation="right" domain={[0, 100]}
+                  <YAxis yAxisId="esq" tick={{ fontSize: 10 }} tickFormatter={v => fmtBRL(v)}
+                    label={{ value: "R$/man.", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 9 } }} />
+                  <YAxis yAxisId="dir" orientation="right" domain={[0, 100]}
                     tick={{ fontSize: 10 }} tickFormatter={v => `${v}%`} />
                   <Tooltip
                     formatter={(v: any, name: string) =>
-                      name === "Custo Lanchas"
-                        ? [fmtBRL(Number(v)), name]
+                      name === "Custo/Manobra"
+                        ? [v != null ? fmtBRL(Number(v)) : "—", name]
                         : [v != null ? `${Number(v).toFixed(1)}%` : "—", name]
                     }
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar yAxisId="left" dataKey="custo" name="Custo Lanchas" fill="#6366F1" opacity={0.8} />
-                  <Line yAxisId="right" type="monotone" dataKey="pct_fat" name="% Custo/Fat"
+                  <Line yAxisId="esq" type="monotone" dataKey="custo_manobra" name="Custo/Manobra"
+                    stroke="#6366F1" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                  <Line yAxisId="dir" type="monotone" dataKey="pct_fat" name="Custo Lancha / Faturamento"
                     stroke="#F97316" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                  <Line yAxisId="right" type="monotone" dataKey="pct_custo_total" name="% Custo/Total"
+                  <Line yAxisId="dir" type="monotone" dataKey="pct_total" name="Custo Lancha / Custo Total"
                     stroke="#16A34A" strokeWidth={2} dot={{ r: 3 }} connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -474,18 +496,18 @@ export default function CustosPage() {
             {donutTipo.length === 0 ? (
               <p className="text-center text-muted-foreground py-10 text-sm">Sem dados</p>
             ) : (
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
-                  <Pie data={donutTipo} cx="50%" cy="50%" innerRadius={55} outerRadius={85}
+                  <Pie data={donutTipo} cx="50%" cy="45%" innerRadius={55} outerRadius={85}
                     dataKey="value" nameKey="name"
-                    label={({ percent }) => `${(percent * 100).toFixed(1)}%`}
+                    label={({ name, percent }) => percent > 0.04 ? `${(percent * 100).toFixed(1)}%` : ""}
                     labelLine>
-                    {donutTipo.map((entry, i) => (
-                      <Cell key={entry.name} fill={TIPO_CORES[i % TIPO_CORES.length]} />
+                    {donutTipo.map(entry => (
+                      <Cell key={entry.name} fill={entry.fill} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(v: any, name: string) => [fmtBRL(Number(v)), name]} />
-                  <Legend wrapperStyle={{ fontSize: 10 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
                 </PieChart>
               </ResponsiveContainer>
             )}
@@ -493,7 +515,16 @@ export default function CustosPage() {
         </Card>
 
         <Card className="lg:col-span-3">
-          <CardHeader><CardTitle className="text-base">Top 20 Fornecedores</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              Top 20 Fornecedores
+              {selectedFornecedor && (
+                <span className="text-xs font-normal text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-0.5">
+                  Clique novamente para desfiltrar
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
           <CardContent>
             {treemapData.length === 0 ? (
               <p className="text-center text-muted-foreground py-10 text-sm">Sem dados</p>
@@ -504,7 +535,7 @@ export default function CustosPage() {
                   dataKey="size"
                   aspectRatio={16 / 9}
                   stroke="#fff"
-                  content={(props: any) => <TreemapContent {...props} />}
+                  content={<TreemapCell selected={selectedFornecedor} onSelect={handleFornecedorClick} />}
                 >
                   <Tooltip
                     content={({ payload }: any) => {
@@ -514,6 +545,7 @@ export default function CustosPage() {
                         <div className="bg-background border border-border rounded-md px-3 py-2 text-xs shadow-md">
                           <p className="font-semibold">{item.name}</p>
                           <p>{fmtBRL(item.size ?? item.value ?? 0)}</p>
+                          <p className="text-muted-foreground mt-0.5">Clique para filtrar</p>
                         </div>
                       );
                     }}
@@ -568,5 +600,4 @@ export default function CustosPage() {
       </Dialog>
     </div>
   );
-  
 }
