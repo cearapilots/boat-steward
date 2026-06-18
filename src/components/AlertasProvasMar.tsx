@@ -103,11 +103,12 @@ export function AlertasProvasMar() {
         const dataBase = ultimaPosDock.data
 
         // Passos já executados no ciclo atual
-        const feitos = new Set(
-          provs
-            .filter(p => p.data >= dataBase)
-            .map(p => p.descricao)
-        )
+        const feitos = new Set([
+          "Pós-Docagem",
+          ...provs
+            .filter(p => p.data > dataBase && p.descricao !== "Pós-Docagem")
+            .map(p => p.descricao),
+        ])
 
         // Próximo passo pendente
         const proximoIdx = PASSOS.findIndex(
