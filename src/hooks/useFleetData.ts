@@ -370,6 +370,10 @@ export function useSyncHorimetros() {
       qc.invalidateQueries({ queryKey: ["historico"] });
       qc.invalidateQueries({ queryKey: ["manutencoes"] });
       qc.invalidateQueries({ queryKey: ["ocorrencias_webpilot"] });
+      qc.invalidateQueries({ queryKey: ["ocorrencias"] });
+      qc.invalidateQueries({ queryKey: ["manobras"] });
+      qc.invalidateQueries({ queryKey: ["indicadores_op"] });
+      qc.invalidateQueries({ queryKey: ["fainas"] });
       qc.invalidateQueries({ queryKey: ["manutencoes_periodicas"] });
       qc.invalidateQueries({ queryKey: ["calendario_manutencoes"] });
       qc.invalidateQueries({ queryKey: ["manutencoes_periodicas_realizadas"] });
