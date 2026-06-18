@@ -24,9 +24,6 @@ const LANCHAS = [
   { cd: 1003, nome: "Fortim"    },
   { cd: 117,  nome: "Taíba"     },
 ];
-const NOME_TO_CD: Record<string, number> = Object.fromEntries(
-  Object.entries(LANCHA_NOME).map(([cd, nome]) => [nome, Number(cd)])
-);
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -74,17 +71,9 @@ function fmtPeriodo(de: string, ate: string): string {
   return "todo o período";
 }
 
-function isOcorrenciaInoperante(o: any): boolean {
-  return (
-    (o.efeito ?? "").toLowerCase().includes("inopera") ||
-    (o.tipo_ocorrencia ?? "").toLowerCase().includes("docagem") ||
-    (o.tipo_ocorrencia ?? "").toLowerCase().includes("manutenção") ||
-    (o.tipo_ocorrencia ?? "").toLowerCase().includes("manutencao")
-  );
-}
-
-function ocorrenciaCdLancha(o: any): number | null {
-  return NOME_TO_CD[o.lanchas?.nome] ?? null;
+function shouldCountAsDowntime(efeito: string | null | undefined): boolean {
+  const e = (efeito ?? "").trim();
+  return e === "Inoperante" || e === "Operante com Restrições";
 }
 
 const todayStr    = new Date().toISOString().slice(0, 10);
@@ -238,17 +227,17 @@ export default function OperacoesPage() {
 
   const disponibilidadePorLancha = useMemo(() => {
     return LANCHAS.map(l => {
-      const ocorr = (ocorrencias ?? []).filter((o: any) =>
-        ocorrenciaCdLancha(o) === l.cd &&
-        isOcorrenciaInoperante(o) &&
-        (!filterDe  || (o.data_inicio ?? "") >= filterDe) &&
-        (!filterAte || (o.data_inicio ?? "") <= filterAte)
-      );
-      const horasInop = ocorr.reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
-      const diasPeriodo = filterDe && filterAte
-        ? Math.max(1, (new Date(filterAte).getTime() - new Date(filterDe).getTime()) / 86400000)
-        : 365;
-      const horasPeriodo = diasPeriodo * 24;
+      const horasInop = (ocorrencias ?? [])
+        .filter((o: any) =>
+          Number(o.cd_lancha) === l.cd &&
+          shouldCountAsDowntime(o.efeito) &&
+          (!filterDe  || (o.data_inicio ?? "") >= filterDe) &&
+          (!filterAte || (o.data_inicio ?? "") <= filterAte)
+        )
+        .reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
+      const horasPeriodo = filterDe && filterAte
+        ? (new Date(filterAte).getTime() - new Date(filterDe).getTime() + 86_400_000) / 3_600_000
+        : 365 * 24;
       const disp = Math.max(0, ((horasPeriodo - horasInop) / horasPeriodo) * 100);
       return { cd: l.cd, nome: l.nome, disp };
     });
@@ -273,8 +262,8 @@ export default function OperacoesPage() {
       for (const cd of selectedLanchas) {
         const horasInop = (ocorrencias ?? [])
           .filter((o: any) =>
-            ocorrenciaCdLancha(o) === cd &&
-            isOcorrenciaInoperante(o) &&
+            Number(o.cd_lancha) === cd &&
+            shouldCountAsDowntime(o.efeito) &&
             (o.data_inicio ?? "").slice(0, 7) === month
           )
           .reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
