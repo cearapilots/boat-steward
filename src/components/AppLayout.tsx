@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Wrench, History, Settings, Menu, X, Calendar, LogOut, Anchor, ChevronDown, ChevronUp, BarChart3, DollarSign, List } from "lucide-react";
+import { LayoutDashboard, Wrench, History, Settings, Menu, X, Calendar, LogOut, Anchor, ChevronDown, ChevronUp, BarChart3, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
 import cemapiLogo from "@/assets/cemapi-logo.png";
@@ -12,8 +12,11 @@ const navItemsTop = [
   { to: "/historico", label: "Histórico", icon: History },
   { to: "/calendario", label: "Calendário", icon: Calendar },
   { to: "/operacoes", label: "Operações", icon: BarChart3 },
-  { to: "/custos", label: "Custos", icon: DollarSign },
-  { to: "/custos/detalhes", label: "Custos Detalhes", icon: List },
+];
+
+const CUSTOS_SUBITEMS = [
+  { to: "/custos", label: "Estatísticas" },
+  { to: "/custos/detalhes", label: "Detalhado" },
 ];
 
 const navItemsBottom = [
@@ -82,11 +85,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [provasMarOpen, setProvasMarOpen] = useState(() =>
     location.pathname.startsWith("/provas-mar")
   );
+  const [custosOpen, setCustosOpen] = useState(() =>
+    location.pathname.startsWith("/custos")
+  );
 
   useEffect(() => {
-    if (location.pathname.startsWith("/provas-mar")) {
-      setProvasMarOpen(true);
-    }
+    if (location.pathname.startsWith("/provas-mar")) setProvasMarOpen(true);
+    if (location.pathname.startsWith("/custos")) setCustosOpen(true);
   }, [location.pathname]);
 
   async function handleSignOut() {
@@ -95,6 +100,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   const isProvasMar = location.pathname.startsWith("/provas-mar");
+  const isCustos = location.pathname.startsWith("/custos");
 
   return (
     <div className="min-h-screen flex">
@@ -132,6 +138,43 @@ export function AppLayout({ children }: { children: ReactNode }) {
             {provasMarOpen && (
               <div className="ml-7 mt-0.5 space-y-0.5">
                 {PROVAS_MAR_SUBITEMS.map(({ to, label }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    className={cn(
+                      "flex items-center px-3 py-2 rounded-lg text-sm transition-colors",
+                      location.pathname === to
+                        ? "bg-sidebar-accent text-sidebar-primary font-medium"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                    )}
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Custos — expandable */}
+          <div>
+            <button
+              onClick={() => setCustosOpen((v) => !v)}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors",
+                isCustos
+                  ? "bg-sidebar-accent text-sidebar-primary"
+                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+              )}
+            >
+              <DollarSign className="h-4 w-4" />
+              <span className="flex-1 text-left">Custos</span>
+              {custosOpen
+                ? <ChevronUp className="h-3 w-3 opacity-60" />
+                : <ChevronDown className="h-3 w-3 opacity-60" />}
+            </button>
+            {custosOpen && (
+              <div className="ml-7 mt-0.5 space-y-0.5">
+                {CUSTOS_SUBITEMS.map(({ to, label }) => (
                   <Link
                     key={to}
                     to={to}
@@ -205,6 +248,42 @@ export function AppLayout({ children }: { children: ReactNode }) {
               {provasMarOpen && (
                 <div className="ml-7 mt-0.5 space-y-0.5">
                   {PROVAS_MAR_SUBITEMS.map(({ to, label }) => (
+                    <Link
+                      key={to}
+                      to={to}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        "flex items-center px-3 py-2 rounded-lg text-sm transition-colors",
+                        location.pathname === to
+                          ? "bg-accent text-accent-foreground font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                      )}
+                    >
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Custos mobile */}
+            <div>
+              <button
+                onClick={() => setCustosOpen((v) => !v)}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors",
+                  isCustos
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                )}
+              >
+                <DollarSign className="h-4 w-4" />
+                <span className="flex-1 text-left">Custos</span>
+                {custosOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </button>
+              {custosOpen && (
+                <div className="ml-7 mt-0.5 space-y-0.5">
+                  {CUSTOS_SUBITEMS.map(({ to, label }) => (
                     <Link
                       key={to}
                       to={to}
