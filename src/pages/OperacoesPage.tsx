@@ -304,13 +304,6 @@ export default function OperacoesPage() {
     });
   }, [ocorrencias, filterDe, filterAte, selectedLanchas]);
 
-  const yMinDisp = useMemo(() => {
-    const vals = disponibilidadeMensal.flatMap(pt =>
-      selectedLanchas.map(cd => pt[LANCHA_NOME[cd]] as number).filter(v => v != null && !isNaN(v))
-    );
-    return vals.length > 0 ? Math.max(40, Math.floor(Math.min(...vals) / 5) * 5 - 5) : 40;
-  }, [disponibilidadeMensal, selectedLanchas]);
-
   // ── Gráfico 5: Eficiência (horas / manobra) ───────────────────────────────
 
   const eficienciaPorMes = useMemo(() => {
@@ -735,10 +728,10 @@ export default function OperacoesPage() {
                 <LineChart data={disponibilidadeMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                  <YAxis domain={[yMinDisp, 100]}
-                    ticks={Array.from({ length: Math.ceil((100 - yMinDisp) / 5) + 1 }, (_, i) => yMinDisp + i * 5)}
+                  <YAxis domain={[0, 100]}
+                    ticks={[0, 20, 40, 60, 80, 95, 100]}
                     tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
-                  <ReferenceArea y1={yMinDisp} y2={95} fill="#FEF3C7" fillOpacity={0.25} />
+                  <ReferenceArea y1={0} y2={95} fill="#FEF3C7" fillOpacity={0.25} />
                   <ReferenceLine y={95} stroke="#9CA3AF" strokeDasharray="3 3"
                     label={{ value: "95%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
                   <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
