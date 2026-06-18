@@ -21,7 +21,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Pencil, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 const MESES_ABR = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -259,10 +259,6 @@ export default function CustosDetalhesPage() {
                                 onClick={() => openEditFat(f)}>
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700" title="Excluir"
-                                onClick={() => setDeleteFatMes(f.ano_mes)}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -298,18 +294,27 @@ export default function CustosDetalhesPage() {
               onChange={e => { setSearch(e.target.value); resetPage(); }}
               className="h-9 w-64"
             />
-            <Select value={filterAno} onValueChange={v => { setFilterAno(v); resetPage(); }}>
-              <SelectTrigger className="h-9 w-28 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>{anos.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
-            </Select>
-            <Select value={filterCentro} onValueChange={v => { setFilterCentro(v); resetPage(); }}>
-              <SelectTrigger className="h-9 w-48 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>{centros.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-            </Select>
-            <Select value={filterTipo} onValueChange={v => { setFilterTipo(v); resetPage(); }}>
-              <SelectTrigger className="h-9 w-56 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>{tipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-            </Select>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Ano</span>
+              <Select value={filterAno} onValueChange={v => { setFilterAno(v); resetPage(); }}>
+                <SelectTrigger className="h-9 w-28 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>{anos.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Centro</span>
+              <Select value={filterCentro} onValueChange={v => { setFilterCentro(v); resetPage(); }}>
+                <SelectTrigger className="h-9 w-48 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>{centros.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Tipo</span>
+              <Select value={filterTipo} onValueChange={v => { setFilterTipo(v); resetPage(); }}>
+                <SelectTrigger className="h-9 w-56 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>{tipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
           </div>
 
           <Card>
@@ -353,10 +358,6 @@ export default function CustosDetalhesPage() {
                             <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar"
                               onClick={() => openEditDesp(d)}>
                               <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700" title="Excluir"
-                              onClick={() => setDeleteDespId(d.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         </TableCell>
@@ -410,11 +411,16 @@ export default function CustosDetalhesPage() {
                 onChange={e => setEditFatForm(f => ({ ...f, custo_total: e.target.value }))} />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditFat(null)}>Cancelar</Button>
-            <Button onClick={saveEditFat} disabled={savingFat}>
-              {savingFat ? "Salvando..." : "Salvar"}
+          <DialogFooter className="sm:justify-between">
+            <Button variant="destructive" onClick={() => { setDeleteFatMes(editFat?.ano_mes ?? null); setEditFat(null); }}>
+              Excluir
             </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setEditFat(null)}>Cancelar</Button>
+              <Button onClick={saveEditFat} disabled={savingFat}>
+                {savingFat ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -467,11 +473,16 @@ export default function CustosDetalhesPage() {
                 onChange={e => setEditDespForm(f => ({ ...f, historico: e.target.value }))} />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDesp(null)}>Cancelar</Button>
-            <Button onClick={saveEditDesp} disabled={savingDesp}>
-              {savingDesp ? "Salvando..." : "Salvar"}
+          <DialogFooter className="sm:justify-between">
+            <Button variant="destructive" onClick={() => { setDeleteDespId(editDesp?.id ?? null); setEditDesp(null); }}>
+              Excluir
             </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setEditDesp(null)}>Cancelar</Button>
+              <Button onClick={saveEditDesp} disabled={savingDesp}>
+                {savingDesp ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
