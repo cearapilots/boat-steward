@@ -892,3 +892,36 @@ export function useOcorrencias() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export function useFaturamentoCusto() {
+  return useQuery({
+    queryKey: ["faturamento_custo"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("faturamento_custo_mensal")
+        .select("ano_mes, faturamento, custo_total")
+        .order("ano_mes");
+      if (error) throw error;
+      return (data ?? []) as Array<{ ano_mes: string; faturamento: number; custo_total: number }>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useDespesas() {
+  return useQuery({
+    queryKey: ["despesas"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("despesas")
+        .select("id, data, fornecedor, centro_resultado, tipo_despesa, valor, historico, ano_mes")
+        .order("data", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string; data: string; fornecedor: string; centro_resultado: string;
+        tipo_despesa: string; valor: number; historico: string; ano_mes: string;
+      }>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
