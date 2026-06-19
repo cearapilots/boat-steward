@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Wrench, History, Settings, Menu, X, Calendar, LogOut, Anchor, ChevronDown, ChevronUp, BarChart3, DollarSign } from "lucide-react";
+import { LayoutDashboard, Wrench, History, Settings, Menu, X, Calendar, LogOut, Anchor, ChevronDown, ChevronUp, BarChart3, DollarSign, Hammer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
 import cemapiLogo from "@/assets/cemapi-logo.png";
@@ -11,7 +11,8 @@ const navItemsTop = [
   { to: "/motores", label: "Motores", icon: Wrench },
   { to: "/historico", label: "Histórico", icon: History },
   { to: "/calendario", label: "Calendário", icon: Calendar },
-  { to: "/operacoes", label: "Operações", icon: BarChart3 },
+  { to: "/operacoes",  label: "Operações",  icon: BarChart3 },
+  { to: "/manutencao", label: "Manutenção", icon: Hammer   },
 ];
 
 const CUSTOS_SUBITEMS = [
