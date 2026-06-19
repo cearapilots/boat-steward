@@ -122,6 +122,42 @@ export type Database = {
         }
         Relationships: []
       }
+      despesas: {
+        Row: {
+          ano_mes: string | null
+          centro_resultado: string | null
+          created_at: string | null
+          data: string
+          fornecedor: string | null
+          historico: string | null
+          id: string
+          tipo_despesa: string | null
+          valor: number | null
+        }
+        Insert: {
+          ano_mes?: string | null
+          centro_resultado?: string | null
+          created_at?: string | null
+          data: string
+          fornecedor?: string | null
+          historico?: string | null
+          id?: string
+          tipo_despesa?: string | null
+          valor?: number | null
+        }
+        Update: {
+          ano_mes?: string | null
+          centro_resultado?: string | null
+          created_at?: string | null
+          data?: string
+          fornecedor?: string | null
+          historico?: string | null
+          id?: string
+          tipo_despesa?: string | null
+          valor?: number | null
+        }
+        Relationships: []
+      }
       fainas_deslocamentos: {
         Row: {
           cd_faina_lancha: number
