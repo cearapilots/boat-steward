@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { ChevronRight, RotateCcw } from "lucide-react";
 
 type Despesa = {
   tipo_despesa: string;
@@ -15,240 +16,203 @@ type Props = {
   onSelectFornecedor: (v: string | null) => void;
 };
 
-const TOP_TIPOS = 7;
-const TOP_FORN  = 6;
+type DrillItem = { nome: string; valor: number; pct: number };
 
-const USABLE_H = 480;
-const GAP      = 10;
-const MIN_H    = 18;
-const NODE_W   = 18;
-const COL_X    = [80, 380, 680] as const;
-
-const COLOR_TOTAL = "#1D4ED8";
-const COLOR_TIPO  = "#3B82F6";
-const COLOR_FORN  = "#0891B2";
-
-type SNode = {
-  id: string; nome: string; valor: number; col: number;
-  x: number; y: number; h: number; color: string;
-};
-
-type SLink = {
-  source: SNode; target: SNode; value: number;
-  sy: number; ty: number; sw: number;
-};
-
-function fmtBRL(v: number): string {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function fmtValor(v: number): string {
+  if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(2).replace(".", ",")} Mi`;
+  if (v >= 1_000)     return `R$ ${(v / 1_000).toFixed(1).replace(".", ",")}k`;
+  return `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
 }
 
-function posNodes(entries: [string, number][], colIdx: number, color: string): SNode[] {
-  const totalGaps = (entries.length - 1) * GAP;
-  const availH    = USABLE_H - totalGaps;
-  const totalVal  = entries.reduce((s, [, v]) => s + v, 0);
-  const nodes: SNode[] = [];
-  let curY = 20;
-  for (const [nome, valor] of entries) {
-    const h = Math.max(MIN_H, (valor / totalVal) * availH);
-    nodes.push({ id: nome, nome, valor, col: colIdx, x: COL_X[colIdx], y: curY, h, color });
-    curY += h + GAP;
-  }
-  return nodes;
-}
+function BarRow({
+  item, color, selected, onClick, labelMaxLen = 45,
+}: {
+  item: DrillItem;
+  color: string;
+  selected?: boolean;
+  onClick?: () => void;
+  labelMaxLen?: number;
+}) {
+  const label = item.nome.length > labelMaxLen ? item.nome.slice(0, labelMaxLen) + "…" : item.nome;
 
-function calcLayout(despesas: Despesa[]) {
-  const tipoMap = new Map<string, number>();
-  const fornMap  = new Map<string, number>();
-  for (const d of despesas) {
-    const t = d.tipo_despesa || "Sem tipo";
-    const f = d.fornecedor   || "Desconhecido";
-    tipoMap.set(t, (tipoMap.get(t) ?? 0) + d.valor);
-    fornMap.set(f, (fornMap.get(f) ?? 0) + d.valor);
-  }
-  const topTipos = [...tipoMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, TOP_TIPOS);
-  const topForn  = [...fornMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, TOP_FORN);
-  const total    = despesas.reduce((s, d) => s + d.valor, 0);
-
-  const nodeTotal: SNode = {
-    id: "total", nome: "Valor Total", valor: total, col: 0,
-    x: COL_X[0], y: 20, h: USABLE_H, color: COLOR_TOTAL,
-  };
-  const nodesTipo = posNodes(topTipos, 1, COLOR_TIPO);
-  const nodesForn = posNodes(topForn,  2, COLOR_FORN);
-  const allNodes  = [nodeTotal, ...nodesTipo, ...nodesForn];
-
-  const outCursor = new Map(allNodes.map(n => [n.id, n.y]));
-  const inCursor  = new Map(allNodes.map(n => [n.id, n.y]));
-
-  const links: SLink[] = [];
-
-  // Total → Tipos
-  for (const tn of nodesTipo) {
-    const ribbonW = (tn.valor / total) * USABLE_H;
-    const sw = Math.max(1, ribbonW);
-    const sy = outCursor.get(nodeTotal.id)!;
-    const ty = inCursor.get(tn.id)!;
-    links.push({ source: nodeTotal, target: tn, value: tn.valor, sy, ty, sw });
-    outCursor.set(nodeTotal.id, sy + sw);
-    inCursor.set(tn.id, ty + sw);
-  }
-
-  // Tipos → Fornecedores
-  for (const tn of nodesTipo) {
-    const fornInTipo = new Map<string, number>();
-    for (const d of despesas) {
-      const t = d.tipo_despesa || "Sem tipo";
-      const f = d.fornecedor   || "Desconhecido";
-      if (t === tn.nome && topForn.some(([tf]) => tf === f)) {
-        fornInTipo.set(f, (fornInTipo.get(f) ?? 0) + d.valor);
-      }
-    }
-    const sorted = [...fornInTipo.entries()].sort((a, b) => b[1] - a[1]);
-    for (const [fornNome, linkVal] of sorted) {
-      const fn = nodesForn.find(n => n.nome === fornNome);
-      if (!fn) continue;
-      const ribbonW = (linkVal / total) * USABLE_H;
-      const sw = Math.max(1, ribbonW);
-      const sy = outCursor.get(tn.id)!;
-      const ty = inCursor.get(fn.id)!;
-      links.push({ source: tn, target: fn, value: linkVal, sy, ty, sw });
-      outCursor.set(tn.id, sy + sw);
-      inCursor.set(fn.id, ty + sw);
-    }
-  }
-
-  return { allNodes, nodeTotal, nodesTipo, nodesForn, links, total };
+  return (
+    <div
+      onClick={onClick}
+      className={`group rounded-lg p-2 transition-colors
+        ${onClick ? "cursor-pointer hover:bg-accent" : ""}
+        ${selected ? "bg-accent" : ""}`}
+    >
+      <div className="flex items-center justify-between text-xs mb-1.5">
+        <span className={`font-medium ${selected ? "text-foreground" : "text-muted-foreground"}`}>
+          {label}
+        </span>
+        <span className="font-mono text-foreground shrink-0 ml-2">
+          {fmtValor(item.valor)}
+          <span className="text-muted-foreground ml-1.5">{item.pct}%</span>
+        </span>
+      </div>
+      <div className="h-5 bg-muted rounded overflow-hidden">
+        <div
+          className="h-full rounded transition-all duration-500"
+          style={{
+            width: `${Math.max(item.pct, 1)}%`,
+            backgroundColor: color,
+            opacity: selected ? 1 : 0.65,
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function SankeyFluxo({
   despesas, cfTipo, cfFornecedor, onSelectTipo, onSelectFornecedor,
 }: Props) {
-  const layout = useMemo(() => calcLayout(despesas), [despesas]);
-  const { allNodes, links, total } = layout;
+  const selectedTipo = cfTipo;
+  const selectedForn = cfFornecedor;
+
+  const total = useMemo(() => despesas.reduce((s, d) => s + d.valor, 0), [despesas]);
+
+  const nivelTipos: DrillItem[] = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const d of despesas) map.set(d.tipo_despesa, (map.get(d.tipo_despesa) ?? 0) + d.valor);
+    return [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([nome, valor]) => ({ nome, valor, pct: Math.round((valor / total) * 100) }));
+  }, [despesas, total]);
+
+  const nivelFornecedores: DrillItem[] = useMemo(() => {
+    if (!selectedTipo) return [];
+    const map = new Map<string, number>();
+    for (const d of despesas.filter(d => d.tipo_despesa === selectedTipo))
+      map.set(d.fornecedor, (map.get(d.fornecedor) ?? 0) + d.valor);
+    const tipoTotal = [...map.values()].reduce((s, v) => s + v, 0);
+    return [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([nome, valor]) => ({ nome, valor, pct: Math.round((valor / tipoTotal) * 100) }));
+  }, [despesas, selectedTipo]);
+
+  const nivelHistorico: DrillItem[] = useMemo(() => {
+    if (!selectedForn) return [];
+    const map = new Map<string, number>();
+    const base = despesas.filter(d =>
+      (!selectedTipo || d.tipo_despesa === selectedTipo) && d.fornecedor === selectedForn
+    );
+    for (const d of base) map.set(d.historico, (map.get(d.historico) ?? 0) + d.valor);
+    const fornTotal = [...map.values()].reduce((s, v) => s + v, 0);
+    return [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([nome, valor]) => ({ nome, valor, pct: Math.round((valor / fornTotal) * 100) }));
+  }, [despesas, selectedTipo, selectedForn]);
 
   if (despesas.length === 0) {
     return <p className="text-center text-muted-foreground py-10 text-sm">Sem dados suficientes</p>;
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          Total: <strong>{fmtBRL(total)}</strong>
-          {" · "}Clique em Tipo ou Fornecedor para filtrar
-        </p>
-        {(cfTipo || cfFornecedor) && (
-          <button
-            className="text-xs underline text-muted-foreground"
-            onClick={() => { onSelectTipo(null); onSelectFornecedor(null); }}
-          >
-            Limpar
-          </button>
+    <div className="space-y-4">
+
+      {/* Card Valor Total */}
+      <div
+        className="rounded-lg border-2 border-primary/40 p-3 cursor-pointer hover:border-primary transition-colors"
+        onClick={() => { onSelectTipo(null); onSelectFornecedor(null); }}
+        title="Clique para reiniciar o drill-down"
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-foreground">Valor Total</span>
+          {(selectedTipo || selectedForn) && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <RotateCcw className="w-3 h-3" /> reiniciar
+            </div>
+          )}
+        </div>
+        <p className="text-2xl font-bold font-mono mt-1">{fmtValor(total)}</p>
+
+        {/* Breadcrumb */}
+        {selectedTipo && (
+          <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground flex-wrap">
+            <span
+              className="hover:text-foreground cursor-pointer underline"
+              onClick={e => { e.stopPropagation(); onSelectTipo(null); onSelectFornecedor(null); }}
+            >
+              Todos
+            </span>
+            <ChevronRight className="w-3 h-3" />
+            <span
+              className={selectedForn ? "hover:text-foreground cursor-pointer underline" : "text-foreground font-medium"}
+              onClick={e => { e.stopPropagation(); if (selectedForn) onSelectFornecedor(null); }}
+            >
+              {selectedTipo}
+            </span>
+            {selectedForn && (
+              <>
+                <ChevronRight className="w-3 h-3" />
+                <span className="text-foreground font-medium">
+                  {selectedForn.slice(0, 30)}{selectedForn.length > 30 ? "…" : ""}
+                </span>
+              </>
+            )}
+          </div>
         )}
       </div>
-      <div className="w-full overflow-x-auto">
-        <svg viewBox="0 0 900 520" className="w-full" style={{ minWidth: 600 }}>
 
-          {/* Links (ribbons) — renderizados antes dos nós */}
-          {links.map((lk, i) => {
-            const x1 = lk.source.x + NODE_W;
-            const x2 = lk.target.x;
-            const mx = (x1 + x2) / 2;
-            const y1t = lk.sy;
-            const y1b = lk.sy + lk.sw;
-            const y2t = lk.ty;
-            const y2b = lk.ty + lk.sw;
-            const path = [
-              `M ${x1} ${y1t}`,
-              `C ${mx} ${y1t}, ${mx} ${y2t}, ${x2} ${y2t}`,
-              `L ${x2} ${y2b}`,
-              `C ${mx} ${y2b}, ${mx} ${y1b}, ${x1} ${y1b}`,
-              "Z",
-            ].join(" ");
-
-            const tipoNome = lk.source.col === 1 ? lk.source.nome : (lk.target.col === 1 ? lk.target.nome : null);
-            const fornNome = lk.target.col === 2 ? lk.target.nome : null;
-            const dimmed =
-              (cfTipo && tipoNome && tipoNome !== cfTipo) ||
-              (cfFornecedor && fornNome && fornNome !== cfFornecedor);
-
-            return (
-              <path
-                key={i}
-                d={path}
-                fill={lk.target.color}
-                opacity={dimmed ? 0.07 : 0.35}
-              />
-            );
-          })}
-
-          {/* Nós */}
-          {allNodes.map(nd => {
-            const isSelTipo = nd.col === 1 && cfTipo === nd.nome;
-            const isSelForn = nd.col === 2 && cfFornecedor === nd.nome;
-            const dimmed =
-              (nd.col === 1 && !!cfTipo && !isSelTipo) ||
-              (nd.col === 2 && !!cfFornecedor && !isSelForn);
-            const clickable = nd.col === 1 || nd.col === 2;
-            const label = nd.nome.length > 26 ? nd.nome.slice(0, 26) + "…" : nd.nome;
-
-            return (
-              <g
-                key={nd.id}
-                onClick={() => {
-                  if (nd.col === 1) onSelectTipo(cfTipo === nd.nome ? null : nd.nome);
-                  if (nd.col === 2) onSelectFornecedor(cfFornecedor === nd.nome ? null : nd.nome);
-                }}
-                style={{ cursor: clickable ? "pointer" : "default" }}
-              >
-                <rect
-                  x={nd.x} y={nd.y} width={NODE_W} height={nd.h}
-                  fill={nd.color}
-                  opacity={dimmed ? 0.25 : 1}
-                  rx={3}
-                  stroke={isSelTipo || isSelForn ? "#FBBF24" : "none"}
-                  strokeWidth={2}
-                />
-
-                {/* Label col 0: à esquerda */}
-                {nd.col === 0 && (
-                  <text
-                    x={nd.x - 6} y={nd.y + nd.h / 2}
-                    textAnchor="end" dominantBaseline="middle"
-                    fontSize={11} fill="currentColor" fontWeight={600}
-                  >
-                    Valor Total
-                  </text>
-                )}
-
-                {/* Label col 1 e 2: à direita */}
-                {nd.col > 0 && nd.h >= 14 && (
-                  <text
-                    x={nd.x + NODE_W + 6} y={nd.y + nd.h / 2 + (nd.h >= 32 ? -7 : 0)}
-                    textAnchor="start" dominantBaseline="middle"
-                    fontSize={10} fill="currentColor"
-                    opacity={dimmed ? 0.35 : 1}
-                  >
-                    {label}
-                  </text>
-                )}
-
-                {/* Valor abaixo quando há espaço */}
-                {nd.col > 0 && nd.h >= 32 && (
-                  <text
-                    x={nd.x + NODE_W + 6} y={nd.y + nd.h / 2 + 6}
-                    textAnchor="start" dominantBaseline="middle"
-                    fontSize={9} fill="currentColor" opacity={dimmed ? 0.2 : 0.5}
-                  >
-                    {`R$ ${(nd.valor / 1000).toFixed(0)}k`}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-
-        </svg>
+      {/* Nível 1 — Tipos de Despesa */}
+      <div className="space-y-1">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
+          Tipos de Despesa
+          <span className="font-normal ml-1">· clique para ver fornecedores</span>
+        </p>
+        {nivelTipos.map(item => (
+          <BarRow
+            key={item.nome}
+            item={item}
+            color="#3B82F6"
+            selected={selectedTipo === item.nome}
+            onClick={() => {
+              onSelectFornecedor(null);
+              onSelectTipo(selectedTipo === item.nome ? null : item.nome);
+            }}
+          />
+        ))}
       </div>
+
+      {/* Nível 2 — Fornecedores */}
+      {selectedTipo && nivelFornecedores.length > 0 && (
+        <div className="space-y-1 pl-4 border-l-2 border-blue-200">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
+            Fornecedores — {selectedTipo}
+            <span className="font-normal ml-1">· clique para ver histórico</span>
+          </p>
+          {nivelFornecedores.map(item => (
+            <BarRow
+              key={item.nome}
+              item={item}
+              color="#0891B2"
+              selected={selectedForn === item.nome}
+              onClick={() => onSelectFornecedor(selectedForn === item.nome ? null : item.nome)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Nível 3 — Histórico */}
+      {selectedForn && nivelHistorico.length > 0 && (
+        <div className="space-y-1 pl-8 border-l-2 border-cyan-200">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
+            Histórico — {selectedForn.slice(0, 40)}{selectedForn.length > 40 ? "…" : ""}
+          </p>
+          {nivelHistorico.map((item, i) => (
+            <BarRow
+              key={i}
+              item={item}
+              color="#8B5CF6"
+              labelMaxLen={60}
+            />
+          ))}
+        </div>
+      )}
+
     </div>
   );
 }
