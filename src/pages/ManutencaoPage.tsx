@@ -4,17 +4,17 @@ import {
   useManutencoesPeriodicas, useManutencoesTipos,
 } from "@/hooks/useFleetData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronDown } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell,
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
-import { cn } from "@/lib/utils";
 
 // ── Constantes ───────────────────────────────────────────────────────────────
 
@@ -88,6 +88,13 @@ const BUCKETS = [
   { label: ">7d",  min: 168, max: Infinity  },
 ];
 
+const todayStr    = new Date().toISOString().slice(0, 10);
+const oneYearAgo  = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+const inputClass =
+  "h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ManutencaoPage() {
@@ -97,16 +104,13 @@ export default function ManutencaoPage() {
   const { data: periodicas }   = useManutencoesPeriodicas();
   const { data: manutTipos }   = useManutencoesTipos();
 
-  const today      = new Date().toISOString().slice(0, 10);
-  const oneYearAgo = new Date();
-  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-  const defaultDe  = oneYearAgo.toISOString().slice(0, 10);
-
-  const [filterDe,   setFilterDe]   = useState(defaultDe);
-  const [filterAte,  setFilterAte]  = useState(today);
+  const [filterDe,   setFilterDe]   = useState(oneYearAgo);
+  const [filterAte,  setFilterAte]  = useState(todayStr);
   const [selLanchas, setSelLanchas] = useState<number[]>([121, 1003, 117]);
   const [selClasses, setSelClasses] = useState<string[]>(["corretiva", "preventiva", "outros"]);
   const [selFaina,   setSelFaina]   = useState<string>("Todas");
+  // Efeito opcional — padrão "Todos" para não perder dados de 'outros'
+  const [filterEfeito, setFilterEfeito] = useState<string>("Todos");
 
   function toggleLancha(cd: number) {
     setSelLanchas(prev =>
@@ -120,6 +124,13 @@ export default function ManutencaoPage() {
     );
   }
 
+  const lanchasLabel = selLanchas.length === LANCHAS.length ? "Todas"
+    : selLanchas.length === 0 ? "Nenhuma"
+    : selLanchas.map(cd => LANCHA_NOME[cd]).join(", ");
+
+  const classesLabel = selClasses.length === 3 ? "Todas"
+    : selClasses.map(c => LABEL_CLASSE[c]).join(", ");
+
   // ── Fainas dinâmicas ─────────────────────────────────────────────────────
   const allFainas = useMemo(() => {
     const s = new Set<string>();
@@ -131,17 +142,18 @@ export default function ManutencaoPage() {
   }, [ocorrencias]);
 
   // ── Ocorrências filtradas ─────────────────────────────────────────────────
+  // Sem pré-filtro de efeito para não excluir eventos classificados como 'outros'
   const ocFiltradas = useMemo(() => {
     return ((ocorrencias ?? []) as any[]).filter(o => {
-      if (o.efeito !== "Inoperante" && o.efeito !== "Operante com Restrições") return false;
       if (o.cd_lancha === null || !selLanchas.includes(o.cd_lancha)) return false;
       const d = (o.data_inicio ?? "").slice(0, 10);
       if (d < filterDe || d > filterAte) return false;
       if (!selClasses.includes(classifyTipo(o.tipo_ocorrencia))) return false;
       if (selFaina !== "Todas" && extractFaina(o.tipo_ocorrencia) !== selFaina) return false;
+      if (filterEfeito !== "Todos" && o.efeito !== filterEfeito) return false;
       return true;
     });
-  }, [ocorrencias, filterDe, filterAte, selLanchas, selClasses, selFaina]);
+  }, [ocorrencias, filterDe, filterAte, selLanchas, selClasses, selFaina, filterEfeito]);
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -168,9 +180,9 @@ export default function ManutencaoPage() {
     return {
       horasManut,
       horasOp,
-      ratioManutOp:     horasOp > 0 ? (horasManut / horasOp * 100) : null,
+      ratioManutOp:    horasOp > 0 ? (horasManut / horasOp * 100) : null,
       nOcorrencias,
-      horasPorManobra:  nManobras > 0 ? horasManut / nManobras : null,
+      horasPorManobra: nManobras > 0 ? horasManut / nManobras : null,
       mttr,
       nManobras,
     };
@@ -305,7 +317,7 @@ export default function ManutencaoPage() {
 
   // ── Compliance periódicas ─────────────────────────────────────────────────
   const complianceByLancha = useMemo(() => {
-    const tiposMap = new Map((manutTipos ?? []).map(t => [t.id, t]));
+    void manutTipos; // cache warming
     const filtered = (periodicas ?? []).filter(p =>
       selLanchas.includes(LANCHA_UUID_TO_CD[p.lancha_id] ?? -1)
     );
@@ -314,7 +326,6 @@ export default function ManutencaoPage() {
       if (!byLancha.has(p.lancha_nome)) byLancha.set(p.lancha_nome, []);
       byLancha.get(p.lancha_nome)!.push(p);
     }
-    void tiposMap; // used for cache warming via useManutencoesTipos
     return byLancha;
   }, [periodicas, selLanchas, manutTipos]);
 
@@ -342,84 +353,86 @@ export default function ManutencaoPage() {
         <p className="text-sm text-accent">Análise de ocorrências e manutenções das lanchas</p>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros — mesmo padrão visual de OperacoesPage */}
       <Card>
-        <CardContent className="pt-4 pb-4 space-y-3">
-          <div className="flex flex-wrap gap-4 items-end">
+        <CardContent className="pt-4 pb-4">
+          <div className="flex flex-wrap gap-3 items-center">
 
-            {/* Date range */}
-            <div className="flex items-center gap-2">
-              <div>
-                <Label className="text-xs text-muted-foreground">De</Label>
-                <Input type="date" className="h-9 w-36 text-sm mt-1"
-                  value={filterDe} onChange={e => setFilterDe(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Até</Label>
-                <Input type="date" className="h-9 w-36 text-sm mt-1"
-                  value={filterAte} onChange={e => setFilterAte(e.target.value)} />
-              </div>
+            {/* Lanchas — Popover com checkboxes */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[140px]">
+                  <span className="font-medium">Lanchas</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{lanchasLabel}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-2" align="start">
+                <div className="space-y-1">
+                  {LANCHAS.map(l => (
+                    <label key={l.cd} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                      <Checkbox checked={selLanchas.includes(l.cd)} onCheckedChange={() => toggleLancha(l.cd)} />
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[l.cd] }} />
+                      <span className="text-sm">{l.nome}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Datas — input nativo igual OperacoesPage */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">De</span>
+              <input type="date" value={filterDe} onChange={e => setFilterDe(e.target.value)} className={inputClass} />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Até</span>
+              <input type="date" value={filterAte} onChange={e => setFilterAte(e.target.value)} className={inputClass} />
             </div>
 
-            {/* Lanchas */}
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5">Lancha</p>
-              <div className="flex gap-1.5">
-                {LANCHAS.map(l => (
-                  <button
-                    key={l.cd}
-                    onClick={() => toggleLancha(l.cd)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
-                      selLanchas.includes(l.cd)
-                        ? "border-transparent text-white"
-                        : "border-muted-foreground/30 text-muted-foreground hover:border-foreground"
-                    )}
-                    style={selLanchas.includes(l.cd) ? { backgroundColor: LANCHA_COR[l.cd] } : {}}
-                  >
-                    {l.nome}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Classificação */}
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5">Classificação</p>
-              <div className="flex gap-1.5">
-                {(["corretiva", "preventiva", "outros"] as const).map(c => (
-                  <button
-                    key={c}
-                    onClick={() => toggleClasse(c)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
-                      selClasses.includes(c)
-                        ? "border-transparent text-white"
-                        : "border-muted-foreground/30 text-muted-foreground hover:border-foreground"
-                    )}
-                    style={selClasses.includes(c) ? { backgroundColor: COR_CLASSE[c] } : {}}
-                  >
-                    {LABEL_CLASSE[c]}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Classificação — Popover com checkboxes */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[150px]">
+                  <span className="font-medium">Classificação</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{classesLabel}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-2" align="start">
+                <div className="space-y-1">
+                  {(["corretiva", "preventiva", "outros"] as const).map(c => (
+                    <label key={c} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                      <Checkbox checked={selClasses.includes(c)} onCheckedChange={() => toggleClasse(c)} />
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COR_CLASSE[c] }} />
+                      <span className="text-sm">{LABEL_CLASSE[c]}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
             {/* Faina */}
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5">Faina</p>
-              <Select value={selFaina} onValueChange={setSelFaina}>
-                <SelectTrigger className="h-9 w-56 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {allFainas.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            <Select value={selFaina} onValueChange={setSelFaina}>
+              <SelectTrigger className="h-9 w-52 text-sm"><SelectValue placeholder="Faina" /></SelectTrigger>
+              <SelectContent>
+                {allFainas.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            {/* Efeito (opcional — padrão Todos para mostrar 'outros') */}
+            <Select value={filterEfeito} onValueChange={setFilterEfeito}>
+              <SelectTrigger className="h-9 w-52 text-sm"><SelectValue placeholder="Efeito" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Todos">Todos os efeitos</SelectItem>
+                <SelectItem value="Inoperante">Inoperante</SelectItem>
+                <SelectItem value="Operante com Restrições">Operante com Restrições</SelectItem>
+                <SelectItem value="Operante">Operante</SelectItem>
+                <SelectItem value="Não Altera">Não Altera</SelectItem>
+              </SelectContent>
+            </Select>
 
           </div>
-          <p className="text-xs text-muted-foreground">
-            {ocFiltradas.length} ocorrência{ocFiltradas.length !== 1 ? "s" : ""} no filtro (efeito: Inoperante ou Operante com Restrições)
-          </p>
         </CardContent>
       </Card>
 
@@ -442,7 +455,7 @@ export default function ManutencaoPage() {
         </CardHeader>
         <CardContent>
           {dadosHorasMes.length === 0 ? (
-            <p className="text-center text-muted-foreground py-10 text-sm">Sem dados</p>
+            <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={dadosHorasMes} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
