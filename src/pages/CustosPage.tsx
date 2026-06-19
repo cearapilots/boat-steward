@@ -21,6 +21,7 @@ import {
   Treemap,
 } from "recharts";
 import { Upload } from "lucide-react";
+import SankeyFluxo from "@/components/SankeyFluxo";
 
 // ── Constantes exportadas ─────────────────────────────────────────────────────
 
@@ -616,6 +617,30 @@ export default function CustosPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sankey: Fluxo de Custos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Fluxo de Custos Detalhado</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Valor Total → Tipo de Despesa → Fornecedor{cfFornecedor ? " → Histórico" : ""}
+          </p>
+        </CardHeader>
+        <CardContent>
+          <SankeyFluxo
+            despesas={despesasFiltradas.map(d => ({
+              tipo_despesa: d.tipo_despesa,
+              fornecedor:   d.fornecedor,
+              historico:    d.historico,
+              valor:        Number(d.valor) || 0,
+            }))}
+            cfTipo={cfTipo}
+            cfFornecedor={cfFornecedor}
+            onSelectTipo={setCfTipo}
+            onSelectFornecedor={setCfFornecedor}
+          />
+        </CardContent>
+      </Card>
 
       {/* Modal Upload */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
