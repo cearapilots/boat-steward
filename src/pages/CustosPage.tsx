@@ -2,9 +2,10 @@ import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
-import { useDespesas, useFaturamentoCusto, useManobras } from "@/hooks/useFleetData";
+import { useDespesas, useManobras } from "@/hooks/useFleetData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart, Line, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Treemap,
 } from "recharts";
 import { Upload } from "lucide-react";
@@ -34,14 +35,18 @@ export const LANCHAS_OPERACIONAIS = ["Flexeiras", "Fortim", "Taíba"];
 
 const ALL_CENTROS = ["Todas", "Flexeiras", "Fortim", "Taíba", "Lancha Nova", "Jeri", "Container de Apoio"];
 
-// cd_lancha para uso no filtro de manobras
 const CENTRO_TO_CD: Record<string, number[]> = {
   Flexeiras: [121],
   Fortim:    [1003],
   Taíba:     [117],
 };
 
-// ── Grupos do pie tipo ────────────────────────────────────────────────────────
+// ── Cores ─────────────────────────────────────────────────────────────────────
+
+const COR_CENTRO: Record<string, string> = {
+  Flexeiras: "#2563EB", Fortim: "#16A34A", Taíba: "#F97316",
+  "Lancha Nova": "#8B5CF6", Jeri: "#06B6D4", "Container de Apoio": "#6B7280",
+};
 
 const GRUPOS_TIPO = [
   "Combustíveis e Lubrificantes",
@@ -59,7 +64,6 @@ const GRUPO_TIPO_COR: Record<string, string> = {
   "Outros":                       "#6B7280",
 };
 
-// Tipos que mapeiam para cada grupo (case-sensitive)
 const TIPO_TO_GRUPO: Record<string, string> = {
   "Combustíveis e Lubrificantes": "Combustíveis e Lubrificantes",
   "Imobilizado em Andamento":     "Imobilizado em Andamento",
@@ -71,14 +75,6 @@ const TIPO_TO_GRUPO: Record<string, string> = {
 function grupoTipo(tipo: string | null | undefined): string {
   return TIPO_TO_GRUPO[(tipo ?? "").trim()] ?? "Outros";
 }
-
-// ── Treemap cores ─────────────────────────────────────────────────────────────
-
-const TREEMAP_CORES = [
-  "#2563EB", "#16A34A", "#F97316", "#8B5CF6", "#06B6D4",
-  "#EC4899", "#F59E0B", "#10B981", "#EF4444", "#6B7280",
-  "#3B82F6", "#84CC16",
-];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -99,37 +95,8 @@ function normCentro(c: string): string {
   return NORM_CENTRO[c?.trim()] ?? c?.trim() ?? "";
 }
 
-// ── Treemap custom cell ───────────────────────────────────────────────────────
-
-function TreemapCell(props: any) {
-  const { x, y, width, height, name, size, index, selected, onSelect } = props;
-  const isSelected = selected === name;
-  const dimmed = selected && !isSelected;
-  const color = TREEMAP_CORES[index % TREEMAP_CORES.length];
-  if (!width || !height || width < 20 || height < 15) return null;
-  return (
-    <g onClick={() => onSelect?.(name)} style={{ cursor: "pointer" }}>
-      <rect
-        x={x} y={y} width={width} height={height}
-        fill={color}
-        stroke={isSelected ? "#fff" : "#fff"}
-        strokeWidth={isSelected ? 3 : 2}
-        opacity={dimmed ? 0.35 : 1}
-      />
-      {width > 60 && height > 28 && (
-        <text x={x + width / 2} y={y + height / 2 - (height > 48 ? 8 : 0)}
-          textAnchor="middle" fill="#fff" fontSize={10} fontWeight={600}>
-          {name && name.length > 14 ? name.slice(0, 13) + "…" : name}
-        </text>
-      )}
-      {width > 60 && height > 48 && (
-        <text x={x + width / 2} y={y + height / 2 + 10}
-          textAnchor="middle" fill="rgba(255,255,255,0.85)" fontSize={9}>
-          {fmtBRL(size ?? 0)}
-        </text>
-      )}
-    </g>
-  );
+function toggle<T>(setter: (v: T | null) => void, atual: T | null, novo: T) {
+  setter(atual === novo ? null : novo);
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -137,29 +104,31 @@ function TreemapCell(props: any) {
 export default function CustosPage() {
   const qc = useQueryClient();
   const { data: despesas } = useDespesas();
-  const { data: faturamento } = useFaturamentoCusto();
   const { data: manobras } = useManobras();
 
-  // ── Filtros ───────────────────────────────────────────────────────────────
-  const [filterAno, setFilterAno] = useState<string>("Todos");
+  // ── Filtros sidebar ───────────────────────────────────────────────────────
+  const [filterAno,    setFilterAno]    = useState<string>("Todos");
   const [filterLancha, setFilterLancha] = useState<string>("Todas");
-  const [filterTipo, setFilterTipo] = useState<string>("Todos");
-  const [selectedFornecedor, setSelectedFornecedor] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [filterTipo,   setFilterTipo]   = useState<string>("Todos");
 
-  // Upload state
-  const [fileFat, setFileFat] = useState<File | null>(null);
-  const [fileDesp, setFileDesp] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  // ── Cross-filters ─────────────────────────────────────────────────────────
+  const [cfCentro,     setCfCentro]     = useState<string | null>(null);
+  const [cfTipo,       setCfTipo]       = useState<string | null>(null);
+  const [cfMes,        setCfMes]        = useState<string | null>(null);
+  const [cfFornecedor, setCfFornecedor] = useState<string | null>(null);
+
+  // ── Upload ────────────────────────────────────────────────────────────────
+  const [modalOpen,    setModalOpen]    = useState(false);
+  const [fileDesp,     setFileDesp]     = useState<File | null>(null);
+  const [uploading,    setUploading]    = useState(false);
   const [uploadResult, setUploadResult] = useState<string | null>(null);
 
-  // ── Derivados ─────────────────────────────────────────────────────────────
+  // ── Listas de opções ──────────────────────────────────────────────────────
   const anos = useMemo(() => {
     const s = new Set<string>();
     for (const d of despesas ?? []) if (d.ano_mes) s.add(d.ano_mes.slice(0, 4));
-    for (const f of faturamento ?? []) if (f.ano_mes) s.add(f.ano_mes.slice(0, 4));
     return ["Todos", ...[...s].sort().reverse()];
-  }, [despesas, faturamento]);
+  }, [despesas]);
 
   const todosTipos = useMemo(() => {
     const s = new Set<string>();
@@ -167,147 +136,150 @@ export default function CustosPage() {
     return ["Todos", ...[...s].sort()];
   }, [despesas]);
 
-  const filteredDespesas = useMemo(() => {
+  // ── Helpers de filtro (inline para useMemo correto) ───────────────────────
+  // despesasFiltradas: todos os filtros aplicados (usado nos KPIs)
+  const despesasFiltradas = useMemo(() => {
     return (despesas ?? []).filter(d => {
-      if (filterAno !== "Todos" && !d.ano_mes?.startsWith(filterAno)) return false;
+      if (filterAno !== "Todos" && d.ano_mes.slice(0, 4) !== filterAno) return false;
       if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
       if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
-      if (selectedFornecedor && d.fornecedor !== selectedFornecedor) return false;
+      if (cfCentro     && d.centro_resultado !== cfCentro) return false;
+      if (cfTipo       && d.tipo_despesa     !== cfTipo)   return false;
+      if (cfMes        && d.ano_mes          !== cfMes)    return false;
+      if (cfFornecedor && d.fornecedor       !== cfFornecedor) return false;
       return true;
     });
-  }, [despesas, filterAno, filterLancha, filterTipo, selectedFornecedor]);
-
-  const filtFaturamento = useMemo(() => {
-    return (faturamento ?? []).filter(f =>
-      filterAno === "Todos" || f.ano_mes?.startsWith(filterAno)
-    );
-  }, [faturamento, filterAno]);
+  }, [despesas, filterAno, filterLancha, filterTipo, cfCentro, cfTipo, cfMes, cfFornecedor]);
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
-    const custosLanchas = filteredDespesas.reduce((s, d) => s + (Number(d.valor) || 0), 0);
-    const custoTotal = filtFaturamento.reduce((s, f) => s + (Number(f.custo_total) || 0), 0);
-    const fat = filtFaturamento.reduce((s, f) => s + (Number(f.faturamento) || 0), 0);
-    const pctCustoFat = fat > 0 ? (custosLanchas / fat) * 100 : null;
-    const manobrasNoPeriodo = (manobras ?? []).filter((m: any) => {
-      if (filterAno !== "Todos" && !(m.dh_manobra ?? "").startsWith(filterAno)) return false;
-      if (filterLancha !== "Todas") {
-        const cds = CENTRO_TO_CD[filterLancha];
-        if (cds && !cds.includes(Number(m.cd_lancha))) return false;
-      }
+    const total = despesasFiltradas.reduce((s, d) => s + (Number(d.valor) || 0), 0);
+    const lanchas = despesasFiltradas
+      .filter(d => LANCHAS_OPERACIONAIS.includes(d.centro_resultado))
+      .reduce((s, d) => s + (Number(d.valor) || 0), 0);
+    const mesesFiltrados = new Set(despesasFiltradas.map(d => d.ano_mes));
+    const totalManobras = (manobras ?? []).filter((m: any) =>
+      mesesFiltrados.has((m.dh_manobra ?? "").slice(0, 7))
+    ).length;
+    return {
+      total,
+      lanchas,
+      custoPorManobra: totalManobras > 0 ? lanchas / totalManobras : null,
+      mediaMensal: total / Math.max(1, mesesFiltrados.size),
+      nTransacoes: despesasFiltradas.length,
+    };
+  }, [despesasFiltradas, manobras]);
+
+  // ── Gráfico 1: donut centro (ignora cfCentro) ─────────────────────────────
+  const dadosCentro = useMemo(() => {
+    const base = (despesas ?? []).filter(d => {
+      if (filterAno !== "Todos" && d.ano_mes.slice(0, 4) !== filterAno) return false;
+      if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
+      if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      if (cfTipo       && d.tipo_despesa !== cfTipo)       return false;
+      if (cfMes        && d.ano_mes      !== cfMes)        return false;
+      if (cfFornecedor && d.fornecedor   !== cfFornecedor) return false;
       return true;
     });
-    const custoManobra = manobrasNoPeriodo.length > 0 ? custosLanchas / manobrasNoPeriodo.length : null;
-    return { custosLanchas, custoTotal, fat, pctCustoFat, custoManobra };
-  }, [filteredDespesas, filtFaturamento, manobras, filterAno, filterLancha]);
-
-  // ── Chart data ────────────────────────────────────────────────────────────
-
-  const donutCentro = useMemo(() => {
-    const COR_CENTRO: Record<string, string> = {
-      Flexeiras: "#2563EB", Fortim: "#16A34A", Taíba: "#F97316",
-      "Lancha Nova": "#8B5CF6", Jeri: "#06B6D4", "Container de Apoio": "#6B7280",
-    };
-    const TIPO_CORES = ["#6366F1","#EC4899","#F59E0B","#10B981","#3B82F6","#EF4444"];
     const map = new Map<string, number>();
-    for (const d of filteredDespesas) {
+    for (const d of base) {
       const c = d.centro_resultado || "Outros";
       map.set(c, (map.get(c) ?? 0) + (Number(d.valor) || 0));
     }
     return [...map.entries()]
-      .map(([name, value], i) => ({ name, value, fill: COR_CENTRO[name] ?? TIPO_CORES[i % TIPO_CORES.length] }))
-      .filter(d => d.value > 0)
-      .sort((a, b) => b.value - a.value);
-  }, [filteredDespesas]);
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([nome, valor]) => ({ nome, valor }));
+  }, [despesas, filterAno, filterLancha, filterTipo, cfTipo, cfMes, cfFornecedor]);
 
-  const donutTipo = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const d of filteredDespesas) {
-      const g = grupoTipo(d.tipo_despesa);
-      map.set(g, (map.get(g) ?? 0) + (Number(d.valor) || 0));
+  // ── Gráfico 2: barras mensais + custo/manobra (ignora cfMes) ─────────────
+  const dadosMensal = useMemo(() => {
+    const base = (despesas ?? []).filter(d => {
+      if (filterAno !== "Todos" && d.ano_mes.slice(0, 4) !== filterAno) return false;
+      if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
+      if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      if (cfCentro     && d.centro_resultado !== cfCentro) return false;
+      if (cfTipo       && d.tipo_despesa     !== cfTipo)   return false;
+      if (cfFornecedor && d.fornecedor       !== cfFornecedor) return false;
+      return true;
+    });
+    const custoMap = new Map<string, number>();
+    for (const d of base) {
+      if (d.ano_mes) custoMap.set(d.ano_mes, (custoMap.get(d.ano_mes) ?? 0) + (Number(d.valor) || 0));
     }
-    return GRUPOS_TIPO
-      .map(g => ({ name: g, value: map.get(g) ?? 0, fill: GRUPO_TIPO_COR[g] }))
-      .filter(d => d.value > 0);
-  }, [filteredDespesas]);
-
-  const dadosMensais = useMemo(() => {
-    const custoByMes = new Map<string, number>();
-    for (const d of filteredDespesas) {
-      if (d.ano_mes) custoByMes.set(d.ano_mes, (custoByMes.get(d.ano_mes) ?? 0) + (Number(d.valor) || 0));
-    }
-    const fatByMes = new Map<string, { faturamento: number; custo_total: number }>();
-    for (const f of filtFaturamento) {
-      if (f.ano_mes) fatByMes.set(f.ano_mes, { faturamento: f.faturamento, custo_total: f.custo_total });
-    }
-    // manobras por mês filtradas
-    const manByMes = new Map<string, number>();
+    const manobraMap = new Map<string, number>();
     for (const m of (manobras ?? []) as any[]) {
-      if (filterAno !== "Todos" && !(m.dh_manobra ?? "").startsWith(filterAno)) continue;
+      const mes = (m.dh_manobra ?? "").slice(0, 7);
+      if (!mes) continue;
+      if (filterAno !== "Todos" && mes.slice(0, 4) !== filterAno) continue;
       if (filterLancha !== "Todas") {
         const cds = CENTRO_TO_CD[filterLancha];
         if (cds && !cds.includes(Number(m.cd_lancha))) continue;
       }
-      const mes = (m.dh_manobra ?? "").slice(0, 7);
-      if (mes) manByMes.set(mes, (manByMes.get(mes) ?? 0) + 1);
+      manobraMap.set(mes, (manobraMap.get(mes) ?? 0) + 1);
     }
+    return [...custoMap.keys()].sort().map(mes => ({
+      mes: fmtMes(mes),
+      mesKey: mes,
+      custo: Math.round(custoMap.get(mes) ?? 0),
+      custoPorManobra: (manobraMap.get(mes) ?? 0) > 0
+        ? Math.round((custoMap.get(mes) ?? 0) / manobraMap.get(mes)!)
+        : null,
+    }));
+  }, [despesas, manobras, filterAno, filterLancha, filterTipo, cfCentro, cfTipo, cfFornecedor]);
 
-    const allMonths = [...new Set([...custoByMes.keys(), ...fatByMes.keys()])].sort();
-    return allMonths.map(mes => {
-      const custo = custoByMes.get(mes) ?? 0;
-      const fat = fatByMes.get(mes);
-      const nMan = manByMes.get(mes) ?? 0;
-      const pct_fat = fat?.faturamento ? Math.round((custo / fat.faturamento) * 1000) / 10 : null;
-      const pct_total = fat?.custo_total ? Math.round((custo / fat.custo_total) * 1000) / 10 : null;
-      const custo_manobra = nMan > 0 ? Math.round(custo / nMan) : null;
-      return { mes: fmtMes(mes), pct_fat, pct_total, custo_manobra };
-    });
-  }, [filteredDespesas, filtFaturamento, manobras, filterAno, filterLancha]);
-
-  const treemapData = useMemo(() => {
-    const base = selectedFornecedor ? (despesas ?? []).filter(d => {
-      if (filterAno !== "Todos" && !d.ano_mes?.startsWith(filterAno)) return false;
+  // ── Gráfico 3: donut tipo (ignora cfTipo) ─────────────────────────────────
+  const dadosTipo = useMemo(() => {
+    const base = (despesas ?? []).filter(d => {
+      if (filterAno !== "Todos" && d.ano_mes.slice(0, 4) !== filterAno) return false;
       if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
       if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      if (cfCentro     && d.centro_resultado !== cfCentro) return false;
+      if (cfMes        && d.ano_mes          !== cfMes)    return false;
+      if (cfFornecedor && d.fornecedor       !== cfFornecedor) return false;
       return true;
-    }) : filteredDespesas;
+    });
     const map = new Map<string, number>();
     for (const d of base) {
-      const forn = d.fornecedor || "Desconhecido";
-      map.set(forn, (map.get(forn) ?? 0) + (Number(d.valor) || 0));
+      const g = grupoTipo(d.tipo_despesa);
+      map.set(g, (map.get(g) ?? 0) + (Number(d.valor) || 0));
+    }
+    return GRUPOS_TIPO
+      .map(g => ({ nome: g, valor: map.get(g) ?? 0, fill: GRUPO_TIPO_COR[g] }))
+      .filter(d => d.valor > 0);
+  }, [despesas, filterAno, filterLancha, filterTipo, cfCentro, cfMes, cfFornecedor]);
+
+  // ── Gráfico 4: treemap fornecedor (ignora cfFornecedor) ───────────────────
+  const dadosFornecedor = useMemo(() => {
+    const base = (despesas ?? []).filter(d => {
+      if (filterAno !== "Todos" && d.ano_mes.slice(0, 4) !== filterAno) return false;
+      if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
+      if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      if (cfCentro && d.centro_resultado !== cfCentro) return false;
+      if (cfTipo   && d.tipo_despesa     !== cfTipo)   return false;
+      if (cfMes    && d.ano_mes          !== cfMes)    return false;
+      return true;
+    });
+    const map = new Map<string, number>();
+    for (const d of base) {
+      const f = d.fornecedor || "Desconhecido";
+      map.set(f, (map.get(f) ?? 0) + (Number(d.valor) || 0));
     }
     return [...map.entries()]
-      .map(([name, size]) => ({ name, size }))
-      .sort((a, b) => b.size - a.size)
-      .slice(0, 20);
-  }, [despesas, filteredDespesas, filterAno, filterLancha, filterTipo, selectedFornecedor]);
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([name, size]) => ({
+        name,
+        size,
+        shortName: name.length > 25 ? name.slice(0, 24) + "…" : name,
+      }));
+  }, [despesas, filterAno, filterLancha, filterTipo, cfCentro, cfTipo, cfMes]);
 
   // ── Upload ────────────────────────────────────────────────────────────────
-
   async function processarArquivos() {
     setUploading(true);
     setUploadResult(null);
     try {
-      if (fileFat) {
-        const buf = await fileFat.arrayBuffer();
-        const wb = XLSX.read(buf);
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        const fatData = rows.slice(1)
-          .filter(r => r[0] && r[1] != null && r[2] != null)
-          .map(r => {
-            const dt = r[0] instanceof Date
-              ? r[0]
-              : new Date(Math.round((Number(r[0]) - 25569) * 86400 * 1000));
-            const ano_mes = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
-            return { ano_mes, faturamento: Number(r[1]), custo_total: Number(r[2]) };
-          });
-        const { error } = await (supabase as any)
-          .from("faturamento_custo_mensal")
-          .upsert(fatData, { onConflict: "ano_mes" });
-        if (error) throw new Error("Erro faturamento: " + error.message);
-      }
-
       if (fileDesp) {
         const buf = await fileDesp.arrayBuffer();
         const wb = XLSX.read(buf);
@@ -336,8 +308,6 @@ export default function CustosPage() {
         const { error } = await (supabase as any).from("despesas").insert(despData);
         if (error) throw new Error("Erro despesas: " + error.message);
       }
-
-      qc.invalidateQueries({ queryKey: ["faturamento_custo"] });
       qc.invalidateQueries({ queryKey: ["despesas"] });
       setUploadResult("✅ Processado com sucesso!");
     } catch (e: any) {
@@ -347,17 +317,42 @@ export default function CustosPage() {
     }
   }
 
-  function handleFornecedorClick(name: string) {
-    setSelectedFornecedor(prev => prev === name ? null : name);
-  }
+  const hasCf = !!(cfCentro || cfTipo || cfMes || cfFornecedor);
+  function clearAllCf() { setCfCentro(null); setCfTipo(null); setCfMes(null); setCfFornecedor(null); }
 
   const KPI_CARDS = [
-    { label: "Custo Lanchas",  value: fmtBRL(kpis.custosLanchas) },
-    { label: "Custo Total",    value: fmtBRL(kpis.custoTotal) },
-    { label: "Faturamento",    value: fmtBRL(kpis.fat) },
-    { label: "Custo/Manobra",  value: kpis.custoManobra != null ? fmtBRL(kpis.custoManobra) : "—" },
-    { label: "% Custo/Fat",    value: kpis.pctCustoFat != null ? `${kpis.pctCustoFat.toFixed(1)}%` : "—" },
+    { label: "Custo Total",   value: fmtBRL(kpis.total) },
+    { label: "Custo Lanchas", value: fmtBRL(kpis.lanchas) },
+    { label: "Custo/Manobra", value: kpis.custoPorManobra != null ? fmtBRL(kpis.custoPorManobra) : "—" },
+    { label: "Média Mensal",  value: fmtBRL(kpis.mediaMensal) },
+    { label: "Transações",    value: kpis.nTransacoes.toLocaleString("pt-BR") },
   ];
+
+  // ── Treemap content ───────────────────────────────────────────────────────
+  function treemapContent(props: any) {
+    const { x, y, width, height, name, value } = props;
+    const fullName = dadosFornecedor.find(d => d.shortName === name)?.name ?? name;
+    const isSelected = cfFornecedor === fullName;
+    const opacity = cfFornecedor && !isSelected ? 0.3 : 1;
+    if (!width || !height || width < 20 || height < 15) return null;
+    return (
+      <g style={{ cursor: "pointer" }}>
+        <rect
+          x={x} y={y} width={width} height={height}
+          fill={isSelected ? "#1D4ED8" : "#3B82F6"}
+          stroke="#fff" strokeWidth={2} opacity={opacity} rx={3}
+        />
+        {width > 60 && height > 30 && (
+          <text x={x + 6} y={y + 16} fontSize={10} fill="#fff" opacity={opacity}>{name}</text>
+        )}
+        {width > 60 && height > 45 && (
+          <text x={x + 6} y={y + 30} fontSize={9} fill="rgba(255,255,255,0.8)" opacity={opacity}>
+            {`R$ ${(Number(value) / 1000).toFixed(0)}k`}
+          </text>
+        )}
+      </g>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -366,59 +361,75 @@ export default function CustosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Custos — Estatísticas</h1>
-          <p className="text-sm text-accent">Análise de despesas operacionais e faturamento</p>
+          <p className="text-sm text-accent">Análise de despesas operacionais</p>
         </div>
-        <Button
-          onClick={() => { setUploadResult(null); setFileFat(null); setFileDesp(null); setModalOpen(true); }}
-        >
+        <Button onClick={() => { setUploadResult(null); setFileDesp(null); setModalOpen(true); }}>
           <Upload className="h-4 w-4 mr-2" />
           Atualizar Dados
         </Button>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros sidebar */}
       <Card>
-        <CardContent className="pt-4 pb-4">
+        <CardContent className="pt-4 pb-4 space-y-3">
           <div className="flex flex-wrap gap-3 items-center">
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Tipo de Despesa</span>
-              <Select value={filterTipo} onValueChange={setFilterTipo}>
+              <Select value={filterTipo} onValueChange={v => { setFilterTipo(v); setCfTipo(null); }}>
                 <SelectTrigger className="h-9 w-56 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {todosTipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Lancha</span>
-              <Select value={filterLancha} onValueChange={setFilterLancha}>
+              <Select value={filterLancha} onValueChange={v => { setFilterLancha(v); setCfCentro(null); }}>
                 <SelectTrigger className="h-9 w-44 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {ALL_CENTROS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Ano</span>
-              <Select value={filterAno} onValueChange={setFilterAno}>
+              <Select value={filterAno} onValueChange={v => { setFilterAno(v); setCfMes(null); }}>
                 <SelectTrigger className="h-9 w-28 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {anos.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-
-            {selectedFornecedor && (
-              <button
-                onClick={() => setSelectedFornecedor(null)}
-                className="h-9 px-3 rounded-md border border-orange-300 bg-orange-50 text-orange-700 text-xs font-medium hover:bg-orange-100 transition-colors flex items-center gap-1"
-              >
-                Fornecedor: {selectedFornecedor} ✕
-              </button>
-            )}
           </div>
+
+          {hasCf && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-muted-foreground">Filtros ativos:</span>
+              {cfCentro && (
+                <Badge variant="secondary" className="cursor-pointer" onClick={() => setCfCentro(null)}>
+                  Centro: {cfCentro} ✕
+                </Badge>
+              )}
+              {cfTipo && (
+                <Badge variant="secondary" className="cursor-pointer" onClick={() => setCfTipo(null)}>
+                  Tipo: {cfTipo} ✕
+                </Badge>
+              )}
+              {cfMes && (
+                <Badge variant="secondary" className="cursor-pointer" onClick={() => setCfMes(null)}>
+                  Mês: {fmtMes(cfMes)} ✕
+                </Badge>
+              )}
+              {cfFornecedor && (
+                <Badge variant="secondary" className="cursor-pointer" onClick={() => setCfFornecedor(null)}>
+                  Fornecedor: {cfFornecedor.length > 30 ? cfFornecedor.slice(0, 29) + "…" : cfFornecedor} ✕
+                </Badge>
+              )}
+              <button onClick={clearAllCf} className="text-xs underline text-muted-foreground ml-1">
+                Limpar todos
+              </button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -436,57 +447,92 @@ export default function CustosPage() {
 
       {/* Gráfico 1 + 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        {/* Donut: por centro */}
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle className="text-base">Distribuição por Centro</CardTitle></CardHeader>
           <CardContent>
-            {donutCentro.length === 0 ? (
+            {dadosCentro.length === 0 ? (
               <p className="text-center text-muted-foreground py-10 text-sm">Sem dados</p>
             ) : (
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
-                  <Pie data={donutCentro} cx="50%" cy="50%" innerRadius={55} outerRadius={85}
-                    dataKey="value" nameKey="name"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
-                    labelLine>
-                    {donutCentro.map(entry => (
-                      <Cell key={entry.name} fill={entry.fill} />
+                  <Pie
+                    data={dadosCentro}
+                    cx="50%" cy="50%"
+                    innerRadius={55} outerRadius={85}
+                    dataKey="valor" nameKey="nome"
+                    onClick={(entry: any) => toggle(setCfCentro, cfCentro, entry.nome)}
+                    label={({ percent }) => percent > 0.04 ? `${(percent * 100).toFixed(1)}%` : ""}
+                    labelLine
+                  >
+                    {dadosCentro.map(entry => (
+                      <Cell
+                        key={entry.nome}
+                        fill={COR_CENTRO[entry.nome] ?? "#6B7280"}
+                        opacity={cfCentro && cfCentro !== entry.nome ? 0.3 : 1}
+                        style={{ cursor: "pointer" }}
+                      />
                     ))}
                   </Pie>
                   <Tooltip formatter={(v: any, name: string) => [fmtBRL(Number(v)), name]} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
                 </PieChart>
               </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
 
+        {/* Barras: custo mensal + custo/manobra */}
         <Card className="lg:col-span-3">
-          <CardHeader><CardTitle className="text-base">Custo Mensal vs Representatividade</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              Custo Mensal
+              <span className="text-xs font-normal text-muted-foreground">clique na barra para filtrar o mês</span>
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            {dadosMensais.length === 0 ? (
+            {dadosMensal.length === 0 ? (
               <p className="text-center text-muted-foreground py-10 text-sm">Sem dados</p>
             ) : (
               <ResponsiveContainer width="100%" height={280}>
-                <ComposedChart data={dadosMensais} margin={{ top: 5, right: 30, bottom: 5, left: 0 }}>
+                <ComposedChart
+                  data={dadosMensal}
+                  margin={{ top: 5, right: 30, bottom: 5, left: 0 }}
+                  onClick={(e: any) => {
+                    const mesKey = e?.activePayload?.[0]?.payload?.mesKey;
+                    if (mesKey) toggle(setCfMes, cfMes, mesKey);
+                  }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                  <YAxis yAxisId="esq" tick={{ fontSize: 10 }} tickFormatter={v => fmtBRL(v)}
-                    label={{ value: "R$/man.", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 9 } }} />
-                  <YAxis yAxisId="dir" orientation="right" domain={[0, 100]}
-                    tick={{ fontSize: 10 }} tickFormatter={v => `${v}%`} />
+                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} style={{ cursor: "pointer" }} />
+                  <YAxis yAxisId="custo" orientation="left"
+                    tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="manobra" orientation="right"
+                    tickFormatter={v => `R$${Number(v).toLocaleString("pt-BR")}`} tick={{ fontSize: 10 }} />
                   <Tooltip
-                    formatter={(v: any, name: string) =>
-                      name === "Custo/Manobra"
-                        ? [v != null ? fmtBRL(Number(v)) : "—", name]
-                        : [v != null ? `${Number(v).toFixed(1)}%` : "—", name]
-                    }
+                    formatter={(v: any, name: string) => [
+                      name === "Custo Total"
+                        ? `R$ ${Number(v).toLocaleString("pt-BR")}`
+                        : `R$ ${Number(v).toLocaleString("pt-BR")}/man`,
+                      name,
+                    ]}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Line yAxisId="esq" type="monotone" dataKey="custo_manobra" name="Custo/Manobra"
-                    stroke="#6366F1" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                  <Line yAxisId="dir" type="monotone" dataKey="pct_fat" name="Custo Lancha / Faturamento"
-                    stroke="#F97316" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                  <Line yAxisId="dir" type="monotone" dataKey="pct_total" name="Custo Lancha / Custo Total"
-                    stroke="#16A34A" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                  <Bar yAxisId="custo" dataKey="custo" name="Custo Total" radius={[3, 3, 0, 0]}>
+                    {dadosMensal.map(d => (
+                      <Cell
+                        key={d.mesKey}
+                        fill="#2563EB"
+                        opacity={cfMes && cfMes !== d.mesKey ? 0.3 : 1}
+                        style={{ cursor: "pointer" }}
+                      />
+                    ))}
+                  </Bar>
+                  <Line
+                    yAxisId="manobra" dataKey="custoPorManobra" name="Custo/Manobra"
+                    type="monotone" stroke="#F97316" strokeWidth={2}
+                    dot={{ r: 4 }} connectNulls
+                  />
                 </ComposedChart>
               </ResponsiveContainer>
             )}
@@ -496,20 +542,31 @@ export default function CustosPage() {
 
       {/* Gráfico 3 + 4 */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        {/* Donut: por tipo */}
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle className="text-base">Distribuição por Tipo de Despesa</CardTitle></CardHeader>
           <CardContent>
-            {donutTipo.length === 0 ? (
+            {dadosTipo.length === 0 ? (
               <p className="text-center text-muted-foreground py-10 text-sm">Sem dados</p>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
-                  <Pie data={donutTipo} cx="50%" cy="45%" innerRadius={55} outerRadius={85}
-                    dataKey="value" nameKey="name"
-                    label={({ name, percent }) => percent > 0.04 ? `${(percent * 100).toFixed(1)}%` : ""}
-                    labelLine>
-                    {donutTipo.map(entry => (
-                      <Cell key={entry.name} fill={entry.fill} />
+                  <Pie
+                    data={dadosTipo}
+                    cx="50%" cy="45%"
+                    innerRadius={55} outerRadius={85}
+                    dataKey="valor" nameKey="nome"
+                    onClick={(entry: any) => toggle(setCfTipo, cfTipo, entry.nome)}
+                    label={({ percent }) => percent > 0.04 ? `${(percent * 100).toFixed(1)}%` : ""}
+                    labelLine
+                  >
+                    {dadosTipo.map(entry => (
+                      <Cell
+                        key={entry.nome}
+                        fill={entry.fill}
+                        opacity={cfTipo && cfTipo !== entry.nome ? 0.3 : 1}
+                        style={{ cursor: "pointer" }}
+                      />
                     ))}
                   </Pie>
                   <Tooltip formatter={(v: any, name: string) => [fmtBRL(Number(v)), name]} />
@@ -520,28 +577,25 @@ export default function CustosPage() {
           </CardContent>
         </Card>
 
+        {/* Treemap: top fornecedores */}
         <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               Top 20 Fornecedores
-              {selectedFornecedor && (
-                <span className="text-xs font-normal text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-0.5">
-                  Clique novamente para desfiltrar
-                </span>
-              )}
+              <span className="text-xs font-normal text-muted-foreground">clique para filtrar</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {treemapData.length === 0 ? (
+            {dadosFornecedor.length === 0 ? (
               <p className="text-center text-muted-foreground py-10 text-sm">Sem dados</p>
             ) : (
               <ResponsiveContainer width="100%" height={280}>
                 <Treemap
-                  data={treemapData}
+                  data={dadosFornecedor}
                   dataKey="size"
-                  aspectRatio={16 / 9}
-                  stroke="#fff"
-                  content={<TreemapCell selected={selectedFornecedor} onSelect={handleFornecedorClick} />}
+                  nameKey="shortName"
+                  onClick={(node: any) => toggle(setCfFornecedor, cfFornecedor, node.name)}
+                  content={treemapContent as any}
                 >
                   <Tooltip
                     content={({ payload }: any) => {
@@ -567,21 +621,13 @@ export default function CustosPage() {
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Atualizar Dados de Custos</DialogTitle>
+            <DialogTitle>Atualizar Dados de Despesas</DialogTitle>
             <DialogDescription>
-              Selecione os arquivos Excel recebidos do financeiro.
+              Selecione o arquivo Excel de despesas recebido do financeiro.
               Os dados do(s) mês(es) contido(s) no arquivo serão substituídos.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Faturamento e Custo Mensal (.xlsx)</Label>
-              <Input type="file" accept=".xlsx,.xls" className="mt-1.5"
-                onChange={e => setFileFat(e.target.files?.[0] ?? null)} />
-              <p className="text-xs text-muted-foreground mt-1">
-                Colunas: Mês | Faturamento Total | Custo Total
-              </p>
-            </div>
             <div>
               <Label>Despesas — Lanchas (.xlsx)</Label>
               <Input type="file" accept=".xlsx,.xls" className="mt-1.5"
@@ -598,7 +644,7 @@ export default function CustosPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button onClick={processarArquivos} disabled={uploading || (!fileFat && !fileDesp)}>
+            <Button onClick={processarArquivos} disabled={uploading || !fileDesp}>
               {uploading ? "Processando..." : "Processar e Salvar"}
             </Button>
           </DialogFooter>
