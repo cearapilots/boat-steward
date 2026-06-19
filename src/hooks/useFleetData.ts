@@ -893,20 +893,6 @@ export function useOcorrencias() {
   });
 }
 
-export function useFaturamentoCusto() {
-  return useQuery({
-    queryKey: ["faturamento_custo"],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("faturamento_custo_mensal")
-        .select("ano_mes, faturamento, custo_total")
-        .order("ano_mes");
-      if (error) throw error;
-      return (data ?? []) as Array<{ ano_mes: string; faturamento: number; custo_total: number }>;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-}
 
 export function useDespesas() {
   return useQuery({
