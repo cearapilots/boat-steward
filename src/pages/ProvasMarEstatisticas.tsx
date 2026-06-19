@@ -415,7 +415,16 @@ export default function ProvasMarEstatisticas() {
   const [filterDescricoes, setFilterDescricoes] = useState<string[]>([...DESCRICOES_PROVA]);
   const [degradScope, setDegradScope]           = useState<DegradScope>("all");
   const [modalState, setModalState]             = useState<{ ciclo: CicloDocagem; lancha: string } | null>(null);
+  const [expandedLanchas, setExpandedLanchas]   = useState<Set<string>>(new Set());
   const didInitLanchas                          = useRef(false);
+
+  function toggleExpanded(lancha: string) {
+    setExpandedLanchas(prev => {
+      const next = new Set(prev);
+      next.has(lancha) ? next.delete(lancha) : next.add(lancha);
+      return next;
+    });
+  }
 
   function toggleLancha(nome: string) {
     setSelectedLanchas(prev =>
@@ -755,96 +764,110 @@ export default function ProvasMarEstatisticas() {
             )}
           </div>
 
-          {/* Per-lancha cycle charts */}
+          {/* Per-lancha cycle charts — accordion */}
           {selectedLanchas.map(lancha => {
             const pts = cicloPointsByLancha[lancha] ?? [];
             if (pts.length === 0) return null;
+            const isOpen = expandedLanchas.has(lancha);
             return (
               <Card key={lancha}>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: lanchaColor[lancha] }} />
-                    {lancha} — Evolução por Ciclo de Docagem
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Clique no gráfico para ver detalhes do ciclo
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {visibleLines.length === 0 ? (
-                    <p className="py-10 text-center text-sm text-muted-foreground">
-                      Nenhuma linha selecionada — escolha ao menos um estágio em "Ciclos"
-                    </p>
-                  ) : (
-                    <>
-                      {/* Chart 1 — Velocidade (nós) */}
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-2">Velocidade (nós)</p>
-                        <ResponsiveContainer width="100%" height={260}>
-                          <LineChart
-                            data={pts}
-                            margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
-                            onClick={chartData => {
-                              const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
-                              if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
-                            }}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                            <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
-                            <YAxis
-                              tick={{ fontSize: 10 }} domain={["auto", "auto"]}
-                              label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
-                            />
-                            <Tooltip content={<CicloTooltip />} />
-                            <Legend wrapperStyle={{ fontSize: 11 }} />
-                            {visibleLines.map(cfg => (
-                              <Line
-                                key={cfg.key} type="monotone" dataKey={cfg.key}
-                                stroke={cfg.color} strokeWidth={2}
-                                dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
-                                name={cfg.label} connectNulls={false}
-                              />
-                            ))}
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
+                <button
+                  className="w-full text-left"
+                  onClick={() => toggleExpanded(lancha)}
+                >
+                  <CardHeader className="hover:bg-accent/40 transition-colors rounded-t-lg">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: lanchaColor[lancha] }} />
+                      {lancha} — Evolução por Ciclo de Docagem
+                      <ChevronDown
+                        className={`h-4 w-4 ml-auto text-muted-foreground transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                      />
+                    </CardTitle>
+                    {!isOpen && (
+                      <p className="text-xs text-muted-foreground">
+                        {pts.length} ciclo{pts.length !== 1 ? "s" : ""} · clique para expandir
+                      </p>
+                    )}
+                  </CardHeader>
+                </button>
 
-                      {/* Chart 2 — RPM */}
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-2">RPM</p>
-                        <ResponsiveContainer width="100%" height={240}>
-                          <LineChart
-                            data={pts}
-                            margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
-                            onClick={chartData => {
-                              const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
-                              if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
-                            }}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                            <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
-                            <YAxis
-                              tick={{ fontSize: 10 }} domain={["auto", "auto"]}
-                              label={{ value: "RPM", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
-                            />
-                            <Tooltip content={<CicloTooltip />} />
-                            <Legend wrapperStyle={{ fontSize: 11 }} />
-                            {visibleLines.map(cfg => (
-                              <Line
-                                key={cfg.rpmKey} type="monotone" dataKey={cfg.rpmKey}
-                                stroke={cfg.color} strokeWidth={2}
-                                dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
-                                name={`${cfg.label} RPM`} connectNulls={false}
+                {isOpen && (
+                  <CardContent className="space-y-6">
+                    {visibleLines.length === 0 ? (
+                      <p className="py-10 text-center text-sm text-muted-foreground">
+                        Nenhuma linha selecionada — escolha ao menos um estágio em "Ciclos"
+                      </p>
+                    ) : (
+                      <>
+                        {/* Chart 1 — Velocidade (nós) */}
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-2">Velocidade (nós)</p>
+                          <ResponsiveContainer width="100%" height={260}>
+                            <LineChart
+                              data={pts}
+                              margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                              onClick={chartData => {
+                                const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
+                                if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
+                              }}
+                              style={{ cursor: "pointer" }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                              <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
+                              <YAxis
+                                tick={{ fontSize: 10 }} domain={["auto", "auto"]}
+                                label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
                               />
-                            ))}
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
+                              <Tooltip content={<CicloTooltip />} />
+                              <Legend wrapperStyle={{ fontSize: 11 }} />
+                              {visibleLines.map(cfg => (
+                                <Line
+                                  key={cfg.key} type="monotone" dataKey={cfg.key}
+                                  stroke={cfg.color} strokeWidth={2}
+                                  dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
+                                  name={cfg.label} connectNulls={false}
+                                />
+                              ))}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+
+                        {/* Chart 2 — RPM */}
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-2">RPM</p>
+                          <ResponsiveContainer width="100%" height={240}>
+                            <LineChart
+                              data={pts}
+                              margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                              onClick={chartData => {
+                                const payload = chartData?.activePayload?.[0]?.payload as CicloPoint | undefined;
+                                if (payload?._ciclo) setModalState({ ciclo: payload._ciclo, lancha });
+                              }}
+                              style={{ cursor: "pointer" }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                              <XAxis dataKey="cicloLabel" tick={{ fontSize: 10 }} />
+                              <YAxis
+                                tick={{ fontSize: 10 }} domain={["auto", "auto"]}
+                                label={{ value: "RPM", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
+                              />
+                              <Tooltip content={<CicloTooltip />} />
+                              <Legend wrapperStyle={{ fontSize: 11 }} />
+                              {visibleLines.map(cfg => (
+                                <Line
+                                  key={cfg.rpmKey} type="monotone" dataKey={cfg.rpmKey}
+                                  stroke={cfg.color} strokeWidth={2}
+                                  dot={{ r: 4, fill: cfg.color }} activeDot={{ r: 6 }}
+                                  name={`${cfg.label} RPM`} connectNulls={false}
+                                />
+                              ))}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                )}
               </Card>
             );
           })}
