@@ -19,6 +19,7 @@ import ProvasMarEstatisticas from "@/pages/ProvasMarEstatisticas";
 import OperacoesPage from "@/pages/OperacoesPage";
 import CustosPage from "@/pages/CustosPage";
 import CustosDetalhesPage from "@/pages/CustosDetalhesPage";
+import ManutencaoPage from "@/pages/ManutencaoPage";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,7 @@ const App = () => (
                       <Route path="/calendario" element={<CalendarPage />} />
                       <Route path="/configuracoes" element={<SettingsPage />} />
                       <Route path="/operacoes" element={<OperacoesPage />} />
+                      <Route path="/manutencao" element={<ManutencaoPage />} />
                       <Route path="/custos" element={<CustosPage />} />
                       <Route path="/custos/detalhes" element={<CustosDetalhesPage />} />
                       <Route path="/provas-mar/registrar" element={<ProvasMarRegistrar />} />
@@ -77,4 +79,3 @@ const App = () => (
 );
 
 export default App;
- 
