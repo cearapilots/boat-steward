@@ -11,7 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Pencil } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Pencil, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 50;
@@ -286,32 +288,44 @@ export default function ProvasMarHistorico() {
   const { data: provas, isLoading } = useProvasMar();
   const { data: lanchas } = useLanchas();
 
-  const [filterLancha, setFilterLancha] = useState("__all__");
-  const [filterDescricao, setFilterDescricao] = useState("__all__");
-  const [filterDe, setFilterDe] = useState("");
+  const [filterLanchas,    setFilterLanchas]    = useState<string[]>([]);
+  const [filterDescricoes, setFilterDescricoes] = useState<string[]>([]);
+  const [filterDe,  setFilterDe]  = useState("");
   const [filterAte, setFilterAte] = useState("");
   const [page, setPage] = useState(1);
   const [detalhe, setDetalhe] = useState<{ prova: ProvaMar; edit: boolean } | null>(null);
 
+  function toggleLancha(nome: string) {
+    setFilterLanchas(p => p.includes(nome) ? p.filter(x => x !== nome) : [...p, nome]);
+  }
+  function toggleDescricao(d: string) {
+    setFilterDescricoes(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
+  }
+
+  const lanchasLabel    = filterLanchas.length    === 0 ? "Todas"   : filterLanchas.join(", ");
+  const descricaoLabel  = filterDescricoes.length === 0 ? "Todas"
+    : filterDescricoes.length === 1 ? filterDescricoes[0]
+    : `${filterDescricoes.length} tipos`;
+
   const filtered = useMemo(() => {
     return (provas ?? []).filter((p) => {
-      if (filterLancha !== "__all__" && p.lanchas?.nome !== filterLancha) return false;
-      if (filterDescricao !== "__all__" && p.descricao !== filterDescricao) return false;
-      if (filterDe && p.data < filterDe) return false;
+      if (filterLanchas.length    > 0 && !filterLanchas.includes(p.lanchas?.nome ?? ""))  return false;
+      if (filterDescricoes.length > 0 && !filterDescricoes.includes(p.descricao))         return false;
+      if (filterDe  && p.data < filterDe)  return false;
       if (filterAte && p.data > filterAte) return false;
       return true;
     });
-  }, [provas, filterLancha, filterDescricao, filterDe, filterAte]);
+  }, [provas, filterLanchas, filterDescricoes, filterDe, filterAte]);
 
-  useEffect(() => { setPage(1); }, [filterLancha, filterDescricao, filterDe, filterAte]);
+  useEffect(() => { setPage(1); }, [filterLanchas, filterDescricoes, filterDe, filterAte]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const hasFilters = filterLancha !== "__all__" || filterDescricao !== "__all__" || filterDe !== "" || filterAte !== "";
+  const hasFilters = filterLanchas.length > 0 || filterDescricoes.length > 0 || filterDe !== "" || filterAte !== "";
 
   function clearFilters() {
-    setFilterLancha("__all__");
-    setFilterDescricao("__all__");
+    setFilterLanchas([]);
+    setFilterDescricoes([]);
     setFilterDe("");
     setFilterAte("");
   }
@@ -326,55 +340,62 @@ export default function ProvasMarHistorico() {
       {/* Filtros */}
       <Card>
         <CardContent className="pt-4 pb-4">
-          <div className="flex flex-wrap gap-3 items-end">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Lancha</span>
-              <Select value={filterLancha} onValueChange={setFilterLancha}>
-                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Todas</SelectItem>
+          <div className="flex flex-wrap gap-3 items-center">
+
+            {/* Lancha — multi-select */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[140px]">
+                  <span className="font-medium">Lancha</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{lanchasLabel}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-2" align="start">
+                <div className="space-y-1">
                   {(lanchas ?? []).map((l: any) => (
-                    <SelectItem key={l.id} value={l.nome}>{l.nome}</SelectItem>
+                    <label key={l.id} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                      <Checkbox checked={filterLanchas.includes(l.nome)} onCheckedChange={() => toggleLancha(l.nome)} />
+                      <span className="text-sm">{l.nome}</span>
+                    </label>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
+                </div>
+              </PopoverContent>
+            </Popover>
 
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Descrição</span>
-              <Select value={filterDescricao} onValueChange={setFilterDescricao}>
-                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Todas</SelectItem>
+            {/* Descrição — multi-select */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[160px]">
+                  <span className="font-medium">Descrição</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{descricaoLabel}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-2" align="start">
+                <div className="space-y-1">
                   {DESCRICOES_PROVA.map((d) => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                    <label key={d} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                      <Checkbox checked={filterDescricoes.includes(d)} onCheckedChange={() => toggleDescricao(d)} />
+                      <span className="text-sm">{d}</span>
+                    </label>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
+                </div>
+              </PopoverContent>
+            </Popover>
 
-            <div className="flex flex-col gap-1">
+            {/* Datas */}
+            <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">De</span>
-              <input
-                type="date"
-                value={filterDe}
-                onChange={(e) => setFilterDe(e.target.value)}
-                className={inputClass}
-              />
+              <input type="date" value={filterDe} onChange={(e) => setFilterDe(e.target.value)} className={inputClass} />
             </div>
-
-            <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Até</span>
-              <input
-                type="date"
-                value={filterAte}
-                onChange={(e) => setFilterAte(e.target.value)}
-                className={inputClass}
-              />
+              <input type="date" value={filterAte} onChange={(e) => setFilterAte(e.target.value)} className={inputClass} />
             </div>
 
             {hasFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="self-end">
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
                 Limpar filtros
               </Button>
             )}
