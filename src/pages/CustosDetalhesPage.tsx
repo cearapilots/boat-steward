@@ -8,9 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
@@ -20,7 +17,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, ChevronLeft, ChevronRight } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Pencil, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 50;
@@ -98,40 +97,50 @@ export default function CustosDetalhesPage() {
   }
 
   // ── Filtros ───────────────────────────────────────────────────────────────
-  const [search,       setSearch]       = useState("");
-  const [filterAno,    setFilterAno]    = useState("Todos");
-  const [filterCentro, setFilterCentro] = useState("Todos");
-  const [filterTipo,   setFilterTipo]   = useState("Todos");
+  const [search,        setSearch]        = useState("");
+  const [filterAnos,    setFilterAnos]    = useState<string[]>([]);
+  const [filterCentros, setFilterCentros] = useState<string[]>([]);
+  const [filterTipos,   setFilterTipos]   = useState<string[]>([]);
   const [page, setPage] = useState(0);
 
   const anos = useMemo(() => {
     const s = new Set<string>();
     for (const d of despesas ?? []) if (d.ano_mes) s.add(d.ano_mes.slice(0, 4));
-    return ["Todos", ...[...s].sort().reverse()];
+    return [...s].sort().reverse();
   }, [despesas]);
 
   const centros = useMemo(() => {
     const s = new Set<string>();
     for (const d of despesas ?? []) if (d.centro_resultado) s.add(d.centro_resultado);
-    return ["Todos", ...[...s].sort()];
+    return [...s].sort();
   }, [despesas]);
 
   const tipos = useMemo(() => {
     const s = new Set<string>();
     for (const d of despesas ?? []) if (d.tipo_despesa) s.add(d.tipo_despesa);
-    return ["Todos", ...[...s].sort()];
+    return [...s].sort();
   }, [despesas]);
+
+  function toggleAno(a: string)    { setFilterAnos(p    => p.includes(a) ? p.filter(x => x !== a) : [...p, a]);    setPage(0); }
+  function toggleCentro(c: string) { setFilterCentros(p => p.includes(c) ? p.filter(x => x !== c) : [...p, c]); setPage(0); }
+  function toggleTipo(t: string)   { setFilterTipos(p   => p.includes(t) ? p.filter(x => x !== t) : [...p, t]);   setPage(0); }
+
+  const anosLabel    = filterAnos.length    === 0 ? "Todos"   : filterAnos.length    <= 2 ? filterAnos.join(", ")    : `${filterAnos.length} anos`;
+  const centrosLabel = filterCentros.length === 0 ? "Todos"   : filterCentros.length === 1 ? filterCentros[0]        : `${filterCentros.length} centros`;
+  const tiposLabel   = filterTipos.length   === 0 ? "Todos"   : filterTipos.length   === 1
+    ? (filterTipos[0].length > 22 ? filterTipos[0].slice(0, 21) + "…" : filterTipos[0])
+    : `${filterTipos.length} tipos`;
 
   const filteredDespesas = useMemo(() => {
     const q = search.toLowerCase();
     return (despesas ?? []).filter(d => {
-      if (filterAno    !== "Todos" && !d.ano_mes?.startsWith(filterAno))       return false;
-      if (filterCentro !== "Todos" && d.centro_resultado !== filterCentro)      return false;
-      if (filterTipo   !== "Todos" && d.tipo_despesa     !== filterTipo)        return false;
-      if (q && !`${d.fornecedor} ${d.historico}`.toLowerCase().includes(q))    return false;
+      if (filterAnos.length    > 0 && !filterAnos.includes(d.ano_mes?.slice(0, 4) ?? ""))  return false;
+      if (filterCentros.length > 0 && !filterCentros.includes(d.centro_resultado))          return false;
+      if (filterTipos.length   > 0 && !filterTipos.includes(d.tipo_despesa))                return false;
+      if (q && !`${d.fornecedor} ${d.historico}`.toLowerCase().includes(q))                 return false;
       return true;
     });
-  }, [despesas, filterAno, filterCentro, filterTipo, search]);
+  }, [despesas, filterAnos, filterCentros, filterTipos, search]);
 
   const totalPages = Math.ceil(filteredDespesas.length / PAGE_SIZE);
   const pageDespesas = filteredDespesas.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -154,27 +163,69 @@ export default function CustosDetalhesPage() {
           onChange={e => { setSearch(e.target.value); resetPage(); }}
           className="h-9 w-64"
         />
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Ano</span>
-          <Select value={filterAno} onValueChange={v => { setFilterAno(v); resetPage(); }}>
-            <SelectTrigger className="h-9 w-28 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>{anos.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Centro</span>
-          <Select value={filterCentro} onValueChange={v => { setFilterCentro(v); resetPage(); }}>
-            <SelectTrigger className="h-9 w-48 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>{centros.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Tipo</span>
-          <Select value={filterTipo} onValueChange={v => { setFilterTipo(v); resetPage(); }}>
-            <SelectTrigger className="h-9 w-56 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>{tipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
+
+        {/* Ano */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[120px]">
+              <span className="font-medium">Ano</span>
+              <span className="text-muted-foreground text-xs flex-1 text-right truncate">{anosLabel}</span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-36 p-2" align="start">
+            <div className="space-y-1">
+              {anos.map(a => (
+                <label key={a} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                  <Checkbox checked={filterAnos.includes(a)} onCheckedChange={() => toggleAno(a)} />
+                  <span className="text-sm font-mono">{a}</span>
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Centro */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[140px]">
+              <span className="font-medium">Centro</span>
+              <span className="text-muted-foreground text-xs flex-1 text-right truncate">{centrosLabel}</span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-2" align="start">
+            <div className="space-y-1 max-h-52 overflow-y-auto">
+              {centros.map(c => (
+                <label key={c} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                  <Checkbox checked={filterCentros.includes(c)} onCheckedChange={() => toggleCentro(c)} />
+                  <span className="text-sm">{c}</span>
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Tipo de Despesa */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[160px]">
+              <span className="font-medium">Tipo</span>
+              <span className="text-muted-foreground text-xs flex-1 text-right truncate">{tiposLabel}</span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-2" align="start">
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {tipos.map(t => (
+                <label key={t} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                  <Checkbox checked={filterTipos.includes(t)} onCheckedChange={() => toggleTipo(t)} />
+                  <span className="text-sm">{t}</span>
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Tabela */}
