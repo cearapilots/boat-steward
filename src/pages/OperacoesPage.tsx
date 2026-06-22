@@ -75,6 +75,10 @@ function isInoperante(efeito: string | null | undefined): boolean {
   return (efeito ?? "").trim() === "Inoperante";
 }
 
+function isCorretiva(tipo: string | null | undefined): boolean {
+  return (tipo ?? "").toLowerCase().includes("corretiva");
+}
+
 function mergeIntervals(intervals: { s: number; e: number }[]): { s: number; e: number }[] {
   if (!intervals.length) return [];
   const sorted = [...intervals].sort((a, b) => a.s - b.s);
@@ -114,6 +118,37 @@ function calcDowntimeHours(
     return { s: Math.max(s, ps), e: Math.min(endMs, pe) };
   })
   .filter(i => i.s < i.e)  // ← já existe, filtra os { s:0, e:0 } também
+  return mergeIntervals(intervals).reduce((sum, i) => sum + (i.e - i.s) / 3_600_000, 0);
+}
+
+function calcDowntimeHoursCorretiva(
+  ocorrencias: any[],
+  cdLancha: number,
+  periodStart: Date,
+  periodEnd: Date,
+): number {
+  const ps = periodStart.getTime();
+  const pe = periodEnd.getTime();
+  const intervals = (ocorrencias ?? [])
+    .filter(o =>
+      Number(o.cd_lancha) === cdLancha &&
+      isInoperante(o.efeito) &&
+      isCorretiva(o.tipo_ocorrencia) &&
+      o.data_inicio,
+    )
+    .map(o => {
+      const s = new Date(o.data_inicio).getTime();
+      let endMs: number;
+      if (o.data_fim) {
+        endMs = new Date(o.data_fim).getTime();
+      } else if (o.duracao_horas != null && Number(o.duracao_horas) > 0) {
+        endMs = s + Number(o.duracao_horas) * 3_600_000;
+      } else {
+        return { s: 0, e: 0 };
+      }
+      return { s: Math.max(s, ps), e: Math.min(endMs, pe) };
+    })
+    .filter(i => i.s < i.e);
   return mergeIntervals(intervals).reduce((sum, i) => sum + (i.e - i.s) / 3_600_000, 0);
 }
 
@@ -297,6 +332,44 @@ export default function OperacoesPage() {
       const pt: Record<string, any> = { mes: fmtMonth(month) };
       for (const cd of selectedLanchas) {
         const downtimeH = calcDowntimeHours(ocorrencias ?? [], cd, monthStart, monthEnd);
+        const disp = Math.max(0, Math.min(100, (horasMes - downtimeH) / horasMes * 100));
+        pt[LANCHA_NOME[cd]] = Math.round(disp * 10) / 10;
+      }
+      return pt;
+    });
+  }, [ocorrencias, filterDe, filterAte, selectedLanchas]);
+
+  const disponibilidadeTecnicaPorLancha = useMemo(() => {
+    const de  = new Date((filterDe  || oneYearAgo) + "T00:00:00");
+    const ate = new Date((filterAte || todayStr)   + "T23:59:59");
+    const totalH = (ate.getTime() - de.getTime()) / 3_600_000;
+    return LANCHAS.map(l => {
+      const downtimeH = calcDowntimeHoursCorretiva(ocorrencias ?? [], l.cd, de, ate);
+      const disp = Math.max(0, Math.min(100, (totalH - downtimeH) / totalH * 100));
+      return { cd: l.cd, nome: l.nome, disp };
+    });
+  }, [ocorrencias, filterDe, filterAte]);
+
+  const disponibilidadeTecnicaMensal = useMemo(() => {
+    const de  = filterDe  || oneYearAgo;
+    const ate = filterAte || todayStr;
+    const months: string[] = [];
+    const [startY, startM] = de.slice(0, 7).split("-").map(Number);
+    const [endY,   endM  ] = ate.slice(0, 7).split("-").map(Number);
+    let y = startY, m = startM;
+    while (y < endY || (y === endY && m <= endM)) {
+      months.push(`${y}-${String(m).padStart(2, "0")}`);
+      m++;
+      if (m > 12) { m = 1; y++; }
+    }
+    return months.map(month => {
+      const [my, mm] = month.split("-").map(Number);
+      const monthStart = new Date(my, mm - 1, 1);
+      const monthEnd   = new Date(my, mm,     1);
+      const horasMes   = (monthEnd.getTime() - monthStart.getTime()) / 3_600_000;
+      const pt: Record<string, any> = { mes: fmtMonth(month) };
+      for (const cd of selectedLanchas) {
+        const downtimeH = calcDowntimeHoursCorretiva(ocorrencias ?? [], cd, monthStart, monthEnd);
         const disp = Math.max(0, Math.min(100, (horasMes - downtimeH) / horasMes * 100));
         pt[LANCHA_NOME[cd]] = Math.round(disp * 10) / 10;
       }
@@ -634,56 +707,63 @@ export default function OperacoesPage() {
         </Card>
       </div>
 
-      {/* ── SEÇÃO: Manobras resumo + Disponibilidade ───────────── */}
-      <div className="grid grid-cols-4 gap-4" style={{ minHeight: 340 }}>
+      {/* ── SEÇÃO: Disponibilidade ─────────────────────────────── */}
+      <div className="grid grid-cols-4 gap-4">
 
-        {/* Coluna esquerda (25%) — 2 cards empilhados */}
+        {/* Coluna esquerda (25%) — 2 KPI cards */}
         <div className="col-span-1 flex flex-col gap-4">
 
-          {/* Card 1: Manobras por porto (compacto) */}
+          {/* Card: Disponibilidade Técnica (corretiva apenas, target ≥95%) */}
           <Card className="flex-1">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
-                Manobras por Porto
+                Disponibilidade Técnica
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {LANCHAS.filter(l => selectedLanchas.includes(l.cd)).map(l => {
-                const man = (filteredManobras as any[]).filter(m => Number(m.cd_lancha) === l.cd);
-                const mucuripe = man.filter(m => m.ds_porto === "Mucuripe").length;
-                const pecem    = man.filter(m => (m.ds_porto ?? "").includes("Pec")).length;
-                const total    = man.length;
+            <CardContent className="space-y-4">
+              {disponibilidadeTecnicaPorLancha.map(d => {
+                const cor = d.disp >= 95 ? "#16A34A" : "#DC2626";
                 return (
-                  <div key={l.cd} className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[l.cd] }} />
-                      <span className="text-xs font-medium">{l.nome}</span>
-                      <span className="text-xs text-muted-foreground ml-auto">{total} man.</span>
+                  <div key={d.cd} className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
+                        <span className="text-xs font-medium">{d.nome}</span>
+                      </div>
+                      <span className="text-sm font-bold font-mono" style={{ color: cor }}>
+                        {d.disp.toFixed(1)}%
+                      </span>
                     </div>
-                    <div className="flex h-3 rounded-full overflow-hidden bg-muted">
-                      <div style={{ width: `${total ? (mucuripe / total) * 100 : 0}%`, backgroundColor: "#0891B2" }} />
-                      <div style={{ width: `${total ? (pecem / total) * 100 : 0}%`, backgroundColor: "#7C3AED" }} />
-                    </div>
-                    <div className="flex justify-between text-[10px] text-muted-foreground">
-                      <span>Mucuripe {total ? Math.round((mucuripe / total) * 100) : 0}%</span>
-                      <span>Pecém {total ? Math.round((pecem / total) * 100) : 0}%</span>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full transition-all"
+                        style={{ width: `${d.disp}%`, backgroundColor: cor }} />
                     </div>
                   </div>
                 );
               })}
+              {(() => {
+                const media = disponibilidadeTecnicaPorLancha.reduce((s, d) => s + d.disp, 0) / Math.max(1, disponibilidadeTecnicaPorLancha.length);
+                return (
+                  <div className="pt-2 border-t border-border flex justify-between items-center">
+                    <span className="text-[10px] text-muted-foreground">Média frota</span>
+                    <span className="text-xs font-mono font-semibold text-muted-foreground">{media.toFixed(1)}%</span>
+                  </div>
+                );
+              })()}
+              <p className="text-[10px] text-muted-foreground">Meta: ≥ 95%</p>
             </CardContent>
           </Card>
 
-          {/* Card 2: Disponibilidade das 3 lanchas */}
+          {/* Card: Disponibilidade Operacional (todos os tipos, target ≥85%) */}
           <Card className="flex-1">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
-                Disponibilidade
+                Disponibilidade Operacional
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {disponibilidadePorLancha.map(d => {
-                const cor = d.disp >= 95 ? "#16A34A" : "#DC2626";
+                const cor = d.disp >= 85 ? "#16A34A" : "#DC2626";
                 return (
                   <div key={d.cd} className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -711,82 +791,158 @@ export default function OperacoesPage() {
                   </div>
                 );
               })()}
+              <p className="text-[10px] text-muted-foreground">Meta: ≥ 85%</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Coluna direita (75%) — Série temporal disponibilidade */}
-        <Card className="col-span-3">
+        {/* Coluna direita (75%) — 2 gráficos de série temporal empilhados */}
+        <div className="col-span-3 flex flex-col gap-4">
+
+          {/* Gráfico: Disponibilidade Operacional por Período */}
+          <Card className="flex-1">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Disponibilidade Operacional por Período (%)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {disponibilidadeMensal.length === 0 ? (
+                <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={disponibilidadeMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                    <YAxis domain={[0, 100]}
+                      ticks={[0, 20, 40, 60, 80, 85, 100]}
+                      tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
+                    <ReferenceArea y1={0} y2={85} fill="#FEF3C7" fillOpacity={0.25} />
+                    <ReferenceLine y={85} stroke="#9CA3AF" strokeDasharray="3 3"
+                      label={{ value: "85%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
+                    <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {selectedLanchas.map(cd => (
+                      <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
+                        stroke={LANCHA_COR[cd]} strokeWidth={2}
+                        dot={{ r: 3 }} activeDot={{ r: 5 }}
+                        connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Gráfico: Disponibilidade Técnica por Período */}
+          <Card className="flex-1">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Disponibilidade Técnica por Período (%)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {disponibilidadeTecnicaMensal.length === 0 ? (
+                <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={disponibilidadeTecnicaMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                    <YAxis domain={[0, 100]}
+                      ticks={[0, 20, 40, 60, 80, 95, 100]}
+                      tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
+                    <ReferenceArea y1={0} y2={95} fill="#FEF3C7" fillOpacity={0.25} />
+                    <ReferenceLine y={95} stroke="#9CA3AF" strokeDasharray="3 3"
+                      label={{ value: "95%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
+                    <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {selectedLanchas.map(cd => (
+                      <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
+                        stroke={LANCHA_COR[cd]} strokeWidth={2}
+                        dot={{ r: 3 }} activeDot={{ r: 5 }}
+                        connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+      {/* ── FIM SEÇÃO Disponibilidade ─────────────────────────── */}
+
+      {/* Manobras por Porto — card compacto + gráfico de barras lado a lado */}
+      <div className="grid grid-cols-4 gap-4">
+
+        {/* Card compacto Manobras por Porto */}
+        <Card className="col-span-1">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Disponibilidade por Período (%)</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
+              Manobras por Porto
+            </CardTitle>
           </CardHeader>
+          <CardContent className="space-y-2">
+            {LANCHAS.filter(l => selectedLanchas.includes(l.cd)).map(l => {
+              const man = (filteredManobras as any[]).filter(m => Number(m.cd_lancha) === l.cd);
+              const mucuripe = man.filter(m => m.ds_porto === "Mucuripe").length;
+              const pecem    = man.filter(m => (m.ds_porto ?? "").includes("Pec")).length;
+              const total    = man.length;
+              return (
+                <div key={l.cd} className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[l.cd] }} />
+                    <span className="text-xs font-medium">{l.nome}</span>
+                    <span className="text-xs text-muted-foreground ml-auto">{total} man.</span>
+                  </div>
+                  <div className="flex h-3 rounded-full overflow-hidden bg-muted">
+                    <div style={{ width: `${total ? (mucuripe / total) * 100 : 0}%`, backgroundColor: "#0891B2" }} />
+                    <div style={{ width: `${total ? (pecem / total) * 100 : 0}%`, backgroundColor: "#7C3AED" }} />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>Mucuripe {total ? Math.round((mucuripe / total) * 100) : 0}%</span>
+                    <span>Pecém {total ? Math.round((pecem / total) * 100) : 0}%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        {/* Gráfico de barras Manobras por Porto */}
+        <Card className="col-span-3">
+          <CardHeader><CardTitle className="text-base">Manobras por Porto</CardTitle></CardHeader>
           <CardContent>
-            {disponibilidadeMensal.length === 0 ? (
-              <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
+            {manobrasPorPorto.length === 0 ? (
+              <p className="text-center text-muted-foreground py-10 text-sm">
+                Sem dados de manobras para {fmtPeriodo(filterDe, filterAte)}
+              </p>
             ) : (
-              <ResponsiveContainer width="100%" height={290}>
-                <LineChart data={disponibilidadeMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={manobrasPorPorto} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                  <YAxis domain={[0, 100]}
-                    ticks={[0, 20, 40, 60, 80, 95, 100]}
-                    tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
-                  <ReferenceArea y1={0} y2={95} fill="#FEF3C7" fillOpacity={0.25} />
-                  <ReferenceLine y={95} stroke="#9CA3AF" strokeDasharray="3 3"
-                    label={{ value: "95%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
-                  <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
+                  <XAxis dataKey="porto" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 10 }}
+                    label={{ value: "qtd", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }} />
+                  <Tooltip />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   {selectedLanchas.map(cd => (
-                    <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
-                      stroke={LANCHA_COR[cd]} strokeWidth={2}
-                      dot={{ r: 3 }} activeDot={{ r: 5 }}
-                      connectNulls />
+                    <Bar key={cd} dataKey={LANCHA_NOME[cd]} fill={LANCHA_COR[cd]}>
+                      <LabelList dataKey={LANCHA_NOME[cd]} position="inside"
+                        content={(props: any) => {
+                          const { x, y, width, height, value } = props;
+                          if (!value || Number(value) < 5) return null;
+                          return (
+                            <text x={x + width / 2} y={y + height / 2} fill="#fff"
+                              textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={600}>
+                              {value}
+                            </text>
+                          );
+                        }} />
+                    </Bar>
                   ))}
-                </LineChart>
+                </BarChart>
               </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
       </div>
-      {/* ── FIM SEÇÃO Disponibilidade ─────────────────────────── */}
-
-      {/* Gráfico 4 — Manobras por porto */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Manobras por Porto</CardTitle></CardHeader>
-        <CardContent>
-          {manobrasPorPorto.length === 0 ? (
-            <p className="text-center text-muted-foreground py-10 text-sm">
-              Sem dados de manobras para {fmtPeriodo(filterDe, filterAte)}
-            </p>
-          ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={manobrasPorPorto} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="porto" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 10 }}
-                  label={{ value: "qtd", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }} />
-                <Tooltip />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                {selectedLanchas.map(cd => (
-                  <Bar key={cd} dataKey={LANCHA_NOME[cd]} fill={LANCHA_COR[cd]}>
-                    <LabelList dataKey={LANCHA_NOME[cd]} position="inside"
-                      content={(props: any) => {
-                        const { x, y, width, height, value } = props;
-                        if (!value || Number(value) < 5) return null;
-                        return (
-                          <text x={x + width / 2} y={y + height / 2} fill="#fff"
-                            textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={600}>
-                            {value}
-                          </text>
-                        );
-                      }} />
-                  </Bar>
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Gráfico 5 — Eficiência horas/manobra */}
       <Card>
