@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle,
@@ -20,7 +22,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Treemap,
 } from "recharts";
-import { Upload } from "lucide-react";
+import { Upload, ChevronDown } from "lucide-react";
 import SankeyFluxo from "@/components/SankeyFluxo";
 
 // ── Constantes exportadas ─────────────────────────────────────────────────────
@@ -34,7 +36,7 @@ export const NORM_CENTRO: Record<string, string> = {
 
 export const LANCHAS_OPERACIONAIS = ["Flexeiras", "Fortim", "Taíba"];
 
-const ALL_CENTROS = ["Todas", "Flexeiras", "Fortim", "Taíba", "Lancha Nova", "Jeri", "Container de Apoio"];
+const ALL_CENTROS = ["Flexeiras", "Fortim", "Taíba", "Lancha Nova", "Jeri", "Container de Apoio"];
 
 const CENTRO_TO_CD: Record<string, number[]> = {
   Flexeiras: [121],
@@ -107,10 +109,11 @@ export default function CustosPage() {
   const { data: despesas } = useDespesas();
   const { data: manobras } = useManobras();
 
-  // ── Filtros sidebar ───────────────────────────────────────────────────────
-  const [filterAno,    setFilterAno]    = useState<string>("Todos");
-  const [filterLancha, setFilterLancha] = useState<string>("Todas");
-  const [filterTipo,   setFilterTipo]   = useState<string>("Todos");
+  // ── Filtros multi-select ──────────────────────────────────────────────────
+  // Arrays vazios = sem filtro (mostra tudo)
+  const [filterAnos,    setFilterAnos]    = useState<string[]>([]);
+  const [filterLanchas, setFilterLanchas] = useState<string[]>([]);
+  const [filterTipos,   setFilterTipos]   = useState<string[]>([]);
 
   // ── Cross-filters ─────────────────────────────────────────────────────────
   const [cfCentro,     setCfCentro]     = useState<string | null>(null);
@@ -128,29 +131,57 @@ export default function CustosPage() {
   const anos = useMemo(() => {
     const s = new Set<string>();
     for (const d of despesas ?? []) if (d.ano_mes) s.add(d.ano_mes.slice(0, 4));
-    return ["Todos", ...[...s].sort().reverse()];
+    return [...s].sort().reverse();
   }, [despesas]);
 
   const todosTipos = useMemo(() => {
     const s = new Set<string>();
     for (const d of despesas ?? []) if (d.tipo_despesa) s.add(d.tipo_despesa);
-    return ["Todos", ...[...s].sort()];
+    return [...s].sort();
   }, [despesas]);
 
-  // ── Helpers de filtro (inline para useMemo correto) ───────────────────────
-  // despesasFiltradas: todos os filtros aplicados (usado nos KPIs)
+  // ── Toggles multi-select ──────────────────────────────────────────────────
+  function toggleAno(ano: string) {
+    setFilterAnos(prev => prev.includes(ano) ? prev.filter(x => x !== ano) : [...prev, ano]);
+    setCfMes(null);
+  }
+
+  function toggleLancha(l: string) {
+    setFilterLanchas(prev => prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l]);
+    setCfCentro(null);
+  }
+
+  function toggleTipo(t: string) {
+    setFilterTipos(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+    setCfTipo(null);
+  }
+
+  // ── Labels dos popovers ───────────────────────────────────────────────────
+  const anosLabel = filterAnos.length === 0 ? "Todos"
+    : filterAnos.length <= 2 ? filterAnos.join(", ")
+    : `${filterAnos.length} anos`;
+
+  const lanchasLabel = filterLanchas.length === 0 ? "Todas"
+    : filterLanchas.length === 1 ? filterLanchas[0]
+    : `${filterLanchas.length} lanchas`;
+
+  const tiposLabel = filterTipos.length === 0 ? "Todos"
+    : filterTipos.length === 1 ? (filterTipos[0].length > 20 ? filterTipos[0].slice(0, 19) + "…" : filterTipos[0])
+    : `${filterTipos.length} tipos`;
+
+  // ── Helpers de filtro ─────────────────────────────────────────────────────
   const despesasFiltradas = useMemo(() => {
     return (despesas ?? []).filter(d => {
-      if (filterAno !== "Todos" && d.ano_mes.slice(0, 4) !== filterAno) return false;
-      if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
-      if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      if (filterAnos.length > 0    && !filterAnos.includes(d.ano_mes.slice(0, 4)))   return false;
+      if (filterLanchas.length > 0 && !filterLanchas.includes(d.centro_resultado))   return false;
+      if (filterTipos.length > 0   && !filterTipos.includes(d.tipo_despesa))         return false;
       if (cfCentro     && d.centro_resultado !== cfCentro) return false;
       if (cfTipo       && d.tipo_despesa     !== cfTipo)   return false;
       if (cfMes        && d.ano_mes          !== cfMes)    return false;
       if (cfFornecedor && d.fornecedor       !== cfFornecedor) return false;
       return true;
     });
-  }, [despesas, filterAno, filterLancha, filterTipo, cfCentro, cfTipo, cfMes, cfFornecedor]);
+  }, [despesas, filterAnos, filterLanchas, filterTipos, cfCentro, cfTipo, cfMes, cfFornecedor]);
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -174,9 +205,9 @@ export default function CustosPage() {
   // ── Gráfico 1: donut centro (ignora cfCentro) ─────────────────────────────
   const dadosCentro = useMemo(() => {
     const base = (despesas ?? []).filter(d => {
-      if (filterAno !== "Todos" && d.ano_mes.slice(0, 4) !== filterAno) return false;
-      if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
-      if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      if (filterAnos.length > 0    && !filterAnos.includes(d.ano_mes.slice(0, 4)))   return false;
+      if (filterLanchas.length > 0 && !filterLanchas.includes(d.centro_resultado))   return false;
+      if (filterTipos.length > 0   && !filterTipos.includes(d.tipo_despesa))         return false;
       if (cfTipo       && d.tipo_despesa !== cfTipo)       return false;
       if (cfMes        && d.ano_mes      !== cfMes)        return false;
       if (cfFornecedor && d.fornecedor   !== cfFornecedor) return false;
@@ -191,14 +222,14 @@ export default function CustosPage() {
       .filter(([, v]) => v > 0)
       .sort((a, b) => b[1] - a[1])
       .map(([nome, valor]) => ({ nome, valor }));
-  }, [despesas, filterAno, filterLancha, filterTipo, cfTipo, cfMes, cfFornecedor]);
+  }, [despesas, filterAnos, filterLanchas, filterTipos, cfTipo, cfMes, cfFornecedor]);
 
   // ── Gráfico 2: barras mensais + custo/manobra (ignora cfMes) ─────────────
   const dadosMensal = useMemo(() => {
     const base = (despesas ?? []).filter(d => {
-      if (filterAno !== "Todos" && d.ano_mes.slice(0, 4) !== filterAno) return false;
-      if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
-      if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      if (filterAnos.length > 0    && !filterAnos.includes(d.ano_mes.slice(0, 4)))   return false;
+      if (filterLanchas.length > 0 && !filterLanchas.includes(d.centro_resultado))   return false;
+      if (filterTipos.length > 0   && !filterTipos.includes(d.tipo_despesa))         return false;
       if (cfCentro     && d.centro_resultado !== cfCentro) return false;
       if (cfTipo       && d.tipo_despesa     !== cfTipo)   return false;
       if (cfFornecedor && d.fornecedor       !== cfFornecedor) return false;
@@ -209,14 +240,12 @@ export default function CustosPage() {
       if (d.ano_mes) custoMap.set(d.ano_mes, (custoMap.get(d.ano_mes) ?? 0) + (Number(d.valor) || 0));
     }
     const manobraMap = new Map<string, number>();
+    const cdsFiltro = filterLanchas.flatMap(l => CENTRO_TO_CD[l] ?? []);
     for (const m of (manobras ?? []) as any[]) {
       const mes = (m.dh_manobra ?? "").slice(0, 7);
       if (!mes) continue;
-      if (filterAno !== "Todos" && mes.slice(0, 4) !== filterAno) continue;
-      if (filterLancha !== "Todas") {
-        const cds = CENTRO_TO_CD[filterLancha];
-        if (cds && !cds.includes(Number(m.cd_lancha))) continue;
-      }
+      if (filterAnos.length > 0 && !filterAnos.includes(mes.slice(0, 4))) continue;
+      if (cdsFiltro.length > 0 && !cdsFiltro.includes(Number(m.cd_lancha))) continue;
       manobraMap.set(mes, (manobraMap.get(mes) ?? 0) + 1);
     }
     return [...custoMap.keys()].sort().map(mes => ({
@@ -227,14 +256,14 @@ export default function CustosPage() {
         ? Math.round((custoMap.get(mes) ?? 0) / manobraMap.get(mes)!)
         : null,
     }));
-  }, [despesas, manobras, filterAno, filterLancha, filterTipo, cfCentro, cfTipo, cfFornecedor]);
+  }, [despesas, manobras, filterAnos, filterLanchas, filterTipos, cfCentro, cfTipo, cfFornecedor]);
 
   // ── Gráfico 3: donut tipo (ignora cfTipo) ─────────────────────────────────
   const dadosTipo = useMemo(() => {
     const base = (despesas ?? []).filter(d => {
-      if (filterAno !== "Todos" && d.ano_mes.slice(0, 4) !== filterAno) return false;
-      if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
-      if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      if (filterAnos.length > 0    && !filterAnos.includes(d.ano_mes.slice(0, 4)))   return false;
+      if (filterLanchas.length > 0 && !filterLanchas.includes(d.centro_resultado))   return false;
+      if (filterTipos.length > 0   && !filterTipos.includes(d.tipo_despesa))         return false;
       if (cfCentro     && d.centro_resultado !== cfCentro) return false;
       if (cfMes        && d.ano_mes          !== cfMes)    return false;
       if (cfFornecedor && d.fornecedor       !== cfFornecedor) return false;
@@ -248,14 +277,14 @@ export default function CustosPage() {
     return GRUPOS_TIPO
       .map(g => ({ nome: g, valor: map.get(g) ?? 0, fill: GRUPO_TIPO_COR[g] }))
       .filter(d => d.valor > 0);
-  }, [despesas, filterAno, filterLancha, filterTipo, cfCentro, cfMes, cfFornecedor]);
+  }, [despesas, filterAnos, filterLanchas, filterTipos, cfCentro, cfMes, cfFornecedor]);
 
   // ── Gráfico 4: treemap fornecedor (ignora cfFornecedor) ───────────────────
   const dadosFornecedor = useMemo(() => {
     const base = (despesas ?? []).filter(d => {
-      if (filterAno !== "Todos" && d.ano_mes.slice(0, 4) !== filterAno) return false;
-      if (filterLancha !== "Todas" && d.centro_resultado !== filterLancha) return false;
-      if (filterTipo !== "Todos" && d.tipo_despesa !== filterTipo) return false;
+      if (filterAnos.length > 0    && !filterAnos.includes(d.ano_mes.slice(0, 4)))   return false;
+      if (filterLanchas.length > 0 && !filterLanchas.includes(d.centro_resultado))   return false;
+      if (filterTipos.length > 0   && !filterTipos.includes(d.tipo_despesa))         return false;
       if (cfCentro && d.centro_resultado !== cfCentro) return false;
       if (cfTipo   && d.tipo_despesa     !== cfTipo)   return false;
       if (cfMes    && d.ano_mes          !== cfMes)    return false;
@@ -274,7 +303,7 @@ export default function CustosPage() {
         size,
         shortName: name.length > 25 ? name.slice(0, 24) + "…" : name,
       }));
-  }, [despesas, filterAno, filterLancha, filterTipo, cfCentro, cfTipo, cfMes]);
+  }, [despesas, filterAnos, filterLanchas, filterTipos, cfCentro, cfTipo, cfMes]);
 
   // ── Upload ────────────────────────────────────────────────────────────────
   async function processarArquivos() {
@@ -370,37 +399,77 @@ export default function CustosPage() {
         </Button>
       </div>
 
-      {/* Filtros sidebar */}
+      {/* Filtros */}
       <Card>
         <CardContent className="pt-4 pb-4 space-y-3">
           <div className="flex flex-wrap gap-3 items-center">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">Tipo de Despesa</span>
-              <Select value={filterTipo} onValueChange={v => { setFilterTipo(v); setCfTipo(null); }}>
-                <SelectTrigger className="h-9 w-56 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {todosTipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">Lancha</span>
-              <Select value={filterLancha} onValueChange={v => { setFilterLancha(v); setCfCentro(null); }}>
-                <SelectTrigger className="h-9 w-44 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ALL_CENTROS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">Ano</span>
-              <Select value={filterAno} onValueChange={v => { setFilterAno(v); setCfMes(null); }}>
-                <SelectTrigger className="h-9 w-28 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {anos.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+
+            {/* Anos — multi-select */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[130px]">
+                  <span className="font-medium">Ano</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{anosLabel}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-40 p-2" align="start">
+                <div className="space-y-1">
+                  {anos.map(ano => (
+                    <label key={ano} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                      <Checkbox checked={filterAnos.includes(ano)} onCheckedChange={() => toggleAno(ano)} />
+                      <span className="text-sm font-mono">{ano}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Lanchas — multi-select */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[150px]">
+                  <span className="font-medium">Lancha</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{lanchasLabel}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-2" align="start">
+                <div className="space-y-1">
+                  {ALL_CENTROS.map(c => (
+                    <label key={c} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                      <Checkbox checked={filterLanchas.includes(c)} onCheckedChange={() => toggleLancha(c)} />
+                      {COR_CENTRO[c] && (
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COR_CENTRO[c] }} />
+                      )}
+                      <span className="text-sm">{c}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Tipo de Despesa — multi-select */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[180px]">
+                  <span className="font-medium">Tipo de Despesa</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{tiposLabel}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-2" align="start">
+                <div className="space-y-1 max-h-60 overflow-y-auto">
+                  {todosTipos.map(t => (
+                    <label key={t} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                      <Checkbox checked={filterTipos.includes(t)} onCheckedChange={() => toggleTipo(t)} />
+                      <span className="text-sm">{t}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
           </div>
 
           {hasCf && (
