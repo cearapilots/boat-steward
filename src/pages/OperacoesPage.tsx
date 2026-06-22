@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Info } from "lucide-react";
+import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AreaChart, Area,
   BarChart, Bar,
@@ -708,164 +709,177 @@ export default function OperacoesPage() {
       </div>
 
       {/* ── SEÇÃO: Disponibilidade ─────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-4">
+      <TooltipProvider>
+        <div className="space-y-4">
 
-        {/* Coluna esquerda (25%) — 2 KPI cards */}
-        <div className="col-span-1 flex flex-col gap-4">
-
-          {/* Card: Disponibilidade Técnica (corretiva apenas, target ≥95%) */}
-          <Card className="flex-1">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
-                Disponibilidade Técnica
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {disponibilidadeTecnicaPorLancha.map(d => {
-                const cor = d.disp >= 95 ? "#16A34A" : "#DC2626";
-                return (
-                  <div key={d.cd} className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
-                        <span className="text-xs font-medium">{d.nome}</span>
+          {/* Linha 1: Disponibilidade Técnica KPI + gráfico */}
+          <div className="grid grid-cols-4 gap-4">
+            <Card className="col-span-1">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  Disponibilidade Técnica
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[220px] text-xs">
+                      Considera apenas as horas de inoperância causadas por manutenção <strong>corretiva</strong> (falhas não programadas). Meta ≥ 95%.
+                    </TooltipContent>
+                  </UITooltip>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {disponibilidadeTecnicaPorLancha.map(d => {
+                  const cor = d.disp >= 95 ? "#16A34A" : "#DC2626";
+                  return (
+                    <div key={d.cd} className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
+                          <span className="text-xs font-medium">{d.nome}</span>
+                        </div>
+                        <span className="text-sm font-bold font-mono" style={{ color: cor }}>
+                          {d.disp.toFixed(1)}%
+                        </span>
                       </div>
-                      <span className="text-sm font-bold font-mono" style={{ color: cor }}>
-                        {d.disp.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full rounded-full transition-all"
-                        style={{ width: `${d.disp}%`, backgroundColor: cor }} />
-                    </div>
-                  </div>
-                );
-              })}
-              {(() => {
-                const media = disponibilidadeTecnicaPorLancha.reduce((s, d) => s + d.disp, 0) / Math.max(1, disponibilidadeTecnicaPorLancha.length);
-                return (
-                  <div className="pt-2 border-t border-border flex justify-between items-center">
-                    <span className="text-[10px] text-muted-foreground">Média frota</span>
-                    <span className="text-xs font-mono font-semibold text-muted-foreground">{media.toFixed(1)}%</span>
-                  </div>
-                );
-              })()}
-              <p className="text-[10px] text-muted-foreground">Meta: ≥ 95%</p>
-            </CardContent>
-          </Card>
-
-          {/* Card: Disponibilidade Operacional (todos os tipos, target ≥85%) */}
-          <Card className="flex-1">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
-                Disponibilidade Operacional
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {disponibilidadePorLancha.map(d => {
-                const cor = d.disp >= 85 ? "#16A34A" : "#DC2626";
-                return (
-                  <div key={d.cd} className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
-                        <span className="text-xs font-medium">{d.nome}</span>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full transition-all"
+                          style={{ width: `${d.disp}%`, backgroundColor: cor }} />
                       </div>
-                      <span className="text-sm font-bold font-mono" style={{ color: cor }}>
-                        {d.disp.toFixed(1)}%
-                      </span>
                     </div>
-                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full rounded-full transition-all"
-                        style={{ width: `${d.disp}%`, backgroundColor: cor }} />
+                  );
+                })}
+                {(() => {
+                  const media = disponibilidadeTecnicaPorLancha.reduce((s, d) => s + d.disp, 0) / Math.max(1, disponibilidadeTecnicaPorLancha.length);
+                  return (
+                    <div className="pt-2 border-t border-border flex justify-between items-center">
+                      <span className="text-[10px] text-muted-foreground">Média frota</span>
+                      <span className="text-xs font-mono font-semibold text-muted-foreground">{media.toFixed(1)}%</span>
                     </div>
-                  </div>
-                );
-              })}
-              {(() => {
-                const media = disponibilidadePorLancha.reduce((s, d) => s + d.disp, 0) / Math.max(1, disponibilidadePorLancha.length);
-                return (
-                  <div className="pt-2 border-t border-border flex justify-between items-center">
-                    <span className="text-[10px] text-muted-foreground">Média frota</span>
-                    <span className="text-xs font-mono font-semibold text-muted-foreground">{media.toFixed(1)}%</span>
-                  </div>
-                );
-              })()}
-              <p className="text-[10px] text-muted-foreground">Meta: ≥ 85%</p>
-            </CardContent>
-          </Card>
+                  );
+                })()}
+                <p className="text-[10px] text-muted-foreground">Meta: ≥ 95%</p>
+              </CardContent>
+            </Card>
+
+            <Card className="col-span-3">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Disponibilidade Técnica por Período (%)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {disponibilidadeTecnicaMensal.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={disponibilidadeTecnicaMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                      <YAxis domain={[0, 100]}
+                        ticks={[0, 20, 40, 60, 80, 95, 100]}
+                        tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
+                      <ReferenceArea y1={0} y2={95} fill="#FEF3C7" fillOpacity={0.25} />
+                      <ReferenceLine y={95} stroke="#9CA3AF" strokeDasharray="3 3"
+                        label={{ value: "95%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
+                      <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      {selectedLanchas.map(cd => (
+                        <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
+                          stroke={LANCHA_COR[cd]} strokeWidth={2}
+                          dot={{ r: 3 }} activeDot={{ r: 5 }}
+                          connectNulls />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Linha 2: Disponibilidade Operacional KPI + gráfico */}
+          <div className="grid grid-cols-4 gap-4">
+            <Card className="col-span-1">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  Disponibilidade Operacional
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[220px] text-xs">
+                      Considera todas as horas de inoperância, independentemente do tipo de manutenção (corretiva, preventiva ou outros). Meta ≥ 85%.
+                    </TooltipContent>
+                  </UITooltip>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {disponibilidadePorLancha.map(d => {
+                  const cor = d.disp >= 85 ? "#16A34A" : "#DC2626";
+                  return (
+                    <div key={d.cd} className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
+                          <span className="text-xs font-medium">{d.nome}</span>
+                        </div>
+                        <span className="text-sm font-bold font-mono" style={{ color: cor }}>
+                          {d.disp.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full transition-all"
+                          style={{ width: `${d.disp}%`, backgroundColor: cor }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {(() => {
+                  const media = disponibilidadePorLancha.reduce((s, d) => s + d.disp, 0) / Math.max(1, disponibilidadePorLancha.length);
+                  return (
+                    <div className="pt-2 border-t border-border flex justify-between items-center">
+                      <span className="text-[10px] text-muted-foreground">Média frota</span>
+                      <span className="text-xs font-mono font-semibold text-muted-foreground">{media.toFixed(1)}%</span>
+                    </div>
+                  );
+                })()}
+                <p className="text-[10px] text-muted-foreground">Meta: ≥ 85%</p>
+              </CardContent>
+            </Card>
+
+            <Card className="col-span-3">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Disponibilidade Operacional por Período (%)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {disponibilidadeMensal.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={disponibilidadeMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                      <YAxis domain={[0, 100]}
+                        ticks={[0, 20, 40, 60, 80, 85, 100]}
+                        tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
+                      <ReferenceArea y1={0} y2={85} fill="#FEF3C7" fillOpacity={0.25} />
+                      <ReferenceLine y={85} stroke="#9CA3AF" strokeDasharray="3 3"
+                        label={{ value: "85%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
+                      <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      {selectedLanchas.map(cd => (
+                        <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
+                          stroke={LANCHA_COR[cd]} strokeWidth={2}
+                          dot={{ r: 3 }} activeDot={{ r: 5 }}
+                          connectNulls />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
         </div>
-
-        {/* Coluna direita (75%) — 2 gráficos de série temporal empilhados */}
-        <div className="col-span-3 flex flex-col gap-4">
-
-          {/* Gráfico: Disponibilidade Operacional por Período */}
-          <Card className="flex-1">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Disponibilidade Operacional por Período (%)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {disponibilidadeMensal.length === 0 ? (
-                <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={disponibilidadeMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                    <YAxis domain={[0, 100]}
-                      ticks={[0, 20, 40, 60, 80, 85, 100]}
-                      tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
-                    <ReferenceArea y1={0} y2={85} fill="#FEF3C7" fillOpacity={0.25} />
-                    <ReferenceLine y={85} stroke="#9CA3AF" strokeDasharray="3 3"
-                      label={{ value: "85%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
-                    <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {selectedLanchas.map(cd => (
-                      <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
-                        stroke={LANCHA_COR[cd]} strokeWidth={2}
-                        dot={{ r: 3 }} activeDot={{ r: 5 }}
-                        connectNulls />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Gráfico: Disponibilidade Técnica por Período */}
-          <Card className="flex-1">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Disponibilidade Técnica por Período (%)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {disponibilidadeTecnicaMensal.length === 0 ? (
-                <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={disponibilidadeTecnicaMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                    <YAxis domain={[0, 100]}
-                      ticks={[0, 20, 40, 60, 80, 95, 100]}
-                      tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
-                    <ReferenceArea y1={0} y2={95} fill="#FEF3C7" fillOpacity={0.25} />
-                    <ReferenceLine y={95} stroke="#9CA3AF" strokeDasharray="3 3"
-                      label={{ value: "95%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
-                    <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {selectedLanchas.map(cd => (
-                      <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
-                        stroke={LANCHA_COR[cd]} strokeWidth={2}
-                        dot={{ r: 3 }} activeDot={{ r: 5 }}
-                        connectNulls />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      </TooltipProvider>
       {/* ── FIM SEÇÃO Disponibilidade ─────────────────────────── */}
 
       {/* Manobras por Porto — card compacto + gráfico de barras lado a lado */}
