@@ -4,9 +4,6 @@ import {
   useManutencoesPeriodicas, useManutencoesTipos,
 } from "@/hooks/useFleetData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown } from "lucide-react";
@@ -104,13 +101,12 @@ export default function ManutencaoPage() {
   const { data: periodicas }   = useManutencoesPeriodicas();
   const { data: manutTipos }   = useManutencoesTipos();
 
-  const [filterDe,   setFilterDe]   = useState(oneYearAgo);
-  const [filterAte,  setFilterAte]  = useState(todayStr);
-  const [selLanchas, setSelLanchas] = useState<number[]>([121, 1003, 117]);
-  const [selClasses, setSelClasses] = useState<string[]>(["corretiva", "preventiva", "outros"]);
-  const [selFaina,   setSelFaina]   = useState<string>("Todas");
-  // Efeito opcional — padrão "Todos" para não perder dados de 'outros'
-  const [filterEfeito, setFilterEfeito] = useState<string>("Todos");
+  const [filterDe,      setFilterDe]      = useState(oneYearAgo);
+  const [filterAte,     setFilterAte]     = useState(todayStr);
+  const [selLanchas,    setSelLanchas]    = useState<number[]>([121, 1003, 117]);
+  const [selClasses,    setSelClasses]    = useState<string[]>(["corretiva", "preventiva", "outros"]);
+  const [selFainas,     setSelFainas]     = useState<string[]>([]);  // vazio = todas
+  const [filterEfeitos, setFilterEfeitos] = useState<string[]>([]);  // vazio = todos
 
   function toggleLancha(cd: number) {
     setSelLanchas(prev =>
@@ -124,12 +120,27 @@ export default function ManutencaoPage() {
     );
   }
 
+  function toggleFaina(f: string) {
+    setSelFainas(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+  }
+
+  function toggleEfeito(e: string) {
+    setFilterEfeitos(prev => prev.includes(e) ? prev.filter(x => x !== e) : [...prev, e]);
+  }
+
   const lanchasLabel = selLanchas.length === LANCHAS.length ? "Todas"
-    : selLanchas.length === 0 ? "Nenhuma"
     : selLanchas.map(cd => LANCHA_NOME[cd]).join(", ");
 
   const classesLabel = selClasses.length === 3 ? "Todas"
     : selClasses.map(c => LABEL_CLASSE[c]).join(", ");
+
+  const fainasLabel = selFainas.length === 0 ? "Todas"
+    : selFainas.length === 1 ? (selFainas[0].length > 20 ? selFainas[0].slice(0, 19) + "…" : selFainas[0])
+    : `${selFainas.length} fainas`;
+
+  const efeitosLabel = filterEfeitos.length === 0 ? "Todos"
+    : filterEfeitos.length === 1 ? filterEfeitos[0]
+    : `${filterEfeitos.length} efeitos`;
 
   // ── Fainas dinâmicas ─────────────────────────────────────────────────────
   const allFainas = useMemo(() => {
@@ -138,8 +149,10 @@ export default function ManutencaoPage() {
       const f = extractFaina(o.tipo_ocorrencia);
       if (f) s.add(f);
     }
-    return ["Todas", ...[...s].sort()];
+    return [...s].sort();
   }, [ocorrencias]);
+
+  const EFEITOS = ["Inoperante", "Operante com Restrições", "Operante", "Não Altera"];
 
   // ── Ocorrências filtradas ─────────────────────────────────────────────────
   // Sem pré-filtro de efeito para não excluir eventos classificados como 'outros'
@@ -149,11 +162,11 @@ export default function ManutencaoPage() {
       const d = (o.data_inicio ?? "").slice(0, 10);
       if (d < filterDe || d > filterAte) return false;
       if (!selClasses.includes(classifyTipo(o.tipo_ocorrencia))) return false;
-      if (selFaina !== "Todas" && extractFaina(o.tipo_ocorrencia) !== selFaina) return false;
-      if (filterEfeito !== "Todos" && o.efeito !== filterEfeito) return false;
+      if (selFainas.length > 0 && !selFainas.includes(extractFaina(o.tipo_ocorrencia))) return false;
+      if (filterEfeitos.length > 0 && !filterEfeitos.includes(o.efeito)) return false;
       return true;
     });
-  }, [ocorrencias, filterDe, filterAte, selLanchas, selClasses, selFaina, filterEfeito]);
+  }, [ocorrencias, filterDe, filterAte, selLanchas, selClasses, selFainas, filterEfeitos]);
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -412,25 +425,47 @@ export default function ManutencaoPage() {
               </PopoverContent>
             </Popover>
 
-            {/* Faina */}
-            <Select value={selFaina} onValueChange={setSelFaina}>
-              <SelectTrigger className="h-9 w-52 text-sm"><SelectValue placeholder="Faina" /></SelectTrigger>
-              <SelectContent>
-                {allFainas.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {/* Faina — multi-select */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[150px]">
+                  <span className="font-medium">Faina</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{fainasLabel}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-2" align="start">
+                <div className="space-y-1 max-h-64 overflow-y-auto">
+                  {allFainas.map(f => (
+                    <label key={f} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                      <Checkbox checked={selFainas.includes(f)} onCheckedChange={() => toggleFaina(f)} />
+                      <span className="text-sm">{f}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
-            {/* Efeito (opcional — padrão Todos para mostrar 'outros') */}
-            <Select value={filterEfeito} onValueChange={setFilterEfeito}>
-              <SelectTrigger className="h-9 w-52 text-sm"><SelectValue placeholder="Efeito" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Todos">Todos os efeitos</SelectItem>
-                <SelectItem value="Inoperante">Inoperante</SelectItem>
-                <SelectItem value="Operante com Restrições">Operante com Restrições</SelectItem>
-                <SelectItem value="Operante">Operante</SelectItem>
-                <SelectItem value="Não Altera">Não Altera</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Efeito — multi-select */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="h-9 px-3 flex items-center gap-2 rounded-md border border-input bg-background text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-[140px]">
+                  <span className="font-medium">Efeito</span>
+                  <span className="text-muted-foreground text-xs flex-1 text-right truncate">{efeitosLabel}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-60 p-2" align="start">
+                <div className="space-y-1">
+                  {EFEITOS.map(e => (
+                    <label key={e} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                      <Checkbox checked={filterEfeitos.includes(e)} onCheckedChange={() => toggleEfeito(e)} />
+                      <span className="text-sm">{e}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
           </div>
         </CardContent>
