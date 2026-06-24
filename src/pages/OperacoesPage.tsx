@@ -613,7 +613,7 @@ export default function OperacoesPage() {
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3">
-            <p className="text-xs text-muted-foreground">Faina Mais Longa</p>
+            <p className="text-xs text-muted-foreground">Deslocamento Mais Longo</p>
             <p className="text-2xl font-bold font-mono tabular-nums">
               {kpis.fainaMaisLonga != null ? `${kpis.fainaMaisLonga.toFixed(1)}h` : "—"}
             </p>
