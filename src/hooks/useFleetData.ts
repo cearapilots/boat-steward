@@ -86,7 +86,13 @@ export function useCalendarioManutencoes(ano: number) {
       if (errReg) throw errReg;
 
       const items: CalendarioManutencaoItem[] = [];
-      const ultimasPorPar = new Map<string, { data: string; periodicidade: number; lancha_id: string; lancha_nome: string; tipo_id: string; tipo_nome: string }>();
+
+      type PairRec = {
+        data: string; lancha_id: string; lancha_nome: string;
+        tipo_id: string; tipo_nome: string; periodicidade: number;
+      };
+      // Collect every completion per (lancha, tipo) pair in ascending date order
+      const pairCompletions = new Map<string, PairRec[]>();
 
       for (const r of (registros ?? []) as any[]) {
         const lancha_id = r.lancha?.id ?? r.lancha_id;
@@ -97,40 +103,54 @@ export function useCalendarioManutencoes(ano: number) {
         const dataStr: string = r.data_realizada;
 
         if (dataStr.startsWith(String(ano))) {
-          items.push({
-            lancha_id, lancha_nome, tipo_id, tipo_nome, periodicidade_dias,
-            data: dataStr, origem: "realizada",
-          });
+          items.push({ lancha_id, lancha_nome, tipo_id, tipo_nome, periodicidade_dias, data: dataStr, origem: "realizada" });
         }
 
         const key = `${lancha_id}::${tipo_id}`;
-        const prev = ultimasPorPar.get(key);
-        if (!prev || dataStr > prev.data) {
-          ultimasPorPar.set(key, { data: dataStr, periodicidade: periodicidade_dias, lancha_id, lancha_nome, tipo_id, tipo_nome });
-        }
+        if (!pairCompletions.has(key)) pairCompletions.set(key, []);
+        pairCompletions.get(key)!.push({ data: dataStr, lancha_id, lancha_nome, tipo_id, tipo_nome, periodicidade: periodicidade_dias });
       }
 
-      // Projetar próximas datas até o fim do ano alvo
-      const fimAno = new Date(ano, 11, 31);
-      for (const v of ultimasPorPar.values()) {
-        if (!v.periodicidade || v.periodicidade <= 0) continue;
-        let cur = new Date(v.data + "T00:00:00");
-        // avança até passar o início do ano alvo
-        const inicioAno = new Date(ano, 0, 1);
-        while (cur <= fimAno) {
-          cur = new Date(cur.getTime() + v.periodicidade * 24 * 60 * 60 * 1000);
-          if (cur < inicioAno) continue;
-          if (cur > fimAno) break;
-          const iso = cur.toISOString().slice(0, 10);
-          items.push({
-            lancha_id: v.lancha_id,
-            lancha_nome: v.lancha_nome,
-            tipo_id: v.tipo_id,
-            tipo_nome: v.tipo_nome,
-            periodicidade_dias: v.periodicidade,
-            data: iso,
-            origem: "prevista",
-          });
+      // Project prevista dates from EACH completion, stopping when the next actual completion
+      // is reached. This preserves the historical red-x: if maintenance was due in May but
+      // done in June, May still appears as "prevista" (atrasado) in the calendar.
+      const anoStart = `${ano}-01-01`;
+      const anoEnd   = `${ano}-12-31`;
+
+      for (const completions of pairCompletions.values()) {
+        // registros are already sorted ascending by data_realizada
+        for (let i = 0; i < completions.length; i++) {
+          const c = completions[i];
+          if (!c.periodicidade || c.periodicidade <= 0) continue;
+
+          const nextCompletionDate = completions[i + 1]?.data ?? null;
+
+          let cur = new Date(c.data + "T00:00:00");
+          while (true) {
+            cur = new Date(cur.getTime() + c.periodicidade * 24 * 60 * 60 * 1000);
+            const curStr = cur.toISOString().slice(0, 10);
+
+            // Past end of target year
+            if (curStr > anoEnd) break;
+            // Reached or passed the next actual completion — that chain handles future dates
+            if (nextCompletionDate !== null && curStr >= nextCompletionDate) break;
+
+            if (curStr >= anoStart) {
+              // Skip if a realizada already exists for this pair on the same date
+              const jaExiste = items.some(
+                x => x.lancha_id === c.lancha_id && x.tipo_id === c.tipo_id &&
+                     x.data === curStr && x.origem === "realizada",
+              );
+              if (!jaExiste) {
+                items.push({
+                  lancha_id: c.lancha_id, lancha_nome: c.lancha_nome,
+                  tipo_id: c.tipo_id, tipo_nome: c.tipo_nome,
+                  periodicidade_dias: c.periodicidade,
+                  data: curStr, origem: "prevista",
+                });
+              }
+            }
+          }
         }
       }
 
