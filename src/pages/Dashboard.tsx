@@ -14,10 +14,11 @@ import { RefreshCw, Clock, Wrench, CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-function borderForBoat(_name: string) {
-  return "border-t-primary";
-}
-
+const BORDER_BY_STATUS: Record<"ok" | "warn" | "danger", string> = {
+  danger: "border-t-red-600",
+  warn:   "border-t-amber-500",
+  ok:     "border-t-green-600",
+};
 
 function statusFromSemaforo(s: string): "ok" | "warn" | "danger" {
   if (s === "vermelho") return "danger";
@@ -140,12 +141,24 @@ export default function Dashboard() {
               return w;
             }, "ok");
 
+            const worstPeriodic = (periodicasByLancha.get(b.lanchaId) ?? []).reduce<"ok" | "warn" | "danger">((w, p) => {
+              const s = periodicStatusLevel(p.status_semaforo);
+              if (s === "danger") return "danger";
+              if (s === "warn" && w !== "danger") return "warn";
+              return w;
+            }, "ok");
+
+            const worstOverall: "ok" | "warn" | "danger" =
+              worst === "danger" || worstPeriodic === "danger" ? "danger"
+              : worst === "warn"  || worstPeriodic === "warn"  ? "warn"
+              : "ok";
+
             return (
-              <Card key={b.lanchaId} className={cn("border-t-4 shadow-sm hover:shadow-md transition-shadow", borderForBoat(b.nome))}>
+              <Card key={b.lanchaId} className={cn("border-t-4 shadow-sm hover:shadow-md transition-shadow", BORDER_BY_STATUS[worstOverall])}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{b.nome}</CardTitle>
-                    <StatusIndicator status={worst} showLabel />
+                    <StatusIndicator status={worstOverall} showLabel />
                   </div>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
