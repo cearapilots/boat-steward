@@ -132,6 +132,45 @@ export default function Motors() {
     return m;
   }, [motorPositions, lanchaById]);
 
+  const heatmapData = useMemo(() => {
+    const allTs = (motorPositions as any[])
+      .filter((p: any) => p.data_instalacao)
+      .map((p: any) => new Date(p.data_instalacao).getTime());
+    if (!allTs.length) return { months: [] as { year: number; month: number }[], rows: [] as { mId: string; name: string; cells: (any | null)[] }[] };
+
+    const startD = new Date(Math.min(...allTs));
+    startD.setDate(1); startD.setHours(0, 0, 0, 0);
+    const endD = new Date();
+    endD.setDate(1); endD.setHours(0, 0, 0, 0);
+
+    const months: { year: number; month: number }[] = [];
+    const cur = new Date(startD);
+    while (cur <= endD) {
+      months.push({ year: cur.getFullYear(), month: cur.getMonth() + 1 });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+
+    const rows = uniqueMotors.map(([mId, name]) => ({
+      mId,
+      name,
+      cells: months.map(({ year, month }) => {
+        const monthStart = new Date(year, month - 1, 1).getTime();
+        const monthEnd   = new Date(year, month, 0, 23, 59, 59, 999).getTime();
+        const candidates = (motorPositions as any[]).filter((p: any) =>
+          p.ativo_id === mId &&
+          new Date(p.data_instalacao).getTime() <= monthEnd &&
+          (p.data_remocao ? new Date(p.data_remocao).getTime() >= monthStart : true),
+        );
+        if (!candidates.length) return null;
+        return [...candidates].sort((a: any, b: any) =>
+          b.data_instalacao.localeCompare(a.data_instalacao),
+        )[0];
+      }),
+    }));
+
+    return { months, rows };
+  }, [motorPositions, uniqueMotors]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -161,6 +200,7 @@ export default function Motors() {
                       <TableHead>Motor</TableHead>
                       <TableHead>Posição</TableHead>
                       <TableHead>Lancha</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Desde</TableHead>
                       <TableHead className="text-right">
                         <Tooltip>
@@ -197,14 +237,33 @@ export default function Motors() {
                           <TableCell className="font-medium">{a.nome}</TableCell>
                           <TableCell>{p?.posicao ?? a.posicao ?? "—"}</TableCell>
                           <TableCell><span className={cn("font-medium", boatTextClass[boat])}>{boat}</span></TableCell>
+                          <TableCell>
+                            {!p ? (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            ) : isReserva(p) ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />Reserva
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />Ativo
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell>{fmtDate(p?.data_instalacao ?? null)}</TableCell>
-                          <TableCell className="text-right">{fmtH(horasDesdeOverhaul)}</TableCell>
+                          <TableCell className={cn(
+                            "text-right",
+                            situacao?.status_semaforo === "vermelho" && "text-red-600 font-semibold",
+                            situacao?.status_semaforo === "amarelo" && "text-amber-500 font-semibold",
+                          )}>
+                            {fmtH(horasDesdeOverhaul)}
+                          </TableCell>
                           <TableCell className="text-right font-mono">{fmtH(horasOperadas)}</TableCell>
                         </TableRow>
                       );
                     })}
                     {motorAtivos.length === 0 && (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Nenhum motor cadastrado</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Nenhum motor cadastrado</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -215,7 +274,7 @@ export default function Motors() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <CardTitle className="text-base">Linha do Tempo</CardTitle>
+                <CardTitle className="text-base">Heatmap de Posições por Mês</CardTitle>
                 <div className="flex gap-3 text-xs flex-wrap">
                   {TIMELINE_LEGEND.map((item) => (
                     <span key={item.label} className="flex items-center gap-1">
@@ -226,113 +285,81 @@ export default function Motors() {
               </div>
             </CardHeader>
             <CardContent>
-              {(() => {
-                const allDates: number[] = [];
-                motorPositions.forEach((p: any) => {
-                  if (p.data_instalacao) allDates.push(new Date(p.data_instalacao).getTime());
-                  if (p.data_remocao) allDates.push(new Date(p.data_remocao).getTime());
-                });
-                if (allDates.length === 0) return <p className="text-sm text-muted-foreground">Sem dados.</p>;
-                const nowTs = Date.now();
-                allDates.push(nowTs);
-                const minTs = Math.min(...allDates);
-                const maxTs = Math.max(...allDates);
-                const startD = new Date(minTs); startD.setDate(1); startD.setHours(0,0,0,0);
-                const endD = new Date(maxTs); endD.setMonth(endD.getMonth() + 1, 1); endD.setHours(0,0,0,0);
-                const startTs = startD.getTime();
-                const endTs = endD.getTime();
-                const span = endTs - startTs;
-                const pct = (ts: number) => ((ts - startTs) / span) * 100;
-
-                const ticks: { label: string; left: number }[] = [];
-                const cur = new Date(startD);
-                while (cur.getTime() <= endTs) {
-                  if (cur.getMonth() % 3 === 0) {
-                    const m = cur.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
-                    ticks.push({ label: `${m} ${cur.getFullYear()}`, left: pct(cur.getTime()) });
-                  }
-                  cur.setMonth(cur.getMonth() + 1);
-                }
-
-                const Y_LABEL_W = 96;
-                const ROW_H = 32;
-                const AXIS_H = 24;
-
-                return (
+              {heatmapData.months.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sem dados.</p>
+              ) : (
+                <TooltipProvider delayDuration={100}>
                   <div className="overflow-x-auto">
-                    <div style={{ minWidth: 900 }}>
-                      <div className="flex">
-                        <div style={{ width: Y_LABEL_W }} className="shrink-0" />
-                        <div className="relative flex-1 border-b border-border" style={{ height: AXIS_H }}>
-                          {ticks.map((t, i) => (
-                            <div
-                              key={i}
-                              className="absolute top-0 h-full text-[10px] text-muted-foreground"
-                              style={{ left: `${t.left}%`, transform: "translateX(-50%)" }}
-                            >
-                              <div className="h-2 border-l border-border mx-auto w-px" />
-                              <span className="whitespace-nowrap">{t.label}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <TooltipProvider delayDuration={150}>
-                        {uniqueMotors.map(([mId, name]) => {
-                          const segs = motorPositions
-                            .filter((p: any) => p.ativo_id === mId)
-                            .sort((a: any, b: any) => a.data_instalacao.localeCompare(b.data_instalacao));
-                          return (
-                            <div key={mId} className="flex items-center border-b border-border/40" style={{ height: ROW_H + 8 }}>
-                              <div style={{ width: Y_LABEL_W }} className="shrink-0 pr-2 text-xs font-medium truncate">
-                                {name}
+                    {(() => {
+                      const CELL = 22;
+                      const LABEL_W = 112;
+                      const { months, rows } = heatmapData;
+                      const MONTH_NAMES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+                      return (
+                        <div style={{ minWidth: LABEL_W + months.length * (CELL + 2) }}>
+                          {/* Year ticks */}
+                          <div className="flex mb-0.5" style={{ paddingLeft: LABEL_W }}>
+                            {months.map((m, i) => (
+                              <div key={i} className="flex-none" style={{ width: CELL + 2 }}>
+                                {m.month === 1 && (
+                                  <span className="text-[9px] text-muted-foreground font-semibold">{m.year}</span>
+                                )}
                               </div>
-                              <div className="relative flex-1 bg-muted/30 rounded" style={{ height: ROW_H }}>
-                                {ticks.map((t, i) => (
-                                  <div
-                                    key={i}
-                                    className="absolute top-0 bottom-0 border-l border-border/30"
-                                    style={{ left: `${t.left}%` }}
-                                  />
-                                ))}
-                                {segs.map((p: any) => {
-                                  const s = new Date(p.data_instalacao).getTime();
-                                  const e = p.data_remocao ? new Date(p.data_remocao).getTime() : nowTs;
-                                  const left = pct(s);
-                                  const width = Math.max(pct(e) - left, 0.3);
-                                  const boat = boatLabel(p);
-                                  const reserva = isReserva(p);
-                                  const dias = daysBetween(p.data_instalacao, p.data_remocao) ?? 0;
-                                  const horasFmt = Math.round(segHoras(p)).toLocaleString("pt-BR");
-                                  const bg = segmentColor(boat, p.posicao);
-                                  const fimLabel = p.data_remocao ? fmtDate(p.data_remocao) : "atual";
-                                  const tooltip = reserva
-                                    ? `Reserva: ${fmtDate(p.data_instalacao)} → ${fimLabel} — ${dias}d`
-                                    : `${boat} (${p.posicao ?? "—"}): ${fmtDate(p.data_instalacao)} → ${fimLabel} — ${horasFmt}h / ${dias}d`;
-                                  const showLabel = width > 6;
+                            ))}
+                          </div>
+                          {/* Month initials */}
+                          <div className="flex mb-2" style={{ paddingLeft: LABEL_W }}>
+                            {months.map((m, i) => (
+                              <div key={i} className="flex-none text-center text-[9px] text-muted-foreground" style={{ width: CELL + 2 }}>
+                                {"JFMAMJJASOND"[m.month - 1]}
+                              </div>
+                            ))}
+                          </div>
+                          {/* Motor rows */}
+                          {rows.map(({ mId, name, cells }) => (
+                            <div key={mId} className="flex items-center mb-1">
+                              <div className="text-xs font-medium truncate pr-2 shrink-0" style={{ width: LABEL_W }}>{name}</div>
+                              <div className="flex gap-0.5">
+                                {cells.map((pos, i) => {
+                                  const m = months[i];
+                                  if (!pos) {
+                                    return (
+                                      <div
+                                        key={i}
+                                        className="rounded-sm bg-muted/40"
+                                        style={{ width: CELL, height: CELL }}
+                                      />
+                                    );
+                                  }
+                                  const boat = boatLabel(pos);
+                                  const reserva = isReserva(pos);
+                                  const bg = segmentColor(boat, pos.posicao);
+                                  const monthLabel = `${MONTH_NAMES[m.month - 1]}/${String(m.year).slice(2)}`;
+                                  const tipLabel = reserva ? "Reserva" : `${boat} (${pos.posicao ?? "—"})`;
                                   return (
-                                    <Tooltip key={p.id}>
+                                    <Tooltip key={i}>
                                       <TooltipTrigger asChild>
                                         <div
-                                          className="absolute top-0 h-full rounded-sm flex items-center justify-center text-[10px] font-medium text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity overflow-hidden whitespace-nowrap"
-                                          style={{ left: `${left}%`, width: `${width}%`, backgroundColor: bg }}
-                                        >
-                                          {showLabel && `${dias}d`}
-                                        </div>
+                                          className="rounded-sm cursor-help hover:opacity-75 transition-opacity"
+                                          style={{ width: CELL, height: CELL, backgroundColor: bg }}
+                                        />
                                       </TooltipTrigger>
-                                      <TooltipContent>{tooltip}</TooltipContent>
+                                      <TooltipContent className="text-xs">
+                                        <p className="font-medium">{name} — {monthLabel}</p>
+                                        <p>{tipLabel}</p>
+                                      </TooltipContent>
                                     </Tooltip>
                                   );
                                 })}
                               </div>
                             </div>
-                          );
-                        })}
-                      </TooltipProvider>
-                    </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
-                );
-              })()}
+                </TooltipProvider>
+              )}
             </CardContent>
           </Card>
 
