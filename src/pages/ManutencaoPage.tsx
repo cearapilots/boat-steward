@@ -6,7 +6,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronDown } from "lucide-react";
+import { AlertTriangle, ChevronDown } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell,
@@ -107,6 +107,8 @@ export default function ManutencaoPage() {
   const [selClasses,    setSelClasses]    = useState<string[]>(["corretiva", "preventiva", "outros"]);
   const [selFainas,     setSelFainas]     = useState<string[]>([]);  // vazio = todas
   const [filterEfeitos, setFilterEfeitos] = useState<string[]>([]);  // vazio = todos
+  const [fainaSearch,   setFainaSearch]   = useState("");
+  const [complianceSort, setComplianceSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "dias", dir: "asc" });
 
   function toggleLancha(cd: number) {
     setSelLanchas(prev =>
@@ -342,6 +344,30 @@ export default function ManutencaoPage() {
     return byLancha;
   }, [periodicas, selLanchas, manutTipos]);
 
+  const complianceFlatSorted = useMemo(() => {
+    const rows: any[] = [];
+    for (const [, items] of complianceByLancha.entries()) {
+      for (const item of items) rows.push(item);
+    }
+    const statusOrder: Record<string, number> = { vencido: 0, critico: 1, atencao: 2, ok: 3, sem_registro: 4 };
+    return rows.sort((a, b) => {
+      const dir = complianceSort.dir === "asc" ? 1 : -1;
+      if (complianceSort.key === "dias") {
+        const da = a.dias_restantes ?? Infinity;
+        const db = b.dias_restantes ?? Infinity;
+        return (da - db) * dir;
+      }
+      if (complianceSort.key === "nome")   return a.tipo_nome.localeCompare(b.tipo_nome)     * dir;
+      if (complianceSort.key === "lancha") return a.lancha_nome.localeCompare(b.lancha_nome) * dir;
+      return ((statusOrder[a.status_semaforo] ?? 5) - (statusOrder[b.status_semaforo] ?? 5)) * dir;
+    });
+  }, [complianceByLancha, complianceSort]);
+
+  const vencidosCount = useMemo(
+    () => complianceFlatSorted.filter(x => x.status_semaforo === "vencido" || x.status_semaforo === "critico").length,
+    [complianceFlatSorted],
+  );
+
   function mtbfColor(mtbf: number): string {
     if (mtbf < 30) return "#DC2626";
     if (mtbf < 90) return "#F59E0B";
@@ -365,6 +391,19 @@ export default function ManutencaoPage() {
         <h1 className="text-2xl font-bold text-foreground">Manutenção</h1>
         <p className="text-sm text-accent">Análise de ocorrências e manutenções das lanchas</p>
       </div>
+
+      {/* Banner — manutenções vencidas / críticas */}
+      {vencidosCount > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 px-4 py-3 text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+          <span className="text-red-700 dark:text-red-400">
+            <strong>
+              {vencidosCount} {vencidosCount === 1 ? "manutenção vencida ou crítica" : "manutenções vencidas ou críticas"}
+            </strong>
+            {" "}— verifique a tabela de Manutenções Periódicas abaixo.
+          </span>
+        </div>
+      )}
 
       {/* Filtros — mesmo padrão visual de OperacoesPage */}
       <Card>
@@ -435,13 +474,27 @@ export default function ManutencaoPage() {
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-72 p-2" align="start">
-                <div className="space-y-1 max-h-64 overflow-y-auto">
-                  {allFainas.map(f => (
-                    <label key={f} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
-                      <Checkbox checked={selFainas.includes(f)} onCheckedChange={() => toggleFaina(f)} />
-                      <span className="text-sm">{f}</span>
-                    </label>
-                  ))}
+                <div className="pb-2">
+                  <input
+                    type="text"
+                    placeholder="Buscar faina…"
+                    value={fainaSearch}
+                    onChange={e => setFainaSearch(e.target.value)}
+                    className={inputClass + " w-full"}
+                  />
+                </div>
+                <div className="space-y-1 max-h-56 overflow-y-auto">
+                  {allFainas
+                    .filter(f => f.toLowerCase().includes(fainaSearch.toLowerCase()))
+                    .map(f => (
+                      <label key={f} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
+                        <Checkbox checked={selFainas.includes(f)} onCheckedChange={() => toggleFaina(f)} />
+                        <span className="text-sm">{f}</span>
+                      </label>
+                    ))}
+                  {allFainas.filter(f => f.toLowerCase().includes(fainaSearch.toLowerCase())).length === 0 && (
+                    <p className="px-2 py-3 text-xs text-muted-foreground text-center">Nenhuma faina encontrada</p>
+                  )}
                 </div>
               </PopoverContent>
             </Popover>
@@ -706,53 +759,74 @@ export default function ManutencaoPage() {
           <CardTitle className="text-base">Status das Manutenções Periódicas</CardTitle>
         </CardHeader>
         <CardContent>
-          {complianceByLancha.size === 0 ? (
+          {complianceFlatSorted.length === 0 ? (
             <p className="text-center text-muted-foreground py-10 text-sm">
               Sem dados de manutenções periódicas
             </p>
           ) : (
-            <div className="space-y-6">
-              {[...complianceByLancha.entries()].map(([lanchaNome, items]) => (
-                <div key={lanchaNome}>
-                  <h3 className="text-sm font-semibold mb-2 text-foreground">{lanchaNome}</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-                    {items.map(item => (
-                      <div
-                        key={item.tipo_id}
-                        className="rounded-lg border p-2.5"
-                        style={{ borderColor: STATUS_COR[item.status_semaforo] + "66" }}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    {([
+                      { key: "nome",   label: "Tipo"       },
+                      { key: "lancha", label: "Lancha"     },
+                      { key: "status", label: "Status"     },
+                      { key: "dias",   label: "Dias Rest." },
+                    ] as const).map(({ key, label }) => (
+                      <th
+                        key={key}
+                        onClick={() => setComplianceSort(prev => ({
+                          key,
+                          dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc",
+                        }))}
+                        className="px-3 py-2 text-left text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground whitespace-nowrap"
                       >
-                        <div className="flex items-start justify-between gap-1 mb-1.5">
-                          <p className="text-xs font-medium leading-tight">{item.tipo_nome}</p>
-                          <span
-                            className="shrink-0 w-2.5 h-2.5 rounded-full mt-0.5"
-                            style={{ backgroundColor: STATUS_COR[item.status_semaforo] }}
-                          />
-                        </div>
-                        <p className="text-xs" style={{ color: STATUS_COR[item.status_semaforo] }}>
-                          {STATUS_LABEL[item.status_semaforo]}
-                        </p>
-                        {item.dias_restantes !== null && (
-                          <p className="text-xs mt-0.5 font-mono text-muted-foreground">
-                            {item.dias_restantes >= 0
-                              ? `${item.dias_restantes}d restantes`
-                              : `${Math.abs(item.dias_restantes)}d vencido`}
-                          </p>
-                        )}
-                        {item.proxima_data && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Próxima:{" "}
-                            {item.proxima_data.slice(0, 10).split("-").reverse().join("/")}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Cada {item.periodicidade_dias}d
-                        </p>
-                      </div>
+                        {label}
+                        {complianceSort.key === key ? (complianceSort.dir === "asc" ? " ↑" : " ↓") : ""}
+                      </th>
                     ))}
-                  </div>
-                </div>
-              ))}
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Próxima Data</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Periodicidade</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {complianceFlatSorted.map(item => {
+                    const isOverdue = (item.dias_restantes ?? 0) < 0;
+                    return (
+                      <tr key={`${item.lancha_nome}-${item.tipo_id}`} className="hover:bg-muted/40">
+                        <td className="px-3 py-2.5 font-medium">{item.tipo_nome}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{item.lancha_nome}</td>
+                        <td className="px-3 py-2.5">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: STATUS_COR[item.status_semaforo] }} />
+                            <span className="text-xs font-medium" style={{ color: STATUS_COR[item.status_semaforo] }}>
+                              {STATUS_LABEL[item.status_semaforo]}
+                            </span>
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-xs">
+                          {item.dias_restantes === null ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : isOverdue ? (
+                            <span className="text-red-600 font-semibold">{Math.abs(item.dias_restantes)}d vencido</span>
+                          ) : (
+                            <span className={item.dias_restantes <= 7 ? "text-amber-600 font-semibold" : "text-muted-foreground"}>
+                              {item.dias_restantes}d
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                          {item.proxima_data ? item.proxima_data.slice(0, 10).split("-").reverse().join("/") : "—"}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                          {item.periodicidade_dias}d
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
