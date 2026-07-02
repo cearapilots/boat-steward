@@ -507,9 +507,11 @@ export function useCreateMotorPosition() {
           const { error: errUpdAtivoEntra } = await supabase
             .from("ativos")
             .update({
-              lancha_id: p.lancha_destino_id,
-              posicao: p.posicao_destino,
-              offset_instalacao: offsetCalculado,
+              lancha_id:              p.lancha_destino_id,
+              posicao:                p.posicao_destino,
+              offset_instalacao:      offsetCalculado,
+              ultima_troca_horimetro: p.horimetro_lancha_destino ?? null,
+              ultima_troca_data:      p.data_troca,
             })
             .eq("id", p.motor_entra_id);
           if (errUpdAtivoEntra) { console.error("[swap] erro atualizando ativo motor que entra:", errUpdAtivoEntra); throw errUpdAtivoEntra; }
