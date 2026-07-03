@@ -111,7 +111,10 @@ export default function CustosPage() {
 
   // ── Filtros multi-select ──────────────────────────────────────────────────
   // Arrays vazios = sem filtro (mostra tudo)
-  const [filterAnos,    setFilterAnos]    = useState<string[]>([]);
+  const [filterAnos,    setFilterAnos]    = useState<string[]>(() => {
+    const y = new Date().getFullYear();
+    return [String(y - 1), String(y)];
+  });
   const [filterLanchas, setFilterLanchas] = useState<string[]>([]);
   const [filterTipos,   setFilterTipos]   = useState<string[]>([]);
 
