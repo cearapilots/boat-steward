@@ -432,6 +432,7 @@ export function useCreateMotorPosition() {
           .maybeSingle();
         if (errPosSai) { console.error("[swap] erro buscando posicao do motor que sai:", errPosSai); throw errPosSai; }
 
+        let horimetroMotorSai: number | null = null;
         if (posSai) {
           const horimetroLanchaInst = Number(posSai.horimetro_lancha_instalacao ?? 0);
           const horasOperadas = (p.horimetro_lancha_destino ?? horimetroLanchaInst) - horimetroLanchaInst;
@@ -447,7 +448,7 @@ export function useCreateMotorPosition() {
 
           // horímetro atual do motor que sai = horímetro da lancha destino - offset_calculado da posição fechada
           const offsetSai = Number(posSai.offset_calculado ?? 0);
-          const horimetroMotorSai = (p.horimetro_lancha_destino ?? horimetroLanchaInst) - offsetSai;
+          horimetroMotorSai = (p.horimetro_lancha_destino ?? horimetroLanchaInst) - offsetSai;
 
           const { error: errInsReservaSai } = await supabase.from("posicoes").insert({
             ativo_id: p.motor_sai_id,
@@ -463,7 +464,9 @@ export function useCreateMotorPosition() {
 
         const { error: errUpdAtivoSai } = await supabase
           .from("ativos")
-          .update({ lancha_id: null, posicao: null })
+          .update(horimetroMotorSai !== null
+            ? { lancha_id: null, posicao: null, horimetro_equipamento: horimetroMotorSai }
+            : { lancha_id: null, posicao: null })
           .eq("id", p.motor_sai_id);
         if (errUpdAtivoSai) { console.error("[swap] erro atualizando ativo motor que sai:", errUpdAtivoSai); throw errUpdAtivoSai; }
       }
