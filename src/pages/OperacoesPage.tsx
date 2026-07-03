@@ -154,7 +154,8 @@ function calcDowntimeHoursCorretiva(
 }
 
 const todayStr    = new Date().toISOString().slice(0, 10);
-const oneYearAgo  = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const currentYear = new Date().getFullYear();
+const oneYearAgo  = `${currentYear - 1}-01-01`;
 
 const inputClass =
   "h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background " +
