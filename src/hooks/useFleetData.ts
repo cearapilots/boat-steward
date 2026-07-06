@@ -936,3 +936,19 @@ export function useDespesas() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export function useAbastecimentos() {
+  return useQuery({
+    queryKey: ["abastecimentos"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("abastecimentos_combustivel")
+        .select("cd_abastecimento, dh_abastecimento, cd_lancha, ds_lancha, ds_posto, dc_litros, vl_unitario, vl_total, dc_horimetro_bb, ano_mes")
+        .order("dh_abastecimento", { ascending: false })
+        .limit(100000);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
