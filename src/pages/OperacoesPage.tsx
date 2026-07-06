@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useManobras, useIndicadoresOp, useFainas, useOcorrencias } from "@/hooks/useFleetData";
+import { useManobras, useIndicadoresOp, useFainas, useOcorrencias, useAbastecimentos } from "@/hooks/useFleetData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -25,6 +25,15 @@ const LANCHAS = [
   { cd: 1003, nome: "Fortim"    },
   { cd: 117,  nome: "Taíba"     },
 ];
+
+const POSTO_COR: Record<string, string> = {
+  "BR DISTRIBUIDORA":      "#FBBF24",
+  "VS TOP DIESEL":         "#60A5FA",
+  "BANDEIRA BRANCA":       "#34D399",
+  "Posto Bandeira Branca": "#34D399",
+  "JS Distribuidora":      "#A78BFA",
+};
+const POSTO_COR_DEFAULT = "#9CA3AF";
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -179,10 +188,11 @@ function ManobrasTooltip({ active, payload, label }: any) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OperacoesPage() {
-  const { data: manobras,    isLoading: loadingM } = useManobras();
-  const { data: indicadores, isLoading: loadingI } = useIndicadoresOp();
-  const { data: fainas,      isLoading: loadingF } = useFainas();
+  const { data: manobras,        isLoading: loadingM } = useManobras();
+  const { data: indicadores,     isLoading: loadingI } = useIndicadoresOp();
+  const { data: fainas,          isLoading: loadingF } = useFainas();
   const { data: ocorrencias } = useOcorrencias();
+  const { data: abastecimentos } = useAbastecimentos();
 
   const [selectedLanchas, setSelectedLanchas] = useState<number[]>([121, 1003, 117]);
   const [filterDe,   setFilterDe]   = useState(oneYearAgo);
@@ -224,6 +234,14 @@ export default function OperacoesPage() {
     if (filterAte && d > filterAte) return false;
     return true;
   }), [fainas, selectedLanchas, filterDe, filterAte]);
+
+  const filteredAbastecimentos = useMemo(() => (abastecimentos ?? []).filter((a: any) => {
+    if (!selectedLanchas.includes(Number(a.cd_lancha))) return false;
+    const d = (a.dh_abastecimento ?? "").slice(0, 10);
+    if (filterDe  && d < filterDe)  return false;
+    if (filterAte && d > filterAte) return false;
+    return true;
+  }), [abastecimentos, selectedLanchas, filterDe, filterAte]);
 
   // ── Gráfico 1: Manobras por mês ───────────────────────────────────────────
 
@@ -498,6 +516,92 @@ export default function OperacoesPage() {
       fainaMaisLonga: fainaMaisLonga > 0 ? fainaMaisLonga : null,
     };
   }, [filteredManobras, filteredIndicadores, filteredFainas, manobras, filterDe, filterAte, selectedLanchas]);
+
+  // ── Combustível ───────────────────────────────────────────────────────────
+
+  const dadosPrecoLitro = useMemo(() => {
+    const map = new Map<string, Map<string, number[]>>();
+    for (const a of filteredAbastecimentos as any[]) {
+      const mes = (a.dh_abastecimento ?? "").slice(0, 7);
+      const posto = a.ds_posto ?? "Outros";
+      if (!mes || !a.vl_unitario) continue;
+      if (!map.has(mes)) map.set(mes, new Map());
+      const pm = map.get(mes)!;
+      if (!pm.has(posto)) pm.set(posto, []);
+      pm.get(posto)!.push(Number(a.vl_unitario));
+    }
+    const postos = [...new Set((filteredAbastecimentos as any[]).map((a: any) => a.ds_posto ?? "Outros"))];
+    return [...map.keys()].sort().map(mes => {
+      const pt: Record<string, any> = { mes: fmtMonth(mes) };
+      for (const posto of postos) {
+        const vals = map.get(mes)?.get(posto) ?? [];
+        pt[posto] = vals.length > 0 ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 1000) / 1000 : null;
+      }
+      return pt;
+    });
+  }, [filteredAbastecimentos]);
+
+  const postosUnicos = useMemo(() =>
+    [...new Set((filteredAbastecimentos as any[]).map((a: any) => a.ds_posto ?? "Outros"))].sort(),
+  [filteredAbastecimentos]);
+
+  const dadosLitrosPorHora = useMemo(() => {
+    const litMap = new Map<string, Record<number, number>>();
+    for (const a of filteredAbastecimentos as any[]) {
+      const mes = (a.dh_abastecimento ?? "").slice(0, 7);
+      const cd = Number(a.cd_lancha);
+      if (!mes || !a.dc_litros || !selectedLanchas.includes(cd)) continue;
+      if (!litMap.has(mes)) litMap.set(mes, {});
+      litMap.get(mes)![cd] = (litMap.get(mes)![cd] ?? 0) + Number(a.dc_litros);
+    }
+    const hMap = new Map<string, Record<number, number>>();
+    for (const i of filteredIndicadores as any[]) {
+      const mes = (i.dh_leitura ?? "").slice(0, 7);
+      const cd = Number(i.cd_lancha);
+      if (!mes || !i.dc_dif_be) continue;
+      if (!hMap.has(mes)) hMap.set(mes, {});
+      hMap.get(mes)![cd] = (hMap.get(mes)![cd] ?? 0) + Number(i.dc_dif_be);
+    }
+    const meses = [...new Set([...litMap.keys()])].sort();
+    return meses.map(mes => {
+      const pt: Record<string, any> = { mes: fmtMonth(mes) };
+      for (const cd of selectedLanchas) {
+        const lit = litMap.get(mes)?.[cd] ?? 0;
+        const h   = hMap.get(mes)?.[cd]   ?? 0;
+        pt[LANCHA_NOME[cd]] = lit > 0 && h > 0 ? Math.round((lit / h) * 10) / 10 : null;
+      }
+      return pt;
+    });
+  }, [filteredAbastecimentos, filteredIndicadores, selectedLanchas]);
+
+  const dadosLitrosPorManobra = useMemo(() => {
+    const litMap = new Map<string, Record<number, number>>();
+    for (const a of filteredAbastecimentos as any[]) {
+      const mes = (a.dh_abastecimento ?? "").slice(0, 7);
+      const cd = Number(a.cd_lancha);
+      if (!mes || !a.dc_litros || !selectedLanchas.includes(cd)) continue;
+      if (!litMap.has(mes)) litMap.set(mes, {});
+      litMap.get(mes)![cd] = (litMap.get(mes)![cd] ?? 0) + Number(a.dc_litros);
+    }
+    const mMap = new Map<string, Record<number, number>>();
+    for (const m of filteredManobras as any[]) {
+      const mes = (m.dh_manobra ?? "").slice(0, 7);
+      const cd = Number(m.cd_lancha);
+      if (!mes) continue;
+      if (!mMap.has(mes)) mMap.set(mes, {});
+      mMap.get(mes)![cd] = (mMap.get(mes)![cd] ?? 0) + 1;
+    }
+    const meses = [...new Set([...litMap.keys()])].sort();
+    return meses.map(mes => {
+      const pt: Record<string, any> = { mes: fmtMonth(mes) };
+      for (const cd of selectedLanchas) {
+        const lit = litMap.get(mes)?.[cd] ?? 0;
+        const n   = mMap.get(mes)?.[cd]   ?? 0;
+        pt[LANCHA_NOME[cd]] = lit > 0 && n > 0 ? Math.round((lit / n) * 10) / 10 : null;
+      }
+      return pt;
+    });
+  }, [filteredAbastecimentos, filteredManobras, selectedLanchas]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -1154,6 +1258,99 @@ export default function OperacoesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── SEÇÃO: Combustível ─────────────────────────────────── */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Combustível</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Abastecimentos diesel — {fmtPeriodo(filterDe, filterAte)}
+          </p>
+        </div>
+
+        {/* Gráfico A — Preço do litro por mês por fornecedor */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Preço do Litro por Mês — por Fornecedor</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {dadosPrecoLitro.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">Sem dados de abastecimento para {fmtPeriodo(filterDe, filterAte)}</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={dadosPrecoLitro} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                  <YAxis tickFormatter={v => `R$${Number(v).toFixed(3)}`} tick={{ fontSize: 10 }} domain={["auto", "auto"]} />
+                  <Tooltip formatter={(v: any) => [`R$ ${Number(v).toFixed(3)}/L`, ""]} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {postosUnicos.map(posto => (
+                    <Line key={posto} type="monotone" dataKey={posto}
+                      stroke={POSTO_COR[posto] ?? POSTO_COR_DEFAULT}
+                      strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Gráficos B + C lado a lado */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Gráfico B — Litros/hora */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Consumo — Litros por Hora Operada</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {dadosLitrosPorHora.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">Sem dados no período</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={dadosLitrosPorHora} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                    <YAxis tickFormatter={v => `${v}L/h`} tick={{ fontSize: 10 }} domain={["auto", "auto"]} />
+                    <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)} L/h`, n]} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {selectedLanchas.map(cd => (
+                      <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
+                        stroke={LANCHA_COR[cd]} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Gráfico C — Litros/manobra */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Consumo — Litros por Manobra</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {dadosLitrosPorManobra.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">Sem dados no período</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={dadosLitrosPorManobra} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                    <YAxis tickFormatter={v => `${v}L`} tick={{ fontSize: 10 }} domain={["auto", "auto"]} />
+                    <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)} L/manobra`, n]} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {selectedLanchas.map(cd => (
+                      <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
+                        stroke={LANCHA_COR[cd]} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+      {/* ── FIM SEÇÃO Combustível ───────────────────────────────── */}
     </div>
   );
 }
