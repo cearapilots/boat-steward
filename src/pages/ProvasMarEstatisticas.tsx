@@ -410,7 +410,7 @@ export default function ProvasMarEstatisticas() {
   const { data: provas, isLoading } = useProvasMar();
 
   const [selectedLanchas, setSelectedLanchas]   = useState<string[]>([]);
-  const [filterDe, setFilterDe]                 = useState(`${new Date().getFullYear() - 1}-01-01`);
+  const [filterDe, setFilterDe]                 = useState("");
   const [filterAte, setFilterAte]               = useState("");
   const [filterDescricoes, setFilterDescricoes] = useState<string[]>([...DESCRICOES_PROVA]);
   const [degradScope, setDegradScope]           = useState<DegradScope>("all");
