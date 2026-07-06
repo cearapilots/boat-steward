@@ -22,9 +22,10 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Treemap,
 } from "recharts";
-import { Upload, ChevronDown } from "lucide-react";
+import { Upload, ChevronDown, Info } from "lucide-react";
+import { Tooltip as UITooltip, TooltipContent as UITooltipContent, TooltipProvider as UITooltipProvider, TooltipTrigger as UITooltipTrigger } from "@/components/ui/tooltip";
 import SankeyFluxo from "@/components/SankeyFluxo";
-
+ 
 // ── Constantes exportadas ─────────────────────────────────────────────────────
 
 export const NORM_CENTRO: Record<string, string> = {
@@ -324,8 +325,8 @@ export default function CustosPage() {
             const dt = r[0] instanceof Date
               ? r[0]
               : new Date(Math.round((Number(r[0]) - 25569) * 86400 * 1000));
-            const data = dt.toISOString().slice(0, 10);
-            const ano_mes = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+            const data = dt.toLocaleDateString("sv-SE");
+            const ano_mes = data.slice(0, 7);
             const forn = (r[1] ?? "").toString().trim();
             const centro = normCentro((r[2] ?? "").toString());
             let tipo = (r[3] ?? "").toString().trim();
@@ -354,11 +355,8 @@ export default function CustosPage() {
   function clearAllCf() { setCfCentro(null); setCfTipo(null); setCfMes(null); setCfFornecedor(null); }
 
   const KPI_CARDS = [
-    { label: "Custo Total",   value: fmtBRL(kpis.total) },
-    { label: "Custo Lanchas", value: fmtBRL(kpis.lanchas) },
     { label: "Custo/Manobra", value: kpis.custoPorManobra != null ? fmtBRL(kpis.custoPorManobra) : "—" },
     { label: "Média Mensal",  value: fmtBRL(kpis.mediaMensal) },
-    { label: "Transações",    value: kpis.nTransacoes.toLocaleString("pt-BR") },
   ];
 
   // ── Treemap content ───────────────────────────────────────────────────────
@@ -507,7 +505,51 @@ export default function CustosPage() {
       </Card>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Custo Total */}
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-1 mb-1">
+              <p className="text-xs text-muted-foreground">Custo Total</p>
+              <UITooltipProvider>
+                <UITooltip>
+                  <UITooltipTrigger asChild>
+                    <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                  </UITooltipTrigger>
+                  <UITooltipContent className="max-w-xs text-xs">
+                    Engloba: operações das lanchas; despesas com container de apoio;
+                    despesas com flutuante de apoio (Jeri); e desembolsos de
+                    investimento em lanchas novas.
+                  </UITooltipContent>
+                </UITooltip>
+              </UITooltipProvider>
+            </div>
+            <p className="text-xl font-bold font-mono tabular-nums">{fmtBRL(kpis.total)}</p>
+          </CardContent>
+        </Card>
+
+        {/* Custo Operacional — Lanchas */}
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-1 mb-1">
+              <p className="text-xs text-muted-foreground">Custo Operacional — Lanchas</p>
+              <UITooltipProvider>
+                <UITooltip>
+                  <UITooltipTrigger asChild>
+                    <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                  </UITooltipTrigger>
+                  <UITooltipContent className="max-w-xs text-xs">
+                    Gastos ligados exclusivamente às lanchas operacionais
+                    (Flexeiras, Fortim e Taíba). Não considera despesas com
+                    container de apoio, flutuante Jeri e investimentos em lancha nova.
+                  </UITooltipContent>
+                </UITooltip>
+              </UITooltipProvider>
+            </div>
+            <p className="text-xl font-bold font-mono tabular-nums">{fmtBRL(kpis.lanchas)}</p>
+          </CardContent>
+        </Card>
+
         {KPI_CARDS.map(({ label, value }) => (
           <Card key={label}>
             <CardContent className="pt-4 pb-3">
