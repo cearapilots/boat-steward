@@ -73,6 +73,8 @@ const inputClass =
   "h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
+const DEFAULT_FILTER_DE = `${new Date().getFullYear() - 1}-01-01`;
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type CicloDocagem = {
@@ -185,9 +187,9 @@ function buildCiclos(provas: ProvaMar[]): CicloDocagem[] {
       dataPos: pos.data,
       preDocagem: preDoc ?? preDocFallback,
       posDocagem: pos,
-      mes1: after.find(p => getDescCanon(p.descricao) === "M1"),
-      mes2: after.find(p => getDescCanon(p.descricao) === "M2"),
-      mes3: after.find(p => getDescCanon(p.descricao) === "M3"),
+      mes1: after.filter(p => getDescCanon(p.descricao) === "M1").slice(-1)[0],
+      mes2: after.filter(p => getDescCanon(p.descricao) === "M2").slice(-1)[0],
+      mes3: after.filter(p => getDescCanon(p.descricao) === "M3").slice(-1)[0],
       preSeguinte: after.filter(p => getDescCanon(p.descricao) === "PRE_SEG").slice(-1)[0],
     });
 
@@ -243,13 +245,14 @@ function buildCicloPoints(ciclos: CicloDocagem[]): CicloPoint[] {
 
 // ── Custom Tooltips ───────────────────────────────────────────────────────────
 
-function CicloTooltip({ active, payload }: any) {
+function CicloTooltip({ active, payload, visibleLines }: any) {
   if (!active || !payload?.length) return null;
   const pt = payload[0].payload as CicloPoint;
+  const lines: typeof CYCLE_LINES = visibleLines ?? CYCLE_LINES;
   return (
     <div className="bg-background border border-border rounded-md px-3 py-2 text-xs shadow-md space-y-0.5 max-w-56">
       <p className="font-semibold mb-1">{`Ciclo ${pt.cicloNum} — ${fmtDate(pt._ciclo.dataPos)}`}</p>
-      {CYCLE_LINES.map(cfg => {
+      {lines.map(cfg => {
         const vel = (pt as any)[cfg.key] as number | null;
         const rpm = (pt as any)[cfg.rpmKey] as number | null;
         if (vel == null && rpm == null) return null;
@@ -410,7 +413,7 @@ export default function ProvasMarEstatisticas() {
   const { data: provas, isLoading } = useProvasMar();
 
   const [selectedLanchas, setSelectedLanchas]   = useState<string[]>([]);
-  const [filterDe, setFilterDe]                 = useState("");
+  const [filterDe, setFilterDe]                 = useState(DEFAULT_FILTER_DE);
   const [filterAte, setFilterAte]               = useState("");
   const [filterDescricoes, setFilterDescricoes] = useState<string[]>([...DESCRICOES_PROVA]);
   const [degradScope, setDegradScope]           = useState<DegradScope>("all");
@@ -529,7 +532,7 @@ export default function ProvasMarEstatisticas() {
   );
 
   const totalCiclos = selectedLanchas.reduce((s, l) => s + (ciclosByLancha[l]?.length ?? 0), 0);
-  const hasFilters = filterDe !== "" || filterAte !== "" || filterDescricoes.length < DESCRICOES_PROVA.length || degradScope !== "all";
+  const hasFilters = filterDe !== DEFAULT_FILTER_DE || filterAte !== "" || filterDescricoes.length < DESCRICOES_PROVA.length || degradScope !== "all";
   const visibleLines = CYCLE_LINES.filter(cfg => filterDescricoes.includes(LINE_DESC_MAP[cfg.key]));
 
   // ── Debug — dev only ───────────────────────────────────────────────────────
@@ -651,7 +654,7 @@ export default function ProvasMarEstatisticas() {
               <Button
                 variant="ghost" size="sm"
                 onClick={() => {
-                  setFilterDe("");
+                  setFilterDe(DEFAULT_FILTER_DE);
                   setFilterAte("");
                   setFilterDescricoes([...DESCRICOES_PROVA]);
                   setDegradScope("all");
@@ -818,7 +821,7 @@ export default function ProvasMarEstatisticas() {
                                 tick={{ fontSize: 10 }} domain={["auto", "auto"]}
                                 label={{ value: "nós", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
                               />
-                              <Tooltip content={<CicloTooltip />} />
+                              <Tooltip content={<CicloTooltip visibleLines={visibleLines} />} />
                               <Legend wrapperStyle={{ fontSize: 11 }} />
                               {visibleLines.map(cfg => (
                                 <Line
@@ -851,7 +854,7 @@ export default function ProvasMarEstatisticas() {
                                 tick={{ fontSize: 10 }} domain={["auto", "auto"]}
                                 label={{ value: "RPM", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 10 } }}
                               />
-                              <Tooltip content={<CicloTooltip />} />
+                              <Tooltip content={<CicloTooltip visibleLines={visibleLines} />} />
                               <Legend wrapperStyle={{ fontSize: 11 }} />
                               {visibleLines.map(cfg => (
                                 <Line
