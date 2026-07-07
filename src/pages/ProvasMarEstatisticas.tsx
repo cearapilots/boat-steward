@@ -198,19 +198,19 @@ function buildCiclos(provas: ProvaMar[]): CicloDocagem[] {
 }
 
 function computeScorecard(lancha: string, ciclos: CicloDocagem[]): ScorecardData {
-  const completos = ciclos.filter(c =>
-    c.posDocagem?.velocidade != null &&
-    c.preDocagem?.velocidade != null &&
-    c.preSeguinte?.velocidade != null
-  );
+  // ciclos are pre-filtered: posDocagem + preSeguinte both non-null, scope applied
+  const ganhos = ciclos
+    .filter(c => c.preDocagem?.velocidade != null)
+    .map(c => c.posDocagem!.velocidade! - c.preDocagem!.velocidade!);
 
-  const ganhos  = completos.map(c => c.posDocagem!.velocidade! - c.preDocagem!.velocidade!);
-  const perdas  = completos.map(c => c.posDocagem!.velocidade! - c.preSeguinte!.velocidade!);
-  const mensais = completos
+  // perdas: negative = loss (preSeg < posDoc) — same sign as chart gap
+  const perdas = ciclos.map(c => c.preSeguinte!.velocidade! - c.posDocagem!.velocidade!);
+
+  const mensais = ciclos
     .map(c => {
       const dias = (new Date(c.preSeguinte!.data).getTime() - new Date(c.posDocagem!.data).getTime()) / 86_400_000;
       const meses = dias / 30;
-      return meses > 0 ? (c.posDocagem!.velocidade! - c.preSeguinte!.velocidade!) / meses : null;
+      return meses > 0 ? (c.preSeguinte!.velocidade! - c.posDocagem!.velocidade!) / meses : null;
     })
     .filter((v): v is number => v !== null);
 
@@ -393,13 +393,13 @@ function ScorecardCard({ data, color }: { data: ScorecardData; color: string }) 
         <div className="flex justify-between items-baseline gap-2">
           <span className="text-muted-foreground text-xs">Perda total/docagem</span>
           <span className="font-mono font-semibold" style={{ color: "hsl(var(--destructive))" }}>
-            {perdaTotal != null ? `-${fmtNum(perdaTotal)} nós` : "—"}
+            {perdaTotal != null ? `${fmtNum(perdaTotal)} nós` : "—"}
           </span>
         </div>
         <div className="flex justify-between items-baseline gap-2">
           <span className="text-muted-foreground text-xs">Perda/mês</span>
           <span className="font-mono font-semibold" style={{ color: "hsl(var(--status-warn))" }}>
-            {perdaMensal != null ? `-${fmtNum(perdaMensal)} nós/mês` : "—"}
+            {perdaMensal != null ? `${fmtNum(perdaMensal)} nós/mês` : "—"}
           </span>
         </div>
       </CardContent>
@@ -480,9 +480,25 @@ export default function ProvasMarEstatisticas() {
     }));
   }, [provas, filterDe, filterAte, lanchasDisponiveis]);
 
+  // Ciclos completos (posDocagem + preSeguinte) com escopo aplicado — base compartilhada
+  // entre a Curva de Degradação e os scorecards, garantindo consistência matemática
+  const ciclosFiltradosPorLancha = useMemo(() =>
+    Object.fromEntries(lanchasDisponiveis.map(l => {
+      const completos = (ciclosByLancha[l] ?? []).filter(
+        c => c.posDocagem?.velocidade != null && c.preSeguinte?.velocidade != null
+      );
+      const filtrados =
+        degradScope === "last5" ? completos.slice(-5) :
+        degradScope === "last1" ? completos.slice(-1) :
+        completos;
+      return [l, filtrados];
+    })),
+    [ciclosByLancha, lanchasDisponiveis, degradScope]
+  );
+
   const scorecards = useMemo(() =>
-    Object.fromEntries(lanchasDisponiveis.map(l => [l, computeScorecard(l, ciclosByLancha[l] ?? [])])),
-    [ciclosByLancha, lanchasDisponiveis]
+    Object.fromEntries(lanchasDisponiveis.map(l => [l, computeScorecard(l, ciclosFiltradosPorLancha[l] ?? [])])),
+    [ciclosFiltradosPorLancha, lanchasDisponiveis]
   );
 
   const cicloPointsByLancha = useMemo(() =>
@@ -512,23 +528,18 @@ export default function ProvasMarEstatisticas() {
     });
   }, [ciclosByLancha, selectedLanchas]);
 
-  // Degradação chart: scoped by degradScope — apenas ciclos completos (posDocagem + preSeguinte)
+  // Degradação chart — usa ciclosFiltradosPorLancha (mesma base do scorecard)
   const degradacaoData = useMemo(() =>
     DEGRAD_STAGES.map(stage => {
       const pt: Record<string, unknown> = { desc: stage.label };
       for (const l of selectedLanchas) {
-        const ciclosCompletos = (ciclosByLancha[l] ?? []).filter(
-          c => c.posDocagem?.velocidade != null && c.preSeguinte?.velocidade != null
-        );
-        let ciclos = ciclosCompletos;
-        if (degradScope === "last5") ciclos = ciclosCompletos.slice(-5);
-        else if (degradScope === "last1") ciclos = ciclosCompletos.slice(-1);
+        const ciclos = ciclosFiltradosPorLancha[l] ?? [];
         const vels = ciclos.map(c => c[stage.key]?.velocidade).filter((v): v is number => v != null);
         pt[l] = avg(vels);
       }
       return pt;
     }),
-    [ciclosByLancha, selectedLanchas, degradScope]
+    [ciclosFiltradosPorLancha, selectedLanchas]
   );
 
   const totalCiclos = selectedLanchas.reduce((s, l) => s + (ciclosByLancha[l]?.length ?? 0), 0);
