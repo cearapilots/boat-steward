@@ -771,112 +771,74 @@ export default function OperacoesPage() {
 
       {/* ── SEÇÃO: Disponibilidade ─────────────────────────────── */}
       <TooltipProvider>
-        <div className="space-y-4">
+        <div className="grid grid-cols-4 gap-4">
 
-          {/* KPI cards — Técnica + Operacional lado a lado */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* KPI Disponibilidade — col-span-1 */}
+          <Card className="col-span-1">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                Disponibilidade
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help shrink-0" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[240px] text-xs">
+                    <strong>Operacional</strong> — toda inoperância (barra). Meta ≥ 85%.<br />
+                    <strong>Técnica</strong> — apenas corretivas, excl. projetos de melhoria. Meta ≥ 95%.
+                  </TooltipContent>
+                </UITooltip>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {disponibilidadePorLancha.map(d => {
+                const tec = disponibilidadeTecnicaPorLancha.find(t => t.cd === d.cd);
+                const corOp  = d.disp        >= 85 ? "#16A34A" : "#DC2626";
+                const corTec = (tec?.disp ?? 0) >= 95 ? "#16A34A" : "#DC2626";
+                return (
+                  <div key={d.cd} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
+                        <span className="text-xs font-medium">{d.nome}</span>
+                      </div>
+                      <span className="text-sm font-bold font-mono" style={{ color: corOp }}>
+                        {d.disp.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full transition-all"
+                        style={{ width: `${d.disp}%`, backgroundColor: corOp }} />
+                    </div>
+                    {tec && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Técnica: <span className="font-mono" style={{ color: corTec }}>{tec.disp.toFixed(1)}%</span>
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+              {(() => {
+                const mediaOp  = disponibilidadePorLancha.reduce((s, d) => s + d.disp, 0) / Math.max(1, disponibilidadePorLancha.length);
+                const mediaTec = disponibilidadeTecnicaPorLancha.reduce((s, d) => s + d.disp, 0) / Math.max(1, disponibilidadeTecnicaPorLancha.length);
+                return (
+                  <div className="pt-2 border-t border-border space-y-0.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-muted-foreground">Média op.</span>
+                      <span className="text-xs font-mono font-semibold text-muted-foreground">{mediaOp.toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-muted-foreground">Média tec.</span>
+                      <span className="text-xs font-mono font-semibold text-muted-foreground">{mediaTec.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              <p className="text-[10px] text-muted-foreground">Meta: op. ≥ 85% / tec. ≥ 95%</p>
+            </CardContent>
+          </Card>
 
-            {/* KPI Disponibilidade Técnica (só corretivas, excl. projetos) */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                  Disponibilidade Técnica
-                  <UITooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help shrink-0" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[220px] text-xs">
-                      Considera apenas horas de inoperância por manutenção <strong>corretiva</strong>, excluindo projetos de melhoria. Meta ≥ 95%.
-                    </TooltipContent>
-                  </UITooltip>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {disponibilidadeTecnicaPorLancha.map(d => {
-                  const cor = d.disp >= 95 ? "#16A34A" : "#DC2626";
-                  return (
-                    <div key={d.cd} className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
-                          <span className="text-xs font-medium">{d.nome}</span>
-                        </div>
-                        <span className="text-sm font-bold font-mono" style={{ color: cor }}>
-                          {d.disp.toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full transition-all"
-                          style={{ width: `${d.disp}%`, backgroundColor: cor }} />
-                      </div>
-                    </div>
-                  );
-                })}
-                {(() => {
-                  const media = disponibilidadeTecnicaPorLancha.reduce((s, d) => s + d.disp, 0) / Math.max(1, disponibilidadeTecnicaPorLancha.length);
-                  return (
-                    <div className="pt-2 border-t border-border flex justify-between items-center">
-                      <span className="text-[10px] text-muted-foreground">Média frota</span>
-                      <span className="text-xs font-mono font-semibold text-muted-foreground">{media.toFixed(1)}%</span>
-                    </div>
-                  );
-                })()}
-                <p className="text-[10px] text-muted-foreground">Meta: ≥ 95%</p>
-              </CardContent>
-            </Card>
-
-            {/* KPI Disponibilidade Operacional (tudo inoperante) */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                  Disponibilidade Operacional
-                  <UITooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help shrink-0" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[220px] text-xs">
-                      Considera todas as horas de inoperância, independentemente do tipo de manutenção (corretiva, preventiva ou outros). Meta ≥ 85%.
-                    </TooltipContent>
-                  </UITooltip>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {disponibilidadePorLancha.map(d => {
-                  const cor = d.disp >= 85 ? "#16A34A" : "#DC2626";
-                  return (
-                    <div key={d.cd} className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LANCHA_COR[d.cd] }} />
-                          <span className="text-xs font-medium">{d.nome}</span>
-                        </div>
-                        <span className="text-sm font-bold font-mono" style={{ color: cor }}>
-                          {d.disp.toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full transition-all"
-                          style={{ width: `${d.disp}%`, backgroundColor: cor }} />
-                      </div>
-                    </div>
-                  );
-                })}
-                {(() => {
-                  const media = disponibilidadePorLancha.reduce((s, d) => s + d.disp, 0) / Math.max(1, disponibilidadePorLancha.length);
-                  return (
-                    <div className="pt-2 border-t border-border flex justify-between items-center">
-                      <span className="text-[10px] text-muted-foreground">Média frota</span>
-                      <span className="text-xs font-mono font-semibold text-muted-foreground">{media.toFixed(1)}%</span>
-                    </div>
-                  );
-                })()}
-                <p className="text-[10px] text-muted-foreground">Meta: ≥ 85%</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Gráfico combinado — linha sólida=Operacional, tracejada=Técnica */}
-          <Card>
+          {/* Gráfico combinado — col-span-3 */}
+          <Card className="col-span-3">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Disponibilidade por Período — Operacional (sólida) × Técnica (tracejada)</CardTitle>
             </CardHeader>
@@ -884,7 +846,7 @@ export default function OperacoesPage() {
               {disponibilidadeMensal.length === 0 ? (
                 <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
               ) : (
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={disponibilidadeMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
