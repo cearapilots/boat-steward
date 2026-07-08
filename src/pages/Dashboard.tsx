@@ -1,10 +1,11 @@
 /* Fleet Dashboard - dados do Supabase */
 import { useMemo, useState } from "react";
-import { useSituacaoAtual, SituacaoRow, useManutencoesPeriodicas, ManutencaoPeriodicaStatus, useSyncHorimetros } from "@/hooks/useFleetData";
+import { useSituacaoAtual, SituacaoRow, useManutencoesPeriodicas, ManutencaoPeriodicaStatus, useSyncHorimetros, useOcorrencias, useManobras, useFainas } from "@/hooks/useFleetData";
 import { MaintenanceModal } from "@/components/MaintenanceModal";
 import { PeriodicMaintenanceModal } from "@/components/PeriodicMaintenanceModal";
 import { AtivoDetalhesModal } from "@/components/AtivoDetalhesModal";
 import { AlertasProvasMar } from "@/components/AlertasProvasMar";
+import { LanchaTimeline } from "@/components/LanchaTimeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusIndicator } from "@/components/StatusIndicator";
@@ -35,6 +36,9 @@ function fmtDate(iso: string | null) {
 export default function Dashboard() {
   const { data: rows, isLoading, isFetching } = useSituacaoAtual();
   const { data: periodicas } = useManutencoesPeriodicas();
+  const { data: ocorrencias = [] } = useOcorrencias();
+  const { data: manobrasData = [] } = useManobras();
+  const { data: fainasData = [] } = useFainas();
   const syncMutation = useSyncHorimetros();
   const [modal, setModal] = useState<{ open: boolean; row: SituacaoRow | null }>({ open: false, row: null });
   const [periodicModal, setPeriodicModal] = useState<{ open: boolean; row: ManutencaoPeriodicaStatus | null }>({ open: false, row: null });
@@ -304,6 +308,18 @@ export default function Dashboard() {
           })}
         </div>
       )}
+
+      <div className="mt-6">
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <LanchaTimeline
+              ocorrencias={ocorrencias}
+              manobras={manobrasData}
+              fainas={fainasData}
+            />
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="mt-6">
         <AlertasProvasMar />
