@@ -31,9 +31,9 @@ const LANCHAS = [
 
 function classifyTipo(tipo: string | null | undefined): "corretiva" | "preventiva" | "projeto" | "outros" {
   const t = (tipo ?? "").toLowerCase();
+  if (t.includes("projeto") || t.includes("melhoria") || t.includes("modificação")) return "projeto";
   if (t.includes("corretiva")) return "corretiva";
   if (t.includes("preventiva") || t.includes("treinamento")) return "preventiva";
-  if (t.includes("projeto") || t.includes("melhoria") || t.includes("modificação")) return "projeto";
   return "outros";
 }
 
