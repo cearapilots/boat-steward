@@ -27,13 +27,18 @@ const LANCHAS = [
 ];
 
 const POSTO_COR: Record<string, string> = {
-  "BR DISTRIBUIDORA":      "#FBBF24",
-  "VS TOP DIESEL":         "#60A5FA",
-  "BANDEIRA BRANCA":       "#34D399",
-  "Posto Bandeira Branca": "#34D399",
-  "JS Distribuidora":      "#A78BFA",
+  "BR DISTRIBUIDORA":  "#FBBF24",
+  "VS TOP DIESEL":     "#60A5FA",
+  "Bandeira Branca":   "#34D399",
+  "JS Distribuidora":  "#A78BFA",
 };
 const POSTO_COR_DEFAULT = "#9CA3AF";
+
+function normalizaPosto(p: string): string {
+  const t = p.trim();
+  if (t.toUpperCase() === "BANDEIRA BRANCA" || t === "Posto Bandeira Branca") return "Bandeira Branca";
+  return t;
+}
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -198,6 +203,7 @@ export default function OperacoesPage() {
   const [filterDe,   setFilterDe]   = useState(oneYearAgo);
   const [filterAte,  setFilterAte]  = useState(todayStr);
   const [filterPorto, setFilterPorto] = useState<"Todos" | "Mucuripe" | "Pecém">("Todos");
+  const [deslocExpanded, setDeslocExpanded] = useState(false);
 
   const isLoading = loadingM || loadingI || loadingF;
 
@@ -432,20 +438,6 @@ export default function OperacoesPage() {
     });
   }, [filteredManobras, filteredIndicadores, selectedLanchas]);
 
-  // ── Gráfico 6: Heatmap Hora × Dia ─────────────────────────────────────────
-
-  const heatmapData = useMemo(() => {
-    const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
-    for (const m of filteredManobras as any[]) {
-      if (!m.dh_manobra) continue;
-      const d   = new Date(m.dh_manobra);
-      const day  = (d.getDay() + 6) % 7; // 0=Seg…6=Dom
-      const hour = d.getHours();
-      grid[day][hour]++;
-    }
-    const max = Math.max(1, ...grid.flat());
-    return { grid, max };
-  }, [filteredManobras]);
 
   // ── Deslocamentos ──────────────────────────────────────────────────────────
 
@@ -523,14 +515,14 @@ export default function OperacoesPage() {
     const map = new Map<string, Map<string, number[]>>();
     for (const a of filteredAbastecimentos as any[]) {
       const mes = (a.dh_abastecimento ?? "").slice(0, 7);
-      const posto = a.ds_posto ?? "Outros";
+      const posto = normalizaPosto(a.ds_posto ?? "Outros");
       if (!mes || !a.vl_unitario) continue;
       if (!map.has(mes)) map.set(mes, new Map());
       const pm = map.get(mes)!;
       if (!pm.has(posto)) pm.set(posto, []);
       pm.get(posto)!.push(Number(a.vl_unitario));
     }
-    const postos = [...new Set((filteredAbastecimentos as any[]).map((a: any) => a.ds_posto ?? "Outros"))];
+    const postos = [...new Set((filteredAbastecimentos as any[]).map((a: any) => normalizaPosto(a.ds_posto ?? "Outros")))];
     return [...map.keys()].sort().map(mes => {
       const pt: Record<string, any> = { mes: fmtMonth(mes) };
       for (const posto of postos) {
@@ -542,7 +534,7 @@ export default function OperacoesPage() {
   }, [filteredAbastecimentos]);
 
   const postosUnicos = useMemo(() =>
-    [...new Set((filteredAbastecimentos as any[]).map((a: any) => a.ds_posto ?? "Outros"))].sort(),
+    [...new Set((filteredAbastecimentos as any[]).map((a: any) => normalizaPosto(a.ds_posto ?? "Outros")))].sort(),
   [filteredAbastecimentos]);
 
   const dadosLitrosPorHora = useMemo(() => {
@@ -1092,56 +1084,6 @@ export default function OperacoesPage() {
         </CardContent>
       </Card>
 
-      {/* Gráfico 6 — Heatmap Hora × Dia */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Concentração de Manobras — Hora × Dia da Semana</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(filteredManobras as any[]).length === 0 ? (
-            <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <div className="min-w-[560px]">
-                <div className="flex ml-12 mb-1">
-                  {Array.from({ length: 24 }, (_, h) => (
-                    <div key={h} className="flex-1 text-center text-[9px] text-muted-foreground leading-none">{h}</div>
-                  ))}
-                </div>
-                {DIAS_SEMANA.map((dia, di) => (
-                  <div key={dia} className="flex items-center mb-0.5 gap-0.5">
-                    <div className="w-12 text-[11px] text-muted-foreground text-right pr-2 shrink-0">{dia}</div>
-                    {Array.from({ length: 24 }, (_, h) => {
-                      const count = heatmapData.grid[di][h];
-                      const intensity = count / heatmapData.max;
-                      return (
-                        <div
-                          key={h}
-                          className="flex-1 h-7 rounded-sm"
-                          style={{
-                            backgroundColor: count === 0
-                              ? "hsl(var(--muted))"
-                              : `rgba(37, 99, 235, ${0.12 + intensity * 0.88})`,
-                          }}
-                          title={`${dia} ${String(h).padStart(2, "0")}h: ${count} manobra${count !== 1 ? "s" : ""}`}
-                        />
-                      );
-                    })}
-                  </div>
-                ))}
-                <div className="flex items-center justify-end gap-1.5 mt-3">
-                  <span className="text-[10px] text-muted-foreground">Menor</span>
-                  {[0.12, 0.32, 0.52, 0.72, 0.92].map(v => (
-                    <div key={v} className="w-5 h-4 rounded-sm" style={{ backgroundColor: `rgba(37, 99, 235, ${v})` }} />
-                  ))}
-                  <span className="text-[10px] text-muted-foreground">Maior</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Deslocamentos */}
       <div className="space-y-4">
         <div>
@@ -1216,46 +1158,56 @@ export default function OperacoesPage() {
           </CardContent>
         </Card>
 
-        {/* Tabela últimas fainas */}
+        {/* Tabela últimas fainas — colapsável */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-baseline gap-2">
-              Últimos 10 Deslocamentos
-              <span className="text-xs text-muted-foreground font-normal">{fmtPeriodo(filterDe, filterAte)}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Origem</TableHead>
-                    <TableHead>Destino</TableHead>
-                    <TableHead className="text-right">Duração</TableHead>
-                    <TableHead>Lancha</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ultimasFainas.length === 0 ? (
+          <button
+            className="w-full text-left"
+            onClick={() => setDeslocExpanded(v => !v)}
+          >
+            <CardHeader className="pb-2 hover:bg-accent/40 transition-colors rounded-t-lg">
+              <CardTitle className="text-sm flex items-center gap-2">
+                Últimos 10 Deslocamentos
+                <span className="text-xs text-muted-foreground font-normal">{fmtPeriodo(filterDe, filterAte)}</span>
+                <ChevronDown
+                  className={`h-4 w-4 ml-auto text-muted-foreground transition-transform duration-200 ${deslocExpanded ? "rotate-180" : ""}`}
+                />
+              </CardTitle>
+            </CardHeader>
+          </button>
+          {deslocExpanded && (
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
-                        Sem deslocamentos no período
-                      </TableCell>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Origem</TableHead>
+                      <TableHead>Destino</TableHead>
+                      <TableHead className="text-right">Duração</TableHead>
+                      <TableHead>Lancha</TableHead>
                     </TableRow>
-                  ) : ultimasFainas.map((f: any) => (
-                    <TableRow key={f.cd_faina_lancha}>
-                      <TableCell className="font-mono text-xs whitespace-nowrap">{fmtDatetime(f.dh_inicio)}</TableCell>
-                      <TableCell className="text-sm">{f.ds_local_orig ?? "—"}</TableCell>
-                      <TableCell className="text-sm">{f.ds_local_dest ?? "—"}</TableCell>
-                      <TableCell className="text-right font-mono text-sm">{fmtHours(Number(f.dc_horas))}</TableCell>
-                      <TableCell className="text-sm">{LANCHA_NOME[Number(f.cd_lancha)] ?? f.ds_lancha ?? "—"}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
+                  </TableHeader>
+                  <TableBody>
+                    {ultimasFainas.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                          Sem deslocamentos no período
+                        </TableCell>
+                      </TableRow>
+                    ) : ultimasFainas.map((f: any) => (
+                      <TableRow key={f.cd_faina_lancha}>
+                        <TableCell className="font-mono text-xs whitespace-nowrap">{fmtDatetime(f.dh_inicio)}</TableCell>
+                        <TableCell className="text-sm">{f.ds_local_orig ?? "—"}</TableCell>
+                        <TableCell className="text-sm">{f.ds_local_dest ?? "—"}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{fmtHours(Number(f.dc_horas))}</TableCell>
+                        <TableCell className="text-sm">{LANCHA_NOME[Number(f.cd_lancha)] ?? f.ds_lancha ?? "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          )}
         </Card>
       </div>
 
