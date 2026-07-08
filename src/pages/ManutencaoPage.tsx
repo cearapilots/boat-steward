@@ -29,10 +29,11 @@ const LANCHAS = [
   { cd: 117,  nome: "Taíba"    },
 ];
 
-function classifyTipo(tipo: string | null | undefined): "corretiva" | "preventiva" | "outros" {
+function classifyTipo(tipo: string | null | undefined): "corretiva" | "preventiva" | "projeto" | "outros" {
   const t = (tipo ?? "").toLowerCase();
   if (t.includes("corretiva")) return "corretiva";
   if (t.includes("preventiva") || t.includes("treinamento")) return "preventiva";
+  if (t.includes("projeto") || t.includes("melhoria") || t.includes("modificação")) return "projeto";
   return "outros";
 }
 
@@ -43,12 +44,14 @@ function extractFaina(tipo: string | null | undefined): string {
 const COR_CLASSE: Record<string, string> = {
   corretiva:  "#DC2626",
   preventiva: "#16A34A",
+  projeto:    "#8B5CF6",
   outros:     "#6B7280",
 };
 
 const LABEL_CLASSE: Record<string, string> = {
   corretiva:  "Corretiva",
   preventiva: "Preventiva",
+  projeto:    "Projeto/Melhoria",
   outros:     "Outros",
 };
 
@@ -104,7 +107,7 @@ export default function ManutencaoPage() {
   const [filterDe,      setFilterDe]      = useState(oneYearAgo);
   const [filterAte,     setFilterAte]     = useState(todayStr);
   const [selLanchas,    setSelLanchas]    = useState<number[]>([121, 1003, 117]);
-  const [selClasses,    setSelClasses]    = useState<string[]>(["corretiva", "preventiva", "outros"]);
+  const [selClasses,    setSelClasses]    = useState<string[]>(["corretiva", "preventiva", "projeto", "outros"]);
   const [selFainas,     setSelFainas]     = useState<string[]>([]);  // vazio = todas
   const [filterEfeitos, setFilterEfeitos] = useState<string[]>([]);  // vazio = todos
   const [fainaSearch,   setFainaSearch]   = useState("");
@@ -133,7 +136,7 @@ export default function ManutencaoPage() {
   const lanchasLabel = selLanchas.length === LANCHAS.length ? "Todas"
     : selLanchas.map(cd => LANCHA_NOME[cd]).join(", ");
 
-  const classesLabel = selClasses.length === 3 ? "Todas"
+  const classesLabel = selClasses.length === 4 ? "Todas"
     : selClasses.map(c => LABEL_CLASSE[c]).join(", ");
 
   const fainasLabel = selFainas.length === 0 ? "Todas"
@@ -205,11 +208,11 @@ export default function ManutencaoPage() {
 
   // ── Gráfico 1: Horas por mês empilhadas ──────────────────────────────────
   const dadosHorasMes = useMemo(() => {
-    const map = new Map<string, { corretiva: number; preventiva: number; outros: number }>();
+    const map = new Map<string, { corretiva: number; preventiva: number; projeto: number; outros: number }>();
     for (const o of ocFiltradas as any[]) {
       const mes = (o.data_inicio ?? "").slice(0, 7);
       if (!mes) continue;
-      if (!map.has(mes)) map.set(mes, { corretiva: 0, preventiva: 0, outros: 0 });
+      if (!map.has(mes)) map.set(mes, { corretiva: 0, preventiva: 0, projeto: 0, outros: 0 });
       const cls = classifyTipo(o.tipo_ocorrencia);
       map.get(mes)![cls] += Number(o.duracao_horas) || 0;
     }
@@ -276,14 +279,14 @@ export default function ManutencaoPage() {
 
   // ── Gráfico 4: Ocorrências por faina ─────────────────────────────────────
   const dadosFaina = useMemo(() => {
-    const map = new Map<string, { corretiva: number; preventiva: number; outros: number }>();
+    const map = new Map<string, { corretiva: number; preventiva: number; projeto: number; outros: number }>();
     for (const o of ocFiltradas as any[]) {
       const f = extractFaina(o.tipo_ocorrencia) || "Sem tipo";
-      if (!map.has(f)) map.set(f, { corretiva: 0, preventiva: 0, outros: 0 });
+      if (!map.has(f)) map.set(f, { corretiva: 0, preventiva: 0, projeto: 0, outros: 0 });
       map.get(f)![classifyTipo(o.tipo_ocorrencia)] += 1;
     }
     return [...map.entries()]
-      .map(([faina, v]) => ({ faina, ...v, total: v.corretiva + v.preventiva + v.outros }))
+      .map(([faina, v]) => ({ faina, ...v, total: v.corretiva + v.preventiva + v.projeto + v.outros }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 15);
   }, [ocFiltradas]);
@@ -299,6 +302,7 @@ export default function ManutencaoPage() {
         label:      b.label,
         corretiva:  bucket.filter((o: any) => classifyTipo(o.tipo_ocorrencia) === "corretiva").length,
         preventiva: bucket.filter((o: any) => classifyTipo(o.tipo_ocorrencia) === "preventiva").length,
+        projeto:    bucket.filter((o: any) => classifyTipo(o.tipo_ocorrencia) === "projeto").length,
         outros:     bucket.filter((o: any) => classifyTipo(o.tipo_ocorrencia) === "outros").length,
       };
     });
@@ -453,7 +457,7 @@ export default function ManutencaoPage() {
               </PopoverTrigger>
               <PopoverContent className="w-48 p-2" align="start">
                 <div className="space-y-1">
-                  {(["corretiva", "preventiva", "outros"] as const).map(c => (
+                  {(["corretiva", "preventiva", "projeto", "outros"] as const).map(c => (
                     <label key={c} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-accent">
                       <Checkbox checked={selClasses.includes(c)} onCheckedChange={() => toggleClasse(c)} />
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COR_CLASSE[c] }} />
@@ -556,6 +560,7 @@ export default function ManutencaoPage() {
                 <Legend formatter={v => LABEL_CLASSE[v] ?? v} wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="corretiva"  stackId="a" fill={COR_CLASSE.corretiva}  />
                 <Bar dataKey="preventiva" stackId="a" fill={COR_CLASSE.preventiva} />
+                <Bar dataKey="projeto"    stackId="a" fill={COR_CLASSE.projeto}    />
                 <Bar dataKey="outros"     stackId="a" fill={COR_CLASSE.outros}     radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -660,6 +665,7 @@ export default function ManutencaoPage() {
                   <Legend formatter={v => LABEL_CLASSE[v] ?? v} wrapperStyle={{ fontSize: 11 }} />
                   <Bar dataKey="corretiva"  stackId="a" fill={COR_CLASSE.corretiva}  />
                   <Bar dataKey="preventiva" stackId="a" fill={COR_CLASSE.preventiva} />
+                  <Bar dataKey="projeto"    stackId="a" fill={COR_CLASSE.projeto}    />
                   <Bar dataKey="outros"     stackId="a" fill={COR_CLASSE.outros}     />
                 </BarChart>
               </ResponsiveContainer>
@@ -682,6 +688,7 @@ export default function ManutencaoPage() {
                 <Legend formatter={v => LABEL_CLASSE[v] ?? v} wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="corretiva"  stackId="a" fill={COR_CLASSE.corretiva}  />
                 <Bar dataKey="preventiva" stackId="a" fill={COR_CLASSE.preventiva} />
+                <Bar dataKey="projeto"    stackId="a" fill={COR_CLASSE.projeto}    />
                 <Bar dataKey="outros"     stackId="a" fill={COR_CLASSE.outros}     radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
