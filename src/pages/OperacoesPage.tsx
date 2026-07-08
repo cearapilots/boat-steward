@@ -90,8 +90,15 @@ function isInoperante(efeito: string | null | undefined): boolean {
   return (efeito ?? "").trim() === "Inoperante";
 }
 
-function isCorretiva(tipo: string | null | undefined): boolean {
-  return (tipo ?? "").toLowerCase().includes("corretiva");
+function isProjeto(tipo: string | null | undefined): boolean {
+  const t = (tipo ?? "").toLowerCase();
+  return t.includes("projeto") || t.includes("melhoria") || t.includes("modificação");
+}
+
+function isDowntimeTecnica(o: any): boolean {
+  if (!isInoperante(o.efeito)) return false;
+  const t = (o.tipo_ocorrencia ?? "").toLowerCase();
+  return t.includes("corretiva") && !isProjeto(o.tipo_ocorrencia);
 }
 
 function mergeIntervals(intervals: { s: number; e: number }[]): { s: number; e: number }[] {
@@ -142,29 +149,10 @@ function calcDowntimeHoursCorretiva(
   periodStart: Date,
   periodEnd: Date,
 ): number {
-  const ps = periodStart.getTime();
-  const pe = periodEnd.getTime();
-  const intervals = (ocorrencias ?? [])
-    .filter(o =>
-      Number(o.cd_lancha) === cdLancha &&
-      isInoperante(o.efeito) &&
-      isCorretiva(o.tipo_ocorrencia) &&
-      o.data_inicio,
-    )
-    .map(o => {
-      const s = new Date(o.data_inicio).getTime();
-      let endMs: number;
-      if (o.data_fim) {
-        endMs = new Date(o.data_fim).getTime();
-      } else if (o.duracao_horas != null && Number(o.duracao_horas) > 0) {
-        endMs = s + Number(o.duracao_horas) * 3_600_000;
-      } else {
-        return { s: 0, e: 0 };
-      }
-      return { s: Math.max(s, ps), e: Math.min(endMs, pe) };
-    })
-    .filter(i => i.s < i.e);
-  return mergeIntervals(intervals).reduce((sum, i) => sum + (i.e - i.s) / 3_600_000, 0);
+  return calcDowntimeHours(
+    (ocorrencias ?? []).filter(isDowntimeTecnica),
+    cdLancha, periodStart, periodEnd,
+  );
 }
 
 const todayStr    = new Date().toISOString().slice(0, 10);
@@ -350,6 +338,8 @@ export default function OperacoesPage() {
       m++;
       if (m > 12) { m = 1; y++; }
     }
+    const ocs    = ocorrencias ?? [];
+    const ocsTec = (ocs as any[]).filter(isDowntimeTecnica);
     return months.map(month => {
       const [my, mm] = month.split("-").map(Number);
       const monthStart = new Date(my, mm - 1, 1);
@@ -357,9 +347,10 @@ export default function OperacoesPage() {
       const horasMes   = (monthEnd.getTime() - monthStart.getTime()) / 3_600_000;
       const pt: Record<string, any> = { mes: fmtMonth(month) };
       for (const cd of selectedLanchas) {
-        const downtimeH = calcDowntimeHours(ocorrencias ?? [], cd, monthStart, monthEnd);
-        const disp = Math.max(0, Math.min(100, (horasMes - downtimeH) / horasMes * 100));
-        pt[LANCHA_NOME[cd]] = Math.round(disp * 10) / 10;
+        const downtimeOp  = calcDowntimeHours(ocs,    cd, monthStart, monthEnd);
+        const downtimeTec = calcDowntimeHours(ocsTec, cd, monthStart, monthEnd);
+        pt[LANCHA_NOME[cd]]          = Math.max(0, Math.min(100, Math.round((horasMes - downtimeOp)  / horasMes * 1000) / 10));
+        pt[LANCHA_NOME[cd] + "_tec"] = Math.max(0, Math.min(100, Math.round((horasMes - downtimeTec) / horasMes * 1000) / 10));
       }
       return pt;
     });
@@ -375,33 +366,6 @@ export default function OperacoesPage() {
       return { cd: l.cd, nome: l.nome, disp };
     });
   }, [ocorrencias, filterDe, filterAte]);
-
-  const disponibilidadeTecnicaMensal = useMemo(() => {
-    const de  = filterDe  || oneYearAgo;
-    const ate = filterAte || todayStr;
-    const months: string[] = [];
-    const [startY, startM] = de.slice(0, 7).split("-").map(Number);
-    const [endY,   endM  ] = ate.slice(0, 7).split("-").map(Number);
-    let y = startY, m = startM;
-    while (y < endY || (y === endY && m <= endM)) {
-      months.push(`${y}-${String(m).padStart(2, "0")}`);
-      m++;
-      if (m > 12) { m = 1; y++; }
-    }
-    return months.map(month => {
-      const [my, mm] = month.split("-").map(Number);
-      const monthStart = new Date(my, mm - 1, 1);
-      const monthEnd   = new Date(my, mm,     1);
-      const horasMes   = (monthEnd.getTime() - monthStart.getTime()) / 3_600_000;
-      const pt: Record<string, any> = { mes: fmtMonth(month) };
-      for (const cd of selectedLanchas) {
-        const downtimeH = calcDowntimeHoursCorretiva(ocorrencias ?? [], cd, monthStart, monthEnd);
-        const disp = Math.max(0, Math.min(100, (horasMes - downtimeH) / horasMes * 100));
-        pt[LANCHA_NOME[cd]] = Math.round(disp * 10) / 10;
-      }
-      return pt;
-    });
-  }, [ocorrencias, filterDe, filterAte, selectedLanchas]);
 
   // ── Gráfico 5: Eficiência (horas / manobra) ───────────────────────────────
 
@@ -809,9 +773,11 @@ export default function OperacoesPage() {
       <TooltipProvider>
         <div className="space-y-4">
 
-          {/* Linha 1: Disponibilidade Técnica KPI + gráfico */}
-          <div className="grid grid-cols-4 gap-4">
-            <Card className="col-span-1">
+          {/* KPI cards — Técnica + Operacional lado a lado */}
+          <div className="grid grid-cols-2 gap-4">
+
+            {/* KPI Disponibilidade Técnica (só corretivas, excl. projetos) */}
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                   Disponibilidade Técnica
@@ -820,7 +786,7 @@ export default function OperacoesPage() {
                       <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help shrink-0" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[220px] text-xs">
-                      Considera apenas as horas de inoperância causadas por manutenção <strong>corretiva</strong> (falhas não programadas). Meta ≥ 95%.
+                      Considera apenas horas de inoperância por manutenção <strong>corretiva</strong>, excluindo projetos de melhoria. Meta ≥ 95%.
                     </TooltipContent>
                   </UITooltip>
                 </CardTitle>
@@ -859,42 +825,8 @@ export default function OperacoesPage() {
               </CardContent>
             </Card>
 
-            <Card className="col-span-3">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Disponibilidade Técnica por Período (%)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {disponibilidadeTecnicaMensal.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={disponibilidadeTecnicaMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                      <YAxis domain={[0, 100]}
-                        ticks={[0, 20, 40, 60, 80, 95, 100]}
-                        tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
-                      <ReferenceArea y1={0} y2={95} fill="#FEF3C7" fillOpacity={0.25} />
-                      <ReferenceLine y={95} stroke="#9CA3AF" strokeDasharray="3 3"
-                        label={{ value: "95%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
-                      <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      {selectedLanchas.map(cd => (
-                        <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
-                          stroke={LANCHA_COR[cd]} strokeWidth={2}
-                          dot={{ r: 3 }} activeDot={{ r: 5 }}
-                          connectNulls />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Linha 2: Disponibilidade Operacional KPI + gráfico */}
-          <div className="grid grid-cols-4 gap-4">
-            <Card className="col-span-1">
+            {/* KPI Disponibilidade Operacional (tudo inoperante) */}
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                   Disponibilidade Operacional
@@ -941,39 +873,49 @@ export default function OperacoesPage() {
                 <p className="text-[10px] text-muted-foreground">Meta: ≥ 85%</p>
               </CardContent>
             </Card>
-
-            <Card className="col-span-3">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Disponibilidade Operacional por Período (%)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {disponibilidadeMensal.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={disponibilidadeMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                      <YAxis domain={[0, 100]}
-                        ticks={[0, 20, 40, 60, 80, 85, 100]}
-                        tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
-                      <ReferenceArea y1={0} y2={85} fill="#FEF3C7" fillOpacity={0.25} />
-                      <ReferenceLine y={85} stroke="#9CA3AF" strokeDasharray="3 3"
-                        label={{ value: "85%", position: "insideTopRight", fontSize: 10, fill: "#9CA3AF" }} />
-                      <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      {selectedLanchas.map(cd => (
-                        <Line key={cd} type="monotone" dataKey={LANCHA_NOME[cd]}
-                          stroke={LANCHA_COR[cd]} strokeWidth={2}
-                          dot={{ r: 3 }} activeDot={{ r: 5 }}
-                          connectNulls />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
           </div>
+
+          {/* Gráfico combinado — linha sólida=Operacional, tracejada=Técnica */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Disponibilidade por Período — Operacional (sólida) × Técnica (tracejada)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {disponibilidadeMensal.length === 0 ? (
+                <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={disponibilidadeMensal} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                    <YAxis domain={[0, 100]}
+                      ticks={[0, 20, 40, 60, 80, 85, 95, 100]}
+                      tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} />
+                    <ReferenceArea y1={0} y2={85} fill="#FEF3C7" fillOpacity={0.15} />
+                    <ReferenceLine y={85} stroke="#9CA3AF" strokeDasharray="3 3"
+                      label={{ value: "85% op.", position: "insideTopRight", fontSize: 9, fill: "#9CA3AF" }} />
+                    <ReferenceLine y={95} stroke="#9CA3AF" strokeDasharray="3 3"
+                      label={{ value: "95% tec.", position: "insideTopRight", fontSize: 9, fill: "#9CA3AF" }} />
+                    <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}%`, n]} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {selectedLanchas.map(cd => (
+                      <Line key={`${cd}_op`} type="monotone" dataKey={LANCHA_NOME[cd]}
+                        stroke={LANCHA_COR[cd]} strokeWidth={2}
+                        name={`${LANCHA_NOME[cd]} operacional`}
+                        dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                    ))}
+                    {selectedLanchas.map(cd => (
+                      <Line key={`${cd}_tec`} type="monotone" dataKey={LANCHA_NOME[cd] + "_tec"}
+                        stroke={LANCHA_COR[cd]} strokeWidth={1.5}
+                        strokeDasharray="5 3"
+                        name={`${LANCHA_NOME[cd]} técnica`}
+                        dot={false} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
 
         </div>
       </TooltipProvider>
