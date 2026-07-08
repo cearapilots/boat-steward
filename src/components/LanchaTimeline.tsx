@@ -2,13 +2,14 @@ import { useState, useMemo, useRef, useCallback } from "react";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
-type StatusType = "disponivel" | "corretiva" | "preventiva" | "restricao" | "deslocamento";
+type StatusType = "disponivel" | "corretiva" | "preventiva" | "projeto" | "restricao" | "deslocamento";
 
 const STATUS_COLOR: Record<StatusType, string> = {
   disponivel:   "#10b981",
   corretiva:    "#ef4444",
   preventiva:   "#f59e0b",
-  restricao:    "#f59e0b",
+  projeto:      "#8b5cf6",
+  restricao:    "#f97316",
   deslocamento: "#94a3b8",
 };
 
@@ -16,6 +17,7 @@ const STATUS_LABEL: Record<StatusType, string> = {
   disponivel:   "Disponível",
   corretiva:    "Manutenção corretiva",
   preventiva:   "Manutenção preventiva",
+  projeto:      "Projeto de modificação/melhoria",
   restricao:    "Com restrições",
   deslocamento: "Deslocamento entre portos",
 };
@@ -68,7 +70,10 @@ interface Pin {
 function classifyOcorrencia(efeito: string | null | undefined, tipo: string | null | undefined): StatusType | null {
   const e = (efeito ?? "").trim().toLowerCase();
   const t = (tipo   ?? "").toLowerCase();
-  if (e === "inoperante") return t.includes("corretiva") ? "corretiva" : "preventiva";
+  if (e === "inoperante") {
+    if (t.includes("projeto") || t.includes("melhoria") || t.includes("modificação")) return "projeto";
+    return t.includes("corretiva") ? "corretiva" : "preventiva";
+  }
   if (e.includes("restri")) return "restricao";
   // "Operante" e "Não Altera" = operação normal → não exibir no timeline
   return null;
