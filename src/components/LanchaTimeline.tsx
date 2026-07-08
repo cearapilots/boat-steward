@@ -65,12 +65,13 @@ interface Pin {
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 
-function classifyOcorrencia(efeito: string | null, tipo: string | null): StatusType {
+function classifyOcorrencia(efeito: string | null | undefined, tipo: string | null | undefined): StatusType | null {
   const e = (efeito ?? "").trim().toLowerCase();
-  const t = (tipo  ?? "").toLowerCase();
+  const t = (tipo   ?? "").toLowerCase();
   if (e === "inoperante") return t.includes("corretiva") ? "corretiva" : "preventiva";
   if (e.includes("restri")) return "restricao";
-  return "restricao";
+  // "Operante" e "Não Altera" = operação normal → não exibir no timeline
+  return null;
 }
 
 function buildStatusSegs(
@@ -88,8 +89,10 @@ function buildStatusSegs(
     else e2 = end;
     const cs = Math.max(s, start); const ce = Math.min(e2, end);
     if (cs >= ce) continue;
+    const type = classifyOcorrencia(o.efeito, o.tipo_ocorrencia);
+    if (type === null) continue; // "Operante" / "Não Altera" → ignorar
     segs.push({
-      type: classifyOcorrencia(o.efeito, o.tipo_ocorrencia),
+      type,
       startMs: cs, endMs: ce,
       detail: [o.tipo_ocorrencia, o.efeito].filter(Boolean).join(" — "),
     });
