@@ -33,7 +33,7 @@ const LANCHA_STYLE: Record<string, { color: string; letter: string }> = {
 
 const LANCHAS_ORDER = ["Flexeiras", "Fortim", "Taíba"];
 
-const LANCHA_LETRA: Record<number, string> = { 121: "F", 1003: "O", 117: "T" };
+const LANCHA_LETRA: Record<number, string> = { 121: "F", 1003: "F", 117: "T" };
 const LANCHA_COR:   Record<number, string> = { 121: "#2563EB", 1003: "#16A34A", 117: "#F97316" };
 
 type VencItem = {
@@ -369,43 +369,48 @@ function MesCell({
         ))}
 
         {vencMes.length > 0 && (
-          <>
-            <div className="border-t border-gray-200 mt-2 pt-2">
-              <p className="text-[9px] text-gray-400 uppercase tracking-widest mb-1.5 font-medium">
-                Vencimentos
-              </p>
-            </div>
-            <div className="rounded-md bg-gray-50 px-2 py-1.5 space-y-1.5">
+          <div className="mt-2 pt-2 border-t border-gray-100">
+            <p className="text-[8px] text-gray-400 uppercase tracking-widest mb-1 font-medium">
+              Vencimentos
+            </p>
+            <div className="space-y-1">
               {vencMes.map((v, i) => {
                 const dia       = v.dt_vencimento.slice(8, 10);
                 const corLancha = LANCHA_COR[v.cd_lancha] ?? "#6B7280";
                 const letra     = LANCHA_LETRA[v.cd_lancha] ?? "?";
-                const statusIcon =
+                const icon =
                   v.status === "realizado" ? (
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 bg-green-500 border-green-500">
-                      <span className="text-white text-[9px] font-bold">{letra}</span>
-                    </div>
-                  ) : v.status === "atrasado" ? (
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 border-dashed border-red-500">
-                      <span style={{ color: corLancha }} className="text-[9px] font-bold">{letra}</span>
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: corLancha }}
+                    >
+                      <span className="text-white text-[8px] font-bold">{letra}</span>
                     </div>
                   ) : (
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 border-dashed border-orange-400">
-                      <span style={{ color: corLancha }} className="text-[9px] font-bold">{letra}</span>
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center border-2 border-dashed shrink-0"
+                      style={{ borderColor: v.status === "atrasado" ? "#DC2626" : corLancha }}
+                    >
+                      <span
+                        className="text-[8px] font-bold"
+                        style={{ color: v.status === "atrasado" ? "#DC2626" : corLancha }}
+                      >
+                        {letra}
+                      </span>
                     </div>
                   );
                 return (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs text-gray-600 truncate block">{v.tipo_label}</span>
-                      <span className="text-[9px] text-gray-400">vence dia {dia}</span>
-                    </div>
-                    {statusIcon}
+                  <div key={i} className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-gray-600 truncate flex-1">
+                      {v.tipo_label}
+                      <span className="text-gray-400 ml-1">· dia {dia}</span>
+                    </span>
+                    {icon}
                   </div>
                 );
               })}
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
