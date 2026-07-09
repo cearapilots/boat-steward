@@ -22,6 +22,20 @@ const STATUS_LABEL: Record<StatusType, string> = {
   deslocamento: "Deslocamento entre portos",
 };
 
+const PRIORIDADE: Record<string, number> = {
+  corretiva:    6,
+  preventiva:   5,
+  projeto:      4,
+  inoperante:   3,
+  restricao:    2,
+  deslocamento: 1,
+  disponivel:   0,
+};
+
+function statusMaisGrave(a: string, b: string): string {
+  return (PRIORIDADE[a] ?? 0) >= (PRIORIDADE[b] ?? 0) ? a : b;
+}
+
 // Porto colors — more distinct (blue vs violet)
 const PORTO_HALO: Record<string, string> = {
   "Mucuripe": "#c4b5fd",   // violet-300
@@ -66,6 +80,28 @@ interface Pin {
 }
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
+
+function resolveOverlaps(segs: StatusSeg[]): StatusSeg[] {
+  if (segs.length === 0) return [];
+  const points = [...new Set(segs.flatMap(s => [s.startMs, s.endMs]))].sort((a, b) => a - b);
+  const result: StatusSeg[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const t0 = points[i];
+    const t1 = points[i + 1];
+    const covering = segs.filter(s => s.startMs <= t0 && s.endMs >= t1);
+    if (covering.length === 0) continue;
+    const winner = covering.reduce((best, cur) =>
+      statusMaisGrave(cur.type, best.type) === cur.type ? cur : best,
+    );
+    const last = result[result.length - 1];
+    if (last && last.type === winner.type && last.endMs === t0) {
+      last.endMs = t1;
+    } else {
+      result.push({ type: winner.type, startMs: t0, endMs: t1, detail: winner.detail });
+    }
+  }
+  return result;
+}
 
 function classifyOcorrencia(efeito: string | null | undefined, tipo: string | null | undefined): StatusType | null {
   const e = (efeito ?? "").trim().toLowerCase();
@@ -113,7 +149,7 @@ function buildStatusSegs(
     segs.push({ type: "deslocamento", startMs: cs, endMs: ce, detail: `${f.ds_local_orig ?? "—"} → ${f.ds_local_dest ?? "—"}` });
   }
 
-  return segs;
+  return resolveOverlaps(segs);
 }
 
 // Porto at time T = porto of the last manobra at or before T.
