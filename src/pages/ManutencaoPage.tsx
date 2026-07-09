@@ -78,6 +78,40 @@ function fmtMes(yyyymm: string): string {
   return `${MESES_ABR[parseInt(m) - 1]}/${y.slice(2)}`;
 }
 
+function horasNoMes(
+  dataInicio: string,
+  dataFim: string | null,
+  duracaoHoras: number | null,
+  monthStart: Date,
+  monthEnd: Date,
+): number {
+  const s = new Date(dataInicio).getTime();
+  let e: number;
+  if (dataFim) {
+    e = new Date(dataFim).getTime();
+  } else if (duracaoHoras != null && duracaoHoras > 0) {
+    e = s + duracaoHoras * 3_600_000;
+  } else {
+    return 0;
+  }
+  const cs = Math.max(s, monthStart.getTime());
+  const ce = Math.min(e, monthEnd.getTime());
+  if (cs >= ce) return 0;
+  return (ce - cs) / 3_600_000;
+}
+
+function monthsInRange(de: string, ate: string): string[] {
+  const months: string[] = [];
+  const [startY, startM] = de.slice(0, 7).split("-").map(Number);
+  const [endY,   endM  ] = ate.slice(0, 7).split("-").map(Number);
+  let y = startY, m = startM;
+  while (y < endY || (y === endY && m <= endM)) {
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  return months;
+}
+
 const BUCKETS = [
   { label: "<1h",  min: 0,   max: 1        },
   { label: "1–4h", min: 1,   max: 4        },
@@ -208,27 +242,25 @@ export default function ManutencaoPage() {
 
   // ── Gráfico 1: Horas por mês empilhadas ──────────────────────────────────
   const dadosHorasMes = useMemo(() => {
-    const map = new Map<string, { corretiva: number; preventiva: number; projeto: number; outros: number }>();
-    for (const o of ocFiltradas as any[]) {
-      const mes = (o.data_inicio ?? "").slice(0, 7);
-      if (!mes) continue;
-      if (!map.has(mes)) map.set(mes, { corretiva: 0, preventiva: 0, projeto: 0, outros: 0 });
-      const cls = classifyTipo(o.tipo_ocorrencia);
-      map.get(mes)![cls] += Number(o.duracao_horas) || 0;
-    }
-    return [...map.keys()].sort().map(mes => ({ mes: fmtMes(mes), ...map.get(mes)! }));
-  }, [ocFiltradas]);
+    const months = monthsInRange(filterDe || oneYearAgo, filterAte || todayStr);
+    return months.map(month => {
+      const [my, mm] = month.split("-").map(Number);
+      const monthStart = new Date(my, mm - 1, 1);
+      const monthEnd   = new Date(my, mm,     1);
+      const pt: Record<string, any> = { mes: fmtMes(month), corretiva: 0, preventiva: 0, projeto: 0, outros: 0 };
+      for (const o of ocFiltradas as any[]) {
+        if (!o.data_inicio) continue;
+        const h = horasNoMes(o.data_inicio, o.data_fim, o.duracao_horas, monthStart, monthEnd);
+        if (h <= 0) continue;
+        const cls = classifyTipo(o.tipo_ocorrencia);
+        pt[cls] = Math.round(((pt[cls] ?? 0) + h) * 10) / 10;
+      }
+      return pt;
+    });
+  }, [ocFiltradas, filterDe, filterAte]);
 
   // ── Gráfico 2: Ratio Manut/Op por mês por lancha ─────────────────────────
   const dadosRatioMes = useMemo(() => {
-    const manutMap = new Map<string, Map<number, number>>();
-    for (const o of ocFiltradas as any[]) {
-      const mes = (o.data_inicio ?? "").slice(0, 7);
-      if (!mes || o.cd_lancha === null) continue;
-      if (!manutMap.has(mes)) manutMap.set(mes, new Map());
-      const lm = manutMap.get(mes)!;
-      lm.set(o.cd_lancha, (lm.get(o.cd_lancha) ?? 0) + (Number(o.duracao_horas) || 0));
-    }
     const opMap = new Map<string, Map<number, number>>();
     for (const i of (indicadores ?? []) as any[]) {
       if (!selLanchas.includes(Number(i.cd_lancha))) continue;
@@ -239,13 +271,21 @@ export default function ManutencaoPage() {
       const om = opMap.get(mes)!;
       om.set(Number(i.cd_lancha), (om.get(Number(i.cd_lancha)) ?? 0) + (Number(i.dc_dif_be) || 0));
     }
-    const allMeses = [...new Set([...manutMap.keys(), ...opMap.keys()])].sort();
+    const months = monthsInRange(filterDe || oneYearAgo, filterAte || todayStr);
+    const allMeses = [...new Set([...months, ...[...opMap.keys()]])].sort();
     return allMeses.map(mes => {
+      const [my, mm] = mes.split("-").map(Number);
+      const monthStart = new Date(my, mm - 1, 1);
+      const monthEnd   = new Date(my, mm,     1);
       const row: Record<string, any> = { mes: fmtMes(mes) };
       for (const { cd } of LANCHAS) {
         if (!selLanchas.includes(cd)) continue;
-        const hManut = manutMap.get(mes)?.get(cd) ?? 0;
-        const hOp    = opMap.get(mes)?.get(cd)    ?? 0;
+        let hManut = 0;
+        for (const o of ocFiltradas as any[]) {
+          if (Number(o.cd_lancha) !== cd || !o.data_inicio) continue;
+          hManut += horasNoMes(o.data_inicio, o.data_fim, o.duracao_horas, monthStart, monthEnd);
+        }
+        const hOp = opMap.get(mes)?.get(cd) ?? 0;
         row[LANCHA_NOME[cd]] = hOp > 0 ? Number((hManut / hOp * 100).toFixed(2)) : null;
       }
       return row;
