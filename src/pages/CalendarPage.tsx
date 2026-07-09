@@ -5,6 +5,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   useCalendarioManutencoes,
   useRealizadasCalendario,
+  useVencimentos,
+  useVencimentosHistorico,
   type CalendarioManutencaoItem,
   type RealizadaItem,
 } from "@/hooks/useFleetData";
@@ -30,6 +32,43 @@ const LANCHA_STYLE: Record<string, { color: string; letter: string }> = {
 };
 
 const LANCHAS_ORDER = ["Flexeiras", "Fortim", "Taíba"];
+
+const LANCHA_LETRA: Record<number, string> = { 121: "F", 1003: "O", 117: "T" };
+const LANCHA_COR:   Record<number, string> = { 121: "#2563EB", 1003: "#16A34A", 117: "#F97316" };
+
+type VencItem = {
+  cd_lancha: number;
+  tipo_label: string;
+  dt_vencimento: string;
+  status: "realizado" | "pendente" | "atrasado";
+};
+
+function getVencimentosMes(
+  ano: number,
+  mes: number,
+  vencimentos: any[],
+  vencimentosHistorico: any[],
+): VencItem[] {
+  const mesStr = `${ano}-${String(mes).padStart(2, "0")}`;
+  const hoje   = new Date().toISOString().slice(0, 10);
+  const items: VencItem[] = [];
+
+  for (const v of vencimentos) {
+    if (v.dt_vencimento.slice(0, 7) !== mesStr) continue;
+    const status: VencItem["status"] = v.dt_vencimento < hoje ? "atrasado" : "pendente";
+    items.push({ cd_lancha: v.cd_lancha, tipo_label: v.tipo_label, dt_vencimento: v.dt_vencimento, status });
+  }
+
+  for (const h of vencimentosHistorico) {
+    if (h.dt_vencimento.slice(0, 7) !== mesStr) continue;
+    const jaExiste = items.some(i => i.cd_lancha === h.cd_lancha && i.tipo_label === h.tipo_label);
+    if (!jaExiste) {
+      items.push({ cd_lancha: h.cd_lancha, tipo_label: h.tipo_label, dt_vencimento: h.dt_vencimento, status: "realizado" });
+    }
+  }
+
+  return items.sort((a, b) => a.dt_vencimento.localeCompare(b.dt_vencimento));
+}
 
 type LanchaStatus = "concluido" | "pendente" | "atrasado";
 
@@ -275,7 +314,17 @@ function LanchaBadge({
 }
 
 // ── Célula de mês ───────────────────────────────────────────────────────────
-function MesCell({ mesIdx, groups, ano }: { mesIdx: number; groups: GroupData[]; ano: number }) {
+function MesCell({
+  mesIdx, groups, ano, vencimentos, vencimentosHistorico,
+}: {
+  mesIdx: number;
+  groups: GroupData[];
+  ano: number;
+  vencimentos: any[];
+  vencimentosHistorico: any[];
+}) {
+  const vencMes = getVencimentosMes(ano, mesIdx + 1, vencimentos, vencimentosHistorico);
+
   return (
     <div className="border border-border rounded-md overflow-hidden bg-card flex flex-col min-h-32">
       <div
@@ -318,6 +367,46 @@ function MesCell({ mesIdx, groups, ano }: { mesIdx: number; groups: GroupData[];
             </span>
           </div>
         ))}
+
+        {vencMes.length > 0 && (
+          <>
+            <div className="border-t border-gray-200 mt-2 pt-2">
+              <p className="text-[9px] text-gray-400 uppercase tracking-widest mb-1.5 font-medium">
+                Vencimentos
+              </p>
+            </div>
+            <div className="rounded-md bg-gray-50 px-2 py-1.5 space-y-1.5">
+              {vencMes.map((v, i) => {
+                const dia       = v.dt_vencimento.slice(8, 10);
+                const corLancha = LANCHA_COR[v.cd_lancha] ?? "#6B7280";
+                const letra     = LANCHA_LETRA[v.cd_lancha] ?? "?";
+                const statusIcon =
+                  v.status === "realizado" ? (
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 bg-green-500 border-green-500">
+                      <span className="text-white text-[9px] font-bold">{letra}</span>
+                    </div>
+                  ) : v.status === "atrasado" ? (
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 border-dashed border-red-500">
+                      <span style={{ color: corLancha }} className="text-[9px] font-bold">{letra}</span>
+                    </div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 border-dashed border-orange-400">
+                      <span style={{ color: corLancha }} className="text-[9px] font-bold">{letra}</span>
+                    </div>
+                  );
+                return (
+                  <div key={i} className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs text-gray-600 truncate block">{v.tipo_label}</span>
+                      <span className="text-[9px] text-gray-400">vence dia {dia}</span>
+                    </div>
+                    {statusIcon}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -328,6 +417,8 @@ export default function CalendarPage() {
   const [ano, setAno] = useState(new Date().getFullYear());
   const { data = [], isLoading } = useCalendarioManutencoes(ano);
   const { data: realizadas = [], isLoading: loadingReal } = useRealizadasCalendario(ano);
+  const { data: vencimentos = [] }          = useVencimentos();
+  const { data: vencimentosHistorico = [] } = useVencimentosHistorico();
 
   const hoje = useMemo(() => new Date(), []);
 
@@ -425,7 +516,7 @@ export default function CalendarPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {monthGroups.map((groups, i) => (
-            <MesCell key={i} mesIdx={i} groups={groups} ano={ano} />
+            <MesCell key={i} mesIdx={i} groups={groups} ano={ano} vencimentos={vencimentos} vencimentosHistorico={vencimentosHistorico} />
           ))}
         </div>
       )}
