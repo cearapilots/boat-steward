@@ -33,8 +33,6 @@ const LANCHA_STYLE: Record<string, { color: string; letter: string }> = {
 
 const LANCHAS_ORDER = ["Flexeiras", "Fortim", "Taíba"];
 
-const LANCHA_LETRA: Record<number, string> = { 121: "F", 1003: "F", 117: "T" };
-const LANCHA_COR:   Record<number, string> = { 121: "#2563EB", 1003: "#16A34A", 117: "#F97316" };
 
 type VencItem = {
   cd_lancha: number;
@@ -369,43 +367,31 @@ function MesCell({
         ))}
 
         {vencMes.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-gray-100">
-            <p className="text-[8px] text-gray-400 uppercase tracking-widest mb-1 font-medium">
+          <div className="mt-2 border-t border-gray-200 pt-2">
+            <p className="text-[9px] text-gray-400 uppercase tracking-widest mb-1.5 font-medium px-0.5">
               Vencimentos
             </p>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {vencMes.map((v, i) => {
-                const dia       = v.dt_vencimento.slice(8, 10);
-                const corLancha = LANCHA_COR[v.cd_lancha] ?? "#6B7280";
-                const letra     = LANCHA_LETRA[v.cd_lancha] ?? "?";
-                const icon =
-                  v.status === "realizado" ? (
-                    <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: corLancha }}
-                    >
-                      <span className="text-white text-[8px] font-bold">{letra}</span>
-                    </div>
-                  ) : (
-                    <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center border-2 border-dashed shrink-0"
-                      style={{ borderColor: v.status === "atrasado" ? "#DC2626" : corLancha }}
-                    >
-                      <span
-                        className="text-[8px] font-bold"
-                        style={{ color: v.status === "atrasado" ? "#DC2626" : corLancha }}
-                      >
-                        {letra}
-                      </span>
-                    </div>
-                  );
+                const dia = v.dt_vencimento.slice(8, 10);
+                const lanchaStatus: LanchaStatus =
+                  v.status === "realizado" ? "concluido" :
+                  v.status === "atrasado"  ? "atrasado"  : "pendente";
+                const lanchaNome =
+                  v.cd_lancha === 121  ? "Flexeiras" :
+                  v.cd_lancha === 1003 ? "Fortim"    :
+                  v.cd_lancha === 117  ? "Taíba"     : "?";
+                const tooltipText =
+                  v.status === "realizado" ? `${lanchaNome} — renovado` :
+                  v.status === "atrasado"  ? `${lanchaNome} — vencido em ${dia}/${String(mesIdx + 1).padStart(2, "0")}` :
+                  `${lanchaNome} — vence dia ${dia}`;
                 return (
-                  <div key={i} className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] text-gray-600 truncate flex-1">
+                  <div key={i} className="flex items-center justify-between py-0.5">
+                    <span className="text-xs text-gray-700 flex-1 truncate">
                       {v.tipo_label}
-                      <span className="text-gray-400 ml-1">· dia {dia}</span>
+                      <span className="text-gray-400 text-[10px] ml-1">· dia {dia}</span>
                     </span>
-                    {icon}
+                    <LanchaBadge nome={lanchaNome} status={lanchaStatus} tooltipText={tooltipText} />
                   </div>
                 );
               })}
