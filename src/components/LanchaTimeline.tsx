@@ -23,12 +23,11 @@ const STATUS_LABEL: Record<StatusType, string> = {
 };
 
 const PRIORIDADE: Record<string, number> = {
-  corretiva:    6,
-  preventiva:   5,
-  projeto:      4,
-  inoperante:   3,
-  restricao:    2,
-  deslocamento: 1,
+  corretiva:    5,
+  preventiva:   4,
+  projeto:      3,
+  deslocamento: 2,
+  restricao:    1,
   disponivel:   0,
 };
 
@@ -65,6 +64,8 @@ interface StatusSeg {
   startMs: number;
   endMs: number;
   detail: string;
+  origStartMs: number;
+  origEndMs: number;
 }
 
 interface PortoSeg {
@@ -97,7 +98,7 @@ function resolveOverlaps(segs: StatusSeg[]): StatusSeg[] {
     if (last && last.type === winner.type && last.endMs === t0) {
       last.endMs = t1;
     } else {
-      result.push({ type: winner.type, startMs: t0, endMs: t1, detail: winner.detail });
+      result.push({ type: winner.type, startMs: t0, endMs: t1, detail: winner.detail, origStartMs: winner.origStartMs, origEndMs: winner.origEndMs });
     }
   }
   return result;
@@ -135,6 +136,7 @@ function buildStatusSegs(
     segs.push({
       type,
       startMs: cs, endMs: ce,
+      origStartMs: s, origEndMs: e2,
       detail: [o.tipo_ocorrencia, o.efeito].filter(Boolean).join(" — "),
     });
   }
@@ -146,7 +148,7 @@ function buildStatusSegs(
     const e2 = new Date(f.dh_fim).getTime();
     const cs = Math.max(s, start); const ce = Math.min(e2, end);
     if (cs >= ce) continue;
-    segs.push({ type: "deslocamento", startMs: cs, endMs: ce, detail: `${f.ds_local_orig ?? "—"} → ${f.ds_local_dest ?? "—"}` });
+    segs.push({ type: "deslocamento", startMs: cs, endMs: ce, origStartMs: s, origEndMs: e2, detail: `${f.ds_local_orig ?? "—"} → ${f.ds_local_dest ?? "—"}` });
   }
 
   return resolveOverlaps(segs);
@@ -407,8 +409,8 @@ export function LanchaTimeline({ ocorrencias, manobras, fainas }: LanchaTimeline
                           backgroundColor: STATUS_COLOR[seg.type],
                           zIndex:          seg.type === "deslocamento" ? 3 : 2,
                         }}
-                        onMouseEnter={e => onHover(e, [STATUS_LABEL[seg.type], `${fmtDt(seg.startMs)} → ${fmtDt(seg.endMs)}`, seg.detail])}
-                        onMouseMove={e => onHover(e, [STATUS_LABEL[seg.type], `${fmtDt(seg.startMs)} → ${fmtDt(seg.endMs)}`, seg.detail])}
+                        onMouseEnter={e => onHover(e, [STATUS_LABEL[seg.type], `${fmtDt(seg.origStartMs)} → ${fmtDt(seg.origEndMs)}`, seg.detail])}
+                        onMouseMove={e => onHover(e, [STATUS_LABEL[seg.type], `${fmtDt(seg.origStartMs)} → ${fmtDt(seg.origEndMs)}`, seg.detail])}
                       />
                     ))}
                   </div>
