@@ -283,6 +283,7 @@ export default function ManutencaoPage() {
         let hManut = 0;
         for (const o of ocFiltradas as any[]) {
           if (Number(o.cd_lancha) !== cd || !o.data_inicio) continue;
+          if ((o.efeito ?? "").trim() !== "Inoperante") continue;
           hManut += horasNoMes(o.data_inicio, o.data_fim, o.duracao_horas, monthStart, monthEnd);
         }
         const hOp = opMap.get(mes)?.get(cd) ?? 0;
@@ -294,11 +295,18 @@ export default function ManutencaoPage() {
 
   // ── Gráfico 3: h Manutenção / Manobra por mês ────────────────────────────
   const dadosManutManobra = useMemo(() => {
-    const manutMap   = new Map<string, number>();
-    for (const o of ocFiltradas as any[]) {
-      const mes = (o.data_inicio ?? "").slice(0, 7);
-      if (!mes) continue;
-      manutMap.set(mes, (manutMap.get(mes) ?? 0) + (Number(o.duracao_horas) || 0));
+    const manutMap = new Map<string, number>();
+    const months = monthsInRange(filterDe || oneYearAgo, filterAte || todayStr);
+    for (const mes of months) {
+      const [my, mm] = mes.split("-").map(Number);
+      const monthStart = new Date(my, mm - 1, 1);
+      const monthEnd   = new Date(my, mm,     1);
+      let total = 0;
+      for (const o of ocFiltradas as any[]) {
+        if (!o.data_inicio) continue;
+        total += horasNoMes(o.data_inicio, o.data_fim, o.duracao_horas, monthStart, monthEnd);
+      }
+      if (total > 0) manutMap.set(mes, total);
     }
     const manobraMap = new Map<string, number>();
     for (const m of (manobras ?? []) as any[]) {
