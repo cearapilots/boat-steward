@@ -952,3 +952,33 @@ export function useAbastecimentos() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export function useVencimentos() {
+  return useQuery({
+    queryKey: ["vencimentos"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("vencimentos")
+        .select("cd_lancha, ds_lancha, tipo, tipo_label, dt_vencimento")
+        .order("dt_vencimento");
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useVencimentosHistorico() {
+  return useQuery({
+    queryKey: ["vencimentos_historico"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("vencimentos_historico")
+        .select("cd_lancha, ds_lancha, tipo, tipo_label, dt_vencimento, dt_detectado")
+        .order("dt_vencimento", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
