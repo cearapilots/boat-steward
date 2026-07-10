@@ -236,13 +236,26 @@ Deno.serve(async (req) => {
 
             if (existeMutOleo) continue;
 
+            // Buscar horímetros atuais da lancha
+            const { data: lanchaHorimetros } = await supabase
+              .from("lanchas")
+              .select("horimetro, horimetro_gerador")
+              .eq("id", lancha.id)
+              .single();
+
+            // Usar horímetro correto pelo tipo do ativo
+            const horimetroParaInserir =
+              tipoAtivoOleo === "gerador"
+                ? (lanchaHorimetros?.horimetro_gerador ?? null)
+                : (lanchaHorimetros?.horimetro ?? null);
+
             const { error: errMutOleo } = await supabase.from("manutencoes").insert({
               ativo_id: pos.ativo_id,
               lancha_id: lancha.id,
               tipo: "troca_oleo",
               data_manutencao: dataOcorrencia,
-              horimetro_lancha: null,
-              horimetro_equipamento: null,
+              horimetro_lancha: horimetroParaInserir,
+              horimetro_equipamento: horimetroParaInserir,
               observacao: oc.DS_OCORRENCIA,
               origem: "webpilot_sync",
             });
@@ -266,6 +279,8 @@ Deno.serve(async (req) => {
                   dados_extras: {
                     cd_ocorrencia: cdOcorrencia,
                     ds_tipo_ocorrencia: oc.DS_TIPO_OCORRENCIA,
+                    horimetro_lancha: horimetroParaInserir,
+                    horimetro_equipamento: horimetroParaInserir,
                   },
                   origem: "webpilot_sync",
                 });
