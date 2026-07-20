@@ -56,6 +56,7 @@ const TRACK_H  = 40;  // px — track row height
 const BAR_TOP  = 10;  // px — status bar top offset inside track
 const BAR_H    = 20;  // px — status bar height
 const MIN_GAP_PCT = 0.35; // minimum gap between manobra markers (%)
+const TOOLTIP_W = 280; // px — max tooltip width; descriptions wrap inside it
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,7 @@ interface StatusSeg {
   startMs: number;
   endMs: number;
   detail: string;
+  desc: string;
   origStartMs: number;
   origEndMs: number;
 }
@@ -98,7 +100,7 @@ function resolveOverlaps(segs: StatusSeg[]): StatusSeg[] {
     if (last && last.type === winner.type && last.endMs === t0) {
       last.endMs = t1;
     } else {
-      result.push({ type: winner.type, startMs: t0, endMs: t1, detail: winner.detail, origStartMs: winner.origStartMs, origEndMs: winner.origEndMs });
+      result.push({ type: winner.type, startMs: t0, endMs: t1, detail: winner.detail, desc: winner.desc, origStartMs: winner.origStartMs, origEndMs: winner.origEndMs });
     }
   }
   return result;
@@ -111,7 +113,12 @@ function classifyOcorrencia(efeito: string | null | undefined, tipo: string | nu
     if (t.includes("projeto") || t.includes("melhoria") || t.includes("modificação")) return "projeto";
     return t.includes("corretiva") ? "corretiva" : "preventiva";
   }
-  if (e.includes("restri")) return "restricao";
+  if (e.includes("restri")) {
+    // Preventiva com restrições continua sendo preventiva (amarelo): o que
+    // define a barra é a natureza do serviço, não o efeito parcial.
+    if (t.includes("preventiva")) return "preventiva";
+    return "restricao";
+  }
   // "Operante" e "Não Altera" = operação normal → não exibir no timeline
   return null;
 }
@@ -138,6 +145,7 @@ function buildStatusSegs(
       startMs: cs, endMs: ce,
       origStartMs: s, origEndMs: e2,
       detail: [o.tipo_ocorrencia, o.efeito].filter(Boolean).join(" — "),
+      desc: (o.descricao ?? "").trim(),
     });
   }
 
@@ -148,7 +156,7 @@ function buildStatusSegs(
     const e2 = new Date(f.dh_fim).getTime();
     const cs = Math.max(s, start); const ce = Math.min(e2, end);
     if (cs >= ce) continue;
-    segs.push({ type: "deslocamento", startMs: cs, endMs: ce, origStartMs: s, origEndMs: e2, detail: `${f.ds_local_orig ?? "—"} → ${f.ds_local_dest ?? "—"}` });
+    segs.push({ type: "deslocamento", startMs: cs, endMs: ce, origStartMs: s, origEndMs: e2, detail: `${f.ds_local_orig ?? "—"} → ${f.ds_local_dest ?? "—"}`, desc: "" });
   }
 
   return resolveOverlaps(segs);
@@ -205,6 +213,17 @@ function buildPins(
 
 function fmtDt(ms: number): string {
   return new Date(ms).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+// Linhas do tooltip de um segmento de status. As datas são as do evento
+// original, não as do segmento recortado por resolveOverlaps().
+function segLines(seg: StatusSeg): string[] {
+  return [
+    STATUS_LABEL[seg.type],
+    `${fmtDt(seg.origStartMs)} → ${fmtDt(seg.origEndMs)}`,
+    seg.detail,
+    seg.desc,
+  ].filter(Boolean);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -409,8 +428,8 @@ export function LanchaTimeline({ ocorrencias, manobras, fainas }: LanchaTimeline
                           backgroundColor: STATUS_COLOR[seg.type],
                           zIndex:          seg.type === "deslocamento" ? 3 : 2,
                         }}
-                        onMouseEnter={e => onHover(e, [STATUS_LABEL[seg.type], `${fmtDt(seg.origStartMs)} → ${fmtDt(seg.origEndMs)}`, seg.detail])}
-                        onMouseMove={e => onHover(e, [STATUS_LABEL[seg.type], `${fmtDt(seg.origStartMs)} → ${fmtDt(seg.origEndMs)}`, seg.detail])}
+                        onMouseEnter={e => onHover(e, segLines(seg))}
+                        onMouseMove={e => onHover(e, segLines(seg))}
                       />
                     ))}
                   </div>
@@ -440,13 +459,14 @@ export function LanchaTimeline({ ocorrencias, manobras, fainas }: LanchaTimeline
         {/* Tooltip */}
         {tooltip && (() => {
           const containerW = wrapRef.current?.offsetWidth ?? 900;
-          const flip = tooltip.x > containerW - 220;
+          const flip = tooltip.x > containerW - (TOOLTIP_W + 30);
           return (
             <div
-              className="absolute z-50 pointer-events-none bg-popover border border-border rounded-md shadow-lg px-2.5 py-1.5 text-xs space-y-0.5 whitespace-nowrap"
+              className="absolute z-50 pointer-events-none bg-popover border border-border rounded-md shadow-lg px-2.5 py-1.5 text-xs space-y-0.5"
               style={{
-                left: flip ? tooltip.x - 190 : tooltip.x + 12,
+                left: flip ? tooltip.x - (TOOLTIP_W + 12) : tooltip.x + 12,
                 top:  Math.max(0, tooltip.y - 10),
+                maxWidth: TOOLTIP_W,
               }}
             >
               {tooltip.lines.map((line, i) => (
