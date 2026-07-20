@@ -22,7 +22,7 @@ type WpTroca = {
 type PosicaoRow = {
   ativo_id: string;
   posicao: string | null;
-  ativos: { id: string; nome: string; tipo: string } | null;
+  ativos: { id: string; nome: string; tipo: string; offset_instalacao: number | null } | null;
 };
 
 type SkipReason =
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
       const dataAbastecimento = troca.DH_ABASTECIMENTO.split("T")[0];
       const { data: posicoes, error: errPos } = await supabase
         .from("posicoes")
-        .select("ativo_id, posicao, ativos(id, nome, tipo)")
+        .select("ativo_id, posicao, ativos(id, nome, tipo, offset_instalacao)")
         .eq("lancha_id", lancha.id)
         .lte("data_instalacao", dataAbastecimento)
         .or(`data_remocao.is.null,data_remocao.gt.${dataAbastecimento}`);
@@ -192,6 +192,16 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // horimetro_equipamento: horas acumuladas do equipamento físico.
+        // Mesma fórmula de horas_equipamento_calculadas em v_situacao_atual:
+        //   gerador        → contador próprio (sem offset)
+        //   motor/reversor → horímetro da lancha menos o offset de instalação
+        const horimetroEquipamento = isGerador
+          ? horimetroLancha
+          : Math.round(
+              (Number(horimetroLancha) - Number((pos.ativos as any)?.offset_instalacao ?? 0)) * 10,
+            ) / 10;
+
         // ── INSERT em manutencoes ────────────────────────────────────────────
         const { error: errMut } = await supabase.from("manutencoes").insert({
           ativo_id: ativoId,
@@ -199,7 +209,7 @@ Deno.serve(async (req) => {
           tipo: "troca_oleo",
           data_manutencao: dhAbastecimento,
           horimetro_lancha: horimetroLancha,
-          horimetro_equipamento: null,
+          horimetro_equipamento: horimetroEquipamento,
           observacao,
           origem: "webpilot_sync",
         });
@@ -235,6 +245,7 @@ Deno.serve(async (req) => {
             dados_extras: {
               cd_abastecimento: troca.CD_ABASTECIMENTO,
               horimetro_lancha: horimetroLancha,
+              horimetro_equipamento: horimetroEquipamento,
               ds_equipamento: troca.DS_EQUIPAMENTO,
             },
             origem: "webpilot_sync",
