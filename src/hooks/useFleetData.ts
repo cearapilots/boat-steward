@@ -905,7 +905,7 @@ export function useOcorrencias() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("ocorrencias_webpilot")
-        .select("cd_ocorrencia, lancha_id, data_inicio, data_fim, duracao_horas, tipo_ocorrencia, efeito")
+        .select("cd_ocorrencia, lancha_id, data_inicio, data_fim, duracao_horas, tipo_ocorrencia, descricao, efeito")
         .order("data_inicio", { ascending: false })
         .limit(100000);
       if (error) throw error;
