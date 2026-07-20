@@ -146,8 +146,13 @@ export function HistoricoDetalheModal({ open, onOpenChange, mode, record }: Prop
                 </div>
                 {(() => {
                   const extras = record.dados_extras ?? {};
-                  const hLancha = extras.horimetro_lancha ?? extras.horimetro;
-                  const hEquip = extras.horimetro_equipamento;
+                  // Gerador tem contador próprio: h_lancha e h_equip são o mesmo
+                  // número, então exibimos apenas o do equipamento.
+                  const isGerador = record.ativo?.tipo === "gerador";
+                  const hLancha = isGerador ? null : (extras.horimetro_lancha ?? extras.horimetro);
+                  const hEquip = isGerador
+                    ? (extras.horimetro_equipamento ?? extras.horimetro_lancha ?? extras.horimetro)
+                    : extras.horimetro_equipamento;
                   if (hLancha == null && hEquip == null) return null;
                   return (
                     <div>
