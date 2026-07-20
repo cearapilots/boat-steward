@@ -210,7 +210,7 @@ Deno.serve(async (req) => {
 
           const { data: posicoesOleo } = await supabase
             .from("posicoes")
-            .select("ativo_id, posicao, ativos(id, nome, tipo)")
+            .select("ativo_id, posicao, ativos(id, nome, tipo, offset_instalacao)")
             .eq("lancha_id", lancha.id)
             .lte("data_instalacao", dataOcorrencia)
             .or(`data_remocao.is.null,data_remocao.gt.${dataOcorrencia}`);
@@ -243,19 +243,31 @@ Deno.serve(async (req) => {
               .eq("id", lancha.id)
               .single();
 
-            // Usar horímetro correto pelo tipo do ativo
-            const horimetroParaInserir =
+            // horimetro_lancha: escala usada pelo trigger para gravar ultima_troca_horimetro.
+            //   gerador       → contador próprio do gerador
+            //   motor/reversor→ horímetro da lancha
+            const horimetroLanchaOleo =
               tipoAtivoOleo === "gerador"
                 ? (lanchaHorimetros?.horimetro_gerador ?? null)
                 : (lanchaHorimetros?.horimetro ?? null);
+
+            // horimetro_equipamento: horas acumuladas do equipamento físico.
+            //   Mesma fórmula de horas_equipamento_calculadas em v_situacao_atual.
+            const offsetOleo = Number(pos.ativos?.offset_instalacao ?? 0);
+            const horimetroEquipOleo =
+              tipoAtivoOleo === "gerador"
+                ? (lanchaHorimetros?.horimetro_gerador ?? null)
+                : lanchaHorimetros?.horimetro != null
+                  ? Math.round((Number(lanchaHorimetros.horimetro) - offsetOleo) * 10) / 10
+                  : null;
 
             const { error: errMutOleo } = await supabase.from("manutencoes").insert({
               ativo_id: pos.ativo_id,
               lancha_id: lancha.id,
               tipo: "troca_oleo",
               data_manutencao: dataOcorrencia,
-              horimetro_lancha: horimetroParaInserir,
-              horimetro_equipamento: horimetroParaInserir,
+              horimetro_lancha: horimetroLanchaOleo,
+              horimetro_equipamento: horimetroEquipOleo,
               observacao: oc.DS_OCORRENCIA,
               origem: "webpilot_sync",
             });
@@ -279,8 +291,8 @@ Deno.serve(async (req) => {
                   dados_extras: {
                     cd_ocorrencia: cdOcorrencia,
                     ds_tipo_ocorrencia: oc.DS_TIPO_OCORRENCIA,
-                    horimetro_lancha: horimetroParaInserir,
-                    horimetro_equipamento: horimetroParaInserir,
+                    horimetro_lancha: horimetroLanchaOleo,
+                    horimetro_equipamento: horimetroEquipOleo,
                   },
                   origem: "webpilot_sync",
                 });
