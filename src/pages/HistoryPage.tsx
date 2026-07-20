@@ -292,8 +292,13 @@ export default function HistoryPage() {
                       <TableBody>
                         {mPaginated.map((r: any) => {
                           const extras = r.dados_extras ?? {};
-                          const hLancha = extras.horimetro_lancha ?? extras.horimetro;
-                          const hEquip  = extras.horimetro_equipamento;
+                          // Gerador tem contador próprio: h_lancha e h_equip são o mesmo
+                          // número, então exibimos apenas o do equipamento.
+                          const isGerador = r.ativo?.tipo === "gerador";
+                          const hLancha = isGerador ? null : (extras.horimetro_lancha ?? extras.horimetro);
+                          const hEquip  = isGerador
+                            ? (extras.horimetro_equipamento ?? extras.horimetro_lancha ?? extras.horimetro)
+                            : extras.horimetro_equipamento;
                           return (
                             <TableRow key={r.id}>
                               <TableCell>{r.data_evento ? r.data_evento.slice(0, 10).split("-").reverse().join("/") : "—"}</TableCell>
