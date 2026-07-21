@@ -46,8 +46,7 @@ export default function SettingsPage() {
   const [vermelhoHoras, setVermelhoHoras] = useState("20");
   const [amareloOverhaul, setAmareloOverhaul] = useState("500");
   const [vermelhoOverhaul, setVermelhoOverhaul] = useState("200");
-  const [amareloPeriodicas, setAmareloPeriodicas] = useState("30");
-  const [vermelhoPeriodicas, setVermelhoPeriodicas] = useState("10");
+  const [amareloPeriodicas, setAmareloPeriodicas] = useState("10");
 
   const [intervalos, setIntervalos] = useState<Record<string, { troca: string; overhaul: string }>>({
     motor: { troca: "", overhaul: "" },
@@ -68,8 +67,7 @@ export default function SettingsPage() {
     setVermelhoHoras(config["semaforo_vermelho_horas"] ?? "20");
     setAmareloOverhaul(config["semaforo_amarelo_overhaul"] ?? "500");
     setVermelhoOverhaul(config["semaforo_vermelho_overhaul"] ?? "200");
-    setAmareloPeriodicas(config["semaforo_amarelo_periodicas_dias"] ?? "30");
-    setVermelhoPeriodicas(config["semaforo_vermelho_periodicas_dias"] ?? "10");
+    setAmareloPeriodicas(config["semaforo_amarelo_periodicas_dias"] ?? "10");
   }, [configData]);
 
   useEffect(() => {
@@ -107,7 +105,6 @@ export default function SettingsPage() {
       { chave: "semaforo_amarelo_overhaul", valor: amareloOverhaul },
       { chave: "semaforo_vermelho_overhaul", valor: vermelhoOverhaul },
       { chave: "semaforo_amarelo_periodicas_dias", valor: amareloPeriodicas },
-      { chave: "semaforo_vermelho_periodicas_dias", valor: vermelhoPeriodicas },
     ];
     saveConfigs.mutate(updates, {
       onSuccess: () => toast.success("Limiares de semáforo salvos"),
@@ -174,7 +171,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Alertas e Semáforos</CardTitle>
           <CardDescription>
-            Limiares para acionamento dos alertas amarelo e vermelho. Os valores são persistidos no banco e serão usados pela view do Dashboard em uma próxima etapa.
+            Limiares para acionamento dos alertas amarelo e vermelho. O limiar das periódicas já é aplicado no Dashboard e na página de Manutenção; os de troca de óleo e overhaul serão usados em uma próxima etapa.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -198,10 +195,7 @@ export default function SettingsPage() {
             <div className="space-y-1">
               <Label className="text-xs">Periódicas — Alerta amarelo (dias antes)</Label>
               <Input type="number" min={1} value={amareloPeriodicas} onChange={(e) => setAmareloPeriodicas(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Periódicas — Alerta vermelho (dias antes)</Label>
-              <Input type="number" min={1} value={vermelhoPeriodicas} onChange={(e) => setVermelhoPeriodicas(e.target.value)} />
+              <p className="text-[11px] text-muted-foreground">O alerta vermelho das periódicas é acionado somente quando a manutenção vence.</p>
             </div>
           </div>
           <Button size="sm" onClick={handleSaveSemaforos} disabled={saveConfigs.isPending}>
