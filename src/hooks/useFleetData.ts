@@ -86,7 +86,20 @@ export function useManutencoesPeriodicas() {
         .order("lancha_nome")
         .order("tipo_nome");
       if (error) throw error;
-      return (data ?? []) as ManutencaoPeriodicaStatus[];
+      // A view expõe as colunas como `ultima_realizada`/`status`; mapeamos para
+      // os nomes usados no app (`ultima_data`/`status_semaforo`). O status é
+      // recalculado no `select` a partir do limiar configurável.
+      return (data ?? []).map((r: any) => ({
+        lancha_id:          r.lancha_id,
+        lancha_nome:        r.lancha_nome,
+        tipo_id:            r.tipo_id,
+        tipo_nome:          r.tipo_nome,
+        periodicidade_dias: r.periodicidade_dias,
+        ultima_data:        r.ultima_realizada ?? r.ultima_data ?? null,
+        proxima_data:       r.proxima_data ?? null,
+        dias_restantes:     r.dias_restantes ?? null,
+        status_semaforo:    (r.status ?? r.status_semaforo ?? "sem_registro"),
+      })) as ManutencaoPeriodicaStatus[];
     },
     // Recalcula o status a partir do limiar configurado sem refazer a query
     // (roda de novo quando amareloDias muda). dias_restantes vem da view.
