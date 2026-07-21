@@ -50,7 +50,33 @@ export type ManutencaoPeriodicaStatus = {
   status_semaforo: "ok" | "atencao" | "critico" | "vencido" | "sem_registro";
 };
 
+// Limiar (dias) padrão do alerta amarelo das periódicas, usado quando a
+// configuração ainda não carregou ou tem valor inválido.
+const PERIODICAS_AMARELO_DIAS_PADRAO = 10;
+
+function configNum(config: Configuracao[] | undefined, chave: string, fallback: number): number {
+  const raw = config?.find((c) => c.chave === chave)?.valor;
+  const n = Number(raw);
+  return raw != null && raw !== "" && Number.isFinite(n) ? n : fallback;
+}
+
+// Semáforo das periódicas derivado no cliente a partir de dias_restantes
+// (fornecido pela view) e do limiar configurável. Regra: vermelho só quando
+// já vencido; amarelo nos `amareloDias` dias que antecedem o vencimento.
+export function periodicaSemaforo(
+  dias: number | null,
+  amareloDias: number,
+): ManutencaoPeriodicaStatus["status_semaforo"] {
+  if (dias == null) return "sem_registro";
+  if (dias < 0) return "vencido";
+  if (dias <= amareloDias) return "atencao";
+  return "ok";
+}
+
 export function useManutencoesPeriodicas() {
+  const { data: config } = useConfiguracoes();
+  const amareloDias = configNum(config, "semaforo_amarelo_periodicas_dias", PERIODICAS_AMARELO_DIAS_PADRAO);
+
   return useQuery({
     queryKey: ["manutencoes_periodicas"],
     queryFn: async () => {
@@ -62,6 +88,16 @@ export function useManutencoesPeriodicas() {
       if (error) throw error;
       return (data ?? []) as ManutencaoPeriodicaStatus[];
     },
+    // Recalcula o status a partir do limiar configurado sem refazer a query
+    // (roda de novo quando amareloDias muda). dias_restantes vem da view.
+    select: (rows: ManutencaoPeriodicaStatus[]) =>
+      rows.map((r) => ({
+        ...r,
+        status_semaforo:
+          r.status_semaforo === "sem_registro"
+            ? "sem_registro"
+            : periodicaSemaforo(r.dias_restantes, amareloDias),
+      })),
   });
 }
 
