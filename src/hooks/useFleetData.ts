@@ -431,6 +431,10 @@ export function useSyncHorimetros() {
       const { error: errOcorrencias } = await supabase.functions.invoke("sync-ocorrencias");
       if (errOcorrencias) throw new Error(`Erro sync-ocorrencias: ${errOcorrencias.message}`);
 
+      // 4. Sync vencimentos (documentos das lanchas)
+      const { error: errVencimentos } = await supabase.functions.invoke("sync-vencimentos");
+      if (errVencimentos) throw new Error(`Erro sync-vencimentos: ${errVencimentos.message}`);
+
       return data as SyncHorimetrosResult;
     },
     onSuccess: () => {
@@ -446,6 +450,8 @@ export function useSyncHorimetros() {
       qc.invalidateQueries({ queryKey: ["manutencoes_periodicas"] });
       qc.invalidateQueries({ queryKey: ["calendario_manutencoes"] });
       qc.invalidateQueries({ queryKey: ["manutencoes_periodicas_realizadas"] });
+      qc.invalidateQueries({ queryKey: ["vencimentos"] });
+      qc.invalidateQueries({ queryKey: ["vencimentos_historico"] });
     },
   });
 }
