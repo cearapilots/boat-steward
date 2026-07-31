@@ -41,31 +41,67 @@ type VencItem = {
   status: "realizado" | "pendente" | "atrasado";
 };
 
+// Regras de exibição dos vencimentos no calendário — segue a mesma lógica das
+// manutenções: um documento vencido "arrasta" o vermelho mês a mês até ser
+// resolvido, e o verde ("renovado") aparece no mês em que a renovação foi
+// detectada. Diferente das manutenções, aqui não há lançamento de ocorrência:
+// a renovação é o próprio JSON do WebPilot mudando a data (o sync-vencimentos
+// registra o episódio em `vencimentos_historico` com `dt_detectado`).
+//
+// `dt_vencimento` no VencItem guarda a data a EXIBIR naquele marcador:
+//   - pendente/atrasado → a data em que o documento vence(u)
+//   - realizado         → a data em que a renovação foi detectada
 function getVencimentosMes(
   ano: number,
   mes: number,
   vencimentos: any[],
   vencimentosHistorico: any[],
 ): VencItem[] {
-  const mesStr = `${ano}-${String(mes).padStart(2, "0")}`;
-  const hoje   = new Date().toISOString().slice(0, 10);
+  const mesStr    = `${ano}-${String(mes).padStart(2, "0")}`;
+  const hoje      = new Date().toISOString().slice(0, 10);
+  const mesAtual  = hoje.slice(0, 7);
   const items: VencItem[] = [];
 
+  // ── Entradas atuais (ainda não renovadas) ─────────────────────────────────
   for (const v of vencimentos) {
-    if (v.dt_vencimento.slice(0, 7) !== mesStr) continue;
-    const status: VencItem["status"] = v.dt_vencimento < hoje ? "atrasado" : "pendente";
-    items.push({ cd_lancha: v.cd_lancha, tipo_label: v.tipo_label, dt_vencimento: v.dt_vencimento, status });
-  }
-
-  for (const h of vencimentosHistorico) {
-    if (h.dt_vencimento.slice(0, 7) !== mesStr) continue;
-    const jaExiste = items.some(i => i.cd_lancha === h.cd_lancha && i.tipo_label === h.tipo_label);
-    if (!jaExiste) {
-      items.push({ cd_lancha: h.cd_lancha, tipo_label: h.tipo_label, dt_vencimento: h.dt_vencimento, status: "realizado" });
+    const vencMonth = v.dt_vencimento.slice(0, 7);
+    if (v.dt_vencimento >= hoje) {
+      // Ainda não venceu → pendente somente no mês do vencimento.
+      if (vencMonth === mesStr) {
+        items.push({ cd_lancha: v.cd_lancha, tipo_label: v.tipo_label, dt_vencimento: v.dt_vencimento, status: "pendente" });
+      }
+    } else if (vencMonth <= mesStr && mesStr <= mesAtual) {
+      // Vencido e não renovado → vermelho a partir do mês do vencimento,
+      // arrastando até o mês atual.
+      items.push({ cd_lancha: v.cd_lancha, tipo_label: v.tipo_label, dt_vencimento: v.dt_vencimento, status: "atrasado" });
     }
   }
 
-  return items.sort((a, b) => a.dt_vencimento.localeCompare(b.dt_vencimento));
+  // ── Episódios de renovação (histórico) ────────────────────────────────────
+  // Cada linha: venceu em `dt_vencimento`, renovação detectada em `dt_detectado`.
+  for (const h of vencimentosHistorico) {
+    const lapseMonth  = h.dt_vencimento.slice(0, 7);
+    const detectMonth = (h.dt_detectado ?? h.dt_vencimento).slice(0, 7);
+
+    if (mesStr === detectMonth) {
+      // Mês em que a renovação foi detectada → verde "renovado".
+      items.push({ cd_lancha: h.cd_lancha, tipo_label: h.tipo_label, dt_vencimento: h.dt_detectado ?? h.dt_vencimento, status: "realizado" });
+    } else if (lapseMonth <= mesStr && mesStr < detectMonth) {
+      // Do mês do vencimento até o mês anterior à detecção → vermelho arrastado.
+      items.push({ cd_lancha: h.cd_lancha, tipo_label: h.tipo_label, dt_vencimento: h.dt_vencimento, status: "atrasado" });
+    }
+  }
+
+  // Evita marcadores duplicados do mesmo (lancha, tipo, status) no mês.
+  const seen = new Set<string>();
+  const dedup = items.filter(it => {
+    const k = `${it.cd_lancha}|${it.tipo_label}|${it.status}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  return dedup.sort((a, b) => a.dt_vencimento.localeCompare(b.dt_vencimento));
 }
 
 type LanchaStatus = "concluido" | "pendente" | "atrasado";
@@ -374,6 +410,7 @@ function MesCell({
             <div className="space-y-0.5">
               {vencMes.map((v, i) => {
                 const dia = v.dt_vencimento.slice(8, 10);
+                const mmVenc = v.dt_vencimento.slice(5, 7);
                 const lanchaStatus: LanchaStatus =
                   v.status === "realizado" ? "concluido" :
                   v.status === "atrasado"  ? "atrasado"  : "pendente";
@@ -382,8 +419,8 @@ function MesCell({
                   v.cd_lancha === 1003 ? "Fortim"    :
                   v.cd_lancha === 117  ? "Taíba"     : "?";
                 const tooltipText =
-                  v.status === "realizado" ? `${lanchaNome} — renovado` :
-                  v.status === "atrasado"  ? `${lanchaNome} — vencido em ${dia}/${String(mesIdx + 1).padStart(2, "0")}` :
+                  v.status === "realizado" ? `${lanchaNome} — renovado em ${dia}/${mmVenc}` :
+                  v.status === "atrasado"  ? `${lanchaNome} — vencido em ${dia}/${mmVenc}, não renovado` :
                   `${lanchaNome} — vence dia ${dia}`;
                 return (
                   <div key={i} className="flex items-center justify-between py-0.5">
