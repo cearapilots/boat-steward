@@ -476,6 +476,10 @@ export function useSyncHorimetros() {
       qc.invalidateQueries({ queryKey: ["manutencoes_periodicas_realizadas"] });
       qc.invalidateQueries({ queryKey: ["vencimentos"] });
       qc.invalidateQueries({ queryKey: ["vencimentos_historico"] });
+      qc.invalidateQueries({ queryKey: ["abastecimentos"] });
+      // trigger em manutencoes atualiza ativos.ultima_troca_horimetro
+      qc.invalidateQueries({ queryKey: ["ativos"] });
+      qc.invalidateQueries({ queryKey: ["sistema_info"] });
     },
   });
 }
