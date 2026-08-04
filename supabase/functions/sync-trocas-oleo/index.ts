@@ -62,8 +62,9 @@ Deno.serve(async (req) => {
     if (!resp.ok) throw new Error(`WebPilot retornou HTTP ${resp.status}`);
 
     const trocas: WpTroca[] = await resp.json();
-    if (!Array.isArray(trocas) || trocas.length === 0)
-      throw new Error("Resposta do WebPilot vazia ou inválida");
+    // Array vazio é resposta válida ("nenhuma troca nova"): não é erro.
+    if (!Array.isArray(trocas))
+      throw new Error("Resposta do WebPilot inválida (não é uma lista)");
 
     // ── 2. Carregar lanchas do banco ─────────────────────────────────────────
     const { data: lanchasBanco, error: errLanchas } = await supabase

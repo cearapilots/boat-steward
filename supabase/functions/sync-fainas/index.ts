@@ -38,8 +38,9 @@ Deno.serve(async (req) => {
     if (!resp.ok) throw new Error(`WebPilot retornou HTTP ${resp.status}`);
 
     const fainas: WpFaina[] = await resp.json();
-    if (!Array.isArray(fainas) || fainas.length === 0)
-      throw new Error("Resposta do WebPilot vazia ou inválida");
+    // Array vazio é resposta válida ("nenhuma faina nova"): não é erro.
+    if (!Array.isArray(fainas))
+      throw new Error("Resposta do WebPilot inválida (não é uma lista)");
 
     // 2. Montar registros e inserir com ON CONFLICT DO NOTHING
     const records = fainas.map((f) => ({

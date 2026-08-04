@@ -34,8 +34,9 @@ Deno.serve(async (req) => {
     if (!resp.ok) throw new Error(`WebPilot retornou HTTP ${resp.status}`);
 
     const manobras: WpManobra[] = await resp.json();
-    if (!Array.isArray(manobras) || manobras.length === 0)
-      throw new Error("Resposta do WebPilot vazia ou inválida");
+    // Array vazio é resposta válida ("nenhuma manobra nova"): não é erro.
+    if (!Array.isArray(manobras))
+      throw new Error("Resposta do WebPilot inválida (não é uma lista)");
 
     // 2. Montar registros e inserir com ON CONFLICT DO NOTHING
     const records = manobras.map((m) => ({

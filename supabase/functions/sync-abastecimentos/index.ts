@@ -36,8 +36,9 @@ Deno.serve(async (req) => {
     if (!resp.ok) throw new Error(`WebPilot retornou HTTP ${resp.status}`);
 
     const dados: WpAbastecimento[] = await resp.json();
-    if (!Array.isArray(dados) || dados.length === 0)
-      throw new Error("Resposta vazia ou inválida");
+    // Array vazio é resposta válida ("nenhum abastecimento novo"): não é erro.
+    if (!Array.isArray(dados))
+      throw new Error("Resposta inválida (não é uma lista)");
 
     // 2. Montar registros
     const records = dados

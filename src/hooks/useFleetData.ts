@@ -413,29 +413,53 @@ export type SyncHorimetrosResult = {
   sucesso: boolean;
   lanchas_atualizadas: number;
   detalhe: string;
+  falhas?: string[];
 };
 
 export function useSyncHorimetros() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (): Promise<SyncHorimetrosResult> => {
-      // 1. Sync horímetros
+      const falhas: string[] = [];
+
+      // sync-horimetros primeiro: sync-ocorrencias lê lanchas.horimetro para
+      // gravar o horímetro das trocas de óleo.
       const { data, error: errHorimetros } = await supabase.functions.invoke("sync-horimetros");
-      if (errHorimetros) throw new Error(`Erro sync-horimetros: ${errHorimetros.message}`);
+      if (errHorimetros) falhas.push("horímetros");
 
-      // 2. Sync trocas de óleo
-      const { error: errTrocas } = await supabase.functions.invoke("sync-trocas-oleo");
-      if (errTrocas) throw new Error(`Erro sync-trocas-oleo: ${errTrocas.message}`);
+      // Demais syncs em paralelo — melhor esforço: a falha de um não impede os
+      // outros nem o refresh da tela.
+      const outras: Array<[string, string]> = [
+        ["trocas de óleo", "sync-trocas-oleo"],
+        ["vencimentos",    "sync-vencimentos"],
+        ["manobras",       "sync-manobras"],
+        ["fainas",         "sync-fainas"],
+        ["indicadores",    "sync-indicadores"],
+        ["abastecimentos", "sync-abastecimentos"],
+      ];
+      // sync-ocorrencias só entra se o horímetro estiver atualizado: com dado
+      // velho ele gravaria horimetro_lancha/equipamento errado em manutencoes,
+      // e a deduplicação impediria a correção numa execução posterior.
+      if (errHorimetros) {
+        falhas.push("ocorrências (ignorado: depende dos horímetros)");
+      } else {
+        outras.splice(1, 0, ["ocorrências", "sync-ocorrencias"]);
+      }
+      const resultados = await Promise.allSettled(
+        outras.map(([, fn]) => supabase.functions.invoke(fn)),
+      );
+      resultados.forEach((r, i) => {
+        const falhou = r.status === "rejected" || (r.value as any)?.error != null;
+        if (falhou) falhas.push(outras[i][0]);
+      });
 
-      // 3. Sync ocorrências operacionais
-      const { error: errOcorrencias } = await supabase.functions.invoke("sync-ocorrencias");
-      if (errOcorrencias) throw new Error(`Erro sync-ocorrencias: ${errOcorrencias.message}`);
-
-      // 4. Sync vencimentos (documentos das lanchas)
-      const { error: errVencimentos } = await supabase.functions.invoke("sync-vencimentos");
-      if (errVencimentos) throw new Error(`Erro sync-vencimentos: ${errVencimentos.message}`);
-
-      return data as SyncHorimetrosResult;
+      const base = (data ?? {}) as Partial<SyncHorimetrosResult>;
+      return {
+        sucesso: falhas.length === 0,
+        lanchas_atualizadas: base.lanchas_atualizadas ?? 0,
+        detalhe: base.detalhe ?? "",
+        falhas,
+      };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["situacao_atual"] });

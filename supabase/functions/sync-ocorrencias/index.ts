@@ -52,8 +52,9 @@ Deno.serve(async (req) => {
     if (!resp.ok) throw new Error(`WebPilot retornou HTTP ${resp.status}`);
 
     const ocorrencias: WpOcorrencia[] = await resp.json();
-    if (!Array.isArray(ocorrencias) || ocorrencias.length === 0)
-      throw new Error("Resposta do WebPilot vazia ou inválida");
+    // Array vazio é resposta válida ("nenhuma ocorrência nova"): não é erro.
+    if (!Array.isArray(ocorrencias))
+      throw new Error("Resposta do WebPilot inválida (não é uma lista)");
 
     // ── 2. Carregar lanchas do banco ─────────────────────────────────────────
     const { data: lanchasBanco, error: errLanchas } = await supabase

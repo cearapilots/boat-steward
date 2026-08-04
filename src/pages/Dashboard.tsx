@@ -113,11 +113,14 @@ export default function Dashboard() {
             onClick={() =>
               syncMutation.mutate(undefined, {
                 onSuccess: (res) => {
-                  const n = res.lanchas_atualizadas;
-                  if (res.sucesso && n > 0) {
-                    toast.success(`${n} lancha${n > 1 ? "s" : ""} atualizada${n > 1 ? "s" : ""}!`);
+                  const falhas = res.falhas ?? [];
+                  if (falhas.length > 0) {
+                    toast.warning(`Sincronizado, mas falhou em: ${falhas.join(", ")}. As demais foram atualizadas.`);
                   } else {
-                    toast.warning("Nenhuma lancha atualizada. Verifique o sync_log.");
+                    const n = res.lanchas_atualizadas;
+                    toast.success(n > 0
+                      ? `${n} lancha${n > 1 ? "s" : ""} atualizada${n > 1 ? "s" : ""}!`
+                      : "Sincronização concluída.");
                   }
                 },
                 onError: (err: unknown) =>

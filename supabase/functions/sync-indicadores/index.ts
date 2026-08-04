@@ -53,8 +53,21 @@ Deno.serve(async (req) => {
     if (!resp.ok) throw new Error(`WebPilot retornou HTTP ${resp.status}`);
 
     const indicadores: WpIndicador[] = await resp.json();
-    if (!Array.isArray(indicadores) || indicadores.length === 0)
-      throw new Error("Resposta do WebPilot vazia ou inválida");
+    if (!Array.isArray(indicadores))
+      throw new Error("Resposta do WebPilot inválida (não é uma lista)");
+
+    // Array vazio é resposta válida ("nenhum indicador novo"). Retorna cedo:
+    // o passo 3 abaixo acessa indicadores[0] e quebraria com a lista vazia.
+    if (indicadores.length === 0) {
+      const detalhe = "Nenhum indicador novo encontrado";
+      await supabase.from("sync_log").insert({
+        status: "parcial", lanchas_atualizadas: 0, eventos_importados: 0, detalhe,
+      });
+      return new Response(
+        JSON.stringify({ sucesso: true, registros_inseridos: 0, detalhe }),
+        { headers: { "Content-Type": "application/json", ...CORS } },
+      );
+    }
 
     // 2. Ordenar por dh_leitura ASC para calcular porto corretamente
     indicadores.sort((a, b) => a.DH_LEITURA.localeCompare(b.DH_LEITURA));
