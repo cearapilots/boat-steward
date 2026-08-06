@@ -99,6 +99,23 @@ function normCentro(c: string): string {
   return NORM_CENTRO[c?.trim()] ?? c?.trim() ?? "";
 }
 
+// Converte a célula de data da planilha em "YYYY-MM-DD".
+// O Excel guarda a data como serial (dias desde 1899-12-30; 25569 = 1970-01-01),
+// que vira um Date à meia-noite UTC. Formatar esse Date no fuso local jogaria a
+// data um dia para trás — em UTC-3, meia-noite UTC é 21h do dia anterior — então
+// a formatação precisa ser em UTC.
+function excelParaISO(v: unknown): string {
+  // Se a leitura for feita com cellDates, o SheetJS devolve Date em hora local.
+  if (v instanceof Date) {
+    const y = v.getFullYear();
+    const m = String(v.getMonth() + 1).padStart(2, "0");
+    const d = String(v.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  const ms = Math.round((Number(v) - 25569) * 86400 * 1000);
+  return new Date(ms).toLocaleDateString("sv-SE", { timeZone: "UTC" });
+}
+
 function toggle<T>(setter: (v: T | null) => void, atual: T | null, novo: T) {
   setter(atual === novo ? null : novo);
 }
@@ -322,10 +339,7 @@ export default function CustosPage() {
         const despData = rows.slice(1)
           .filter(r => r[0])
           .map(r => {
-            const dt = r[0] instanceof Date
-              ? r[0]
-              : new Date(Math.round((Number(r[0]) - 25569) * 86400 * 1000));
-            const data = dt.toLocaleDateString("sv-SE");
+            const data = excelParaISO(r[0]);
             const ano_mes = data.slice(0, 7);
             const forn = (r[1] ?? "").toString().trim();
             const centro = normCentro((r[2] ?? "").toString());
