@@ -16,6 +16,8 @@ const TIPOS: Array<{ campo: string; tipo: string; label: string }> = [
   { campo: "DT_VENCTO_AGULHA",                 tipo: "agulha",           label: "Agulha" },
   { campo: "DT_VENCTO_BALSA",                  tipo: "balsa",            label: "Balsa" },
   { campo: "DT_VENCTO_SISTEMA_COMBATE_INCENDIO", tipo: "combate_incendio", label: "Combate a Incêndio" },
+  { campo: "DT_VENCTO_SEGURO",                 tipo: "seguro",           label: "Seguro" },
+  { campo: "DT_VENCTO_SEGURO_DPEM",            tipo: "seguro_dpem",      label: "Seguro DPEM" },
 ];
 
 const LANCHAS_VALIDAS = [121, 1003, 117]; // Flexeiras, Fortim, Taíba
@@ -38,6 +40,7 @@ Deno.serve(async (req) => {
     let atualizados = 0;
     let historico   = 0;
     const detalhes: string[] = [];
+    const falhas: string[]   = [];
 
     for (const d of dados) {
       const cdLancha = Number(d.CD_LANCHA);
@@ -60,7 +63,7 @@ Deno.serve(async (req) => {
           // Data mudou → a data antiga foi renovada
           // Se a data antiga já passou → era um vencimento que foi tratado
           if (atual.dt_vencimento < hoje) {
-            await supabase.from("vencimentos_historico").insert({
+            const { error: errHist } = await supabase.from("vencimentos_historico").insert({
               cd_lancha:    cdLancha,
               ds_lancha:    dsLancha,
               tipo,
@@ -68,13 +71,17 @@ Deno.serve(async (req) => {
               dt_vencimento: atual.dt_vencimento,
               dt_detectado:  hoje,
             });
-            historico++;
-            detalhes.push(`Histórico: ${dsLancha} ${label} (${atual.dt_vencimento} → ${novaData})`);
+            if (errHist) {
+              falhas.push(`Histórico ${dsLancha} ${label}: ${errHist.message}`);
+            } else {
+              historico++;
+              detalhes.push(`Histórico: ${dsLancha} ${label} (${atual.dt_vencimento} → ${novaData})`);
+            }
           }
         }
 
         // Upsert com nova data
-        await supabase.from("vencimentos").upsert({
+        const { error: errUpsert } = await supabase.from("vencimentos").upsert({
           cd_lancha:    cdLancha,
           ds_lancha:    dsLancha,
           tipo,
@@ -83,18 +90,28 @@ Deno.serve(async (req) => {
           updated_at:   new Date().toISOString(),
         }, { onConflict: "cd_lancha,tipo" });
 
+        // Sem esta checagem, uma rejeição do banco (tipo novo barrado por
+        // constraint, por exemplo) passaria silenciosa e o sync reportaria
+        // sucesso sem ter gravado nada.
+        if (errUpsert) {
+          falhas.push(`${dsLancha} ${label}: ${errUpsert.message}`);
+          continue;
+        }
+
         atualizados++;
       }
     }
 
-    const detalhe = `${atualizados} vencimentos atualizados, ${historico} movidos para histórico. ${detalhes.join(" | ")}`;
+    const detalhe = `${atualizados} vencimentos atualizados, ${historico} movidos para histórico.`
+      + (detalhes.length ? ` ${detalhes.join(" | ")}` : "")
+      + (falhas.length   ? ` | FALHAS: ${falhas.join(" | ")}` : "");
     await supabase.from("sync_log").insert({
-      status: "sucesso", lanchas_atualizadas: 0,
+      status: falhas.length ? "parcial" : "sucesso", lanchas_atualizadas: 0,
       eventos_importados: atualizados, detalhe,
     });
 
     return new Response(
-      JSON.stringify({ sucesso: true, atualizados, historico, detalhe }),
+      JSON.stringify({ sucesso: falhas.length === 0, atualizados, historico, falhas, detalhe }),
       { headers: { "Content-Type": "application/json", ...CORS } },
     );
   } catch (erro) {
