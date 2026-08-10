@@ -6,9 +6,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import {
-  BarChart, Bar, LineChart, Line, ComposedChart,
+  BarChart, Bar, LineChart, Line, LabelList,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
@@ -186,6 +187,7 @@ export default function ManutencaoPage() {
   const [selFainas,     setSelFainas]     = useState<string[]>([]);  // vazio = todas
   const [filterEfeitos, setFilterEfeitos] = useState<string[]>([]);  // vazio = todos
   const [fainaSearch,   setFainaSearch]   = useState("");
+  const [segmentarPorLancha, setSegmentarPorLancha] = useState(false);
   const [complianceSort, setComplianceSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "dias", dir: "asc" });
 
   function toggleLancha(cd: number) {
@@ -327,6 +329,34 @@ export default function ManutencaoPage() {
     });
   }, [ocFiltradas, filterDe, filterAte]);
 
+  // ── Gráfico 1b: mesmas horas, mas separadas por lancha ───────────────────
+  // Chaves compostas "Lancha_classe" para o Recharts empilhar por lancha
+  // (stackId = nome da lancha) e agrupar as lanchas lado a lado no mês.
+  const dadosHorasMesLancha = useMemo(() => {
+    if (!segmentarPorLancha) return [];
+    const classes = ["corretiva", "preventiva", "projeto", "outros"] as const;
+    const months  = monthsInRange(filterDe || oneYearAgo, filterAte || todayStr);
+    return months.map(month => {
+      const [my, mm] = month.split("-").map(Number);
+      const monthStart = new Date(my, mm - 1, 1);
+      const monthEnd   = new Date(my, mm,     1);
+      const pt: Record<string, any> = { mes: fmtMes(month) };
+      for (const l of LANCHAS) {
+        for (const c of classes) pt[`${l.nome}_${c}`] = 0;
+      }
+      for (const o of ocFiltradas as any[]) {
+        if (!o.data_inicio) continue;
+        const nome = LANCHA_NOME[Number(o.cd_lancha)];
+        if (!nome) continue;
+        const h = horasNoMes(o.data_inicio, o.data_fim, o.duracao_horas, monthStart, monthEnd);
+        if (h <= 0) continue;
+        const key = `${nome}_${classifyTipo(o.tipo_ocorrencia)}`;
+        if (key in pt) pt[key] = Math.round((pt[key] + h) * 10) / 10;
+      }
+      return pt;
+    });
+  }, [ocFiltradas, segmentarPorLancha, filterDe, filterAte]);
+
   // ── Gráfico 2: Ratio Manut/Op por mês por lancha ─────────────────────────
   const dadosRatioMes = useMemo(() => {
     const opMap = new Map<string, Map<number, number>>();
@@ -362,22 +392,10 @@ export default function ManutencaoPage() {
     });
   }, [ocFiltradas, indicadores, selLanchas, filterDe, filterAte]);
 
-  // ── Gráfico 3: h Manutenção / Manobra por mês ────────────────────────────
-  const dadosManutManobra = useMemo(() => {
-    const manutMap = new Map<string, number>();
-    const months = monthsInRange(filterDe || oneYearAgo, filterAte || todayStr);
-    for (const mes of months) {
-      const [my, mm] = mes.split("-").map(Number);
-      const monthStart = new Date(my, mm - 1, 1);
-      const monthEnd   = new Date(my, mm,     1);
-      let total = 0;
-      for (const o of ocFiltradas as any[]) {
-        if (!o.data_inicio) continue;
-        if (!contaComoManutencao(o.tipo_ocorrencia)) continue;
-        total += horasNoMes(o.data_inicio, o.data_fim, o.duracao_horas, monthStart, monthEnd);
-      }
-      if (total > 0) manutMap.set(mes, total);
-    }
+  // ── Gráfico 3: horas de manutenção por 100 manobras ──────────────────────
+  // Normaliza a carga pelo uso: 3 séries (total, corretiva, preventiva).
+  // Projeto e treinamento ficam de fora (contaComoManutencao).
+  const dadosCargaManobra = useMemo(() => {
     const manobraMap = new Map<string, number>();
     for (const m of (manobras ?? []) as any[]) {
       if (!selLanchas.includes(Number(m.cd_lancha))) continue;
@@ -386,25 +404,66 @@ export default function ManutencaoPage() {
       if (!mes || d < filterDe || d > filterAte) continue;
       manobraMap.set(mes, (manobraMap.get(mes) ?? 0) + 1);
     }
-    return [...manutMap.keys()].sort().map(mes => ({
-      mes:         fmtMes(mes),
-      horasManut:  Number((manutMap.get(mes) ?? 0).toFixed(1)),
-      hPorManobra: (manobraMap.get(mes) ?? 0) > 0
-        ? Number(((manutMap.get(mes) ?? 0) / manobraMap.get(mes)!).toFixed(2))
-        : null,
-    }));
+
+    const months = monthsInRange(filterDe || oneYearAgo, filterAte || todayStr);
+    return months.map(mes => {
+      const [my, mm] = mes.split("-").map(Number);
+      const monthStart = new Date(my, mm - 1, 1);
+      const monthEnd   = new Date(my, mm,     1);
+
+      let hTotal = 0, hCorretiva = 0, hPreventiva = 0;
+      for (const o of ocFiltradas as any[]) {
+        if (!o.data_inicio) continue;
+        if (!contaComoManutencao(o.tipo_ocorrencia)) continue;
+        const h = horasNoMes(o.data_inicio, o.data_fim, o.duracao_horas, monthStart, monthEnd);
+        if (h <= 0) continue;
+        hTotal += h;
+        const cls = classifyTipo(o.tipo_ocorrencia);
+        if (cls === "corretiva")  hCorretiva  += h;
+        if (cls === "preventiva") hPreventiva += h;
+      }
+
+      const n = manobraMap.get(mes) ?? 0;
+      const por100 = (h: number) => n > 0 ? Math.round(h / n * 100 * 10) / 10 : null;
+      return {
+        mes: fmtMes(mes),
+        total:      por100(hTotal),
+        corretiva:  por100(hCorretiva),
+        preventiva: por100(hPreventiva),
+      };
+    });
   }, [ocFiltradas, manobras, selLanchas, filterDe, filterAte]);
 
-  // ── Gráfico 4: Ocorrências por faina ─────────────────────────────────────
-  const dadosFaina = useMemo(() => {
-    const map = new Map<string, { corretiva: number; preventiva: number; projeto: number; outros: number }>();
+  // ── Gráfico 4: horas de manutenção por faina ─────────────────────────────
+  // Eixo em HORAS (não em contagem): uma faina rara mas demorada pesa mais que
+  // uma frequente e rápida. Projeto/treinamento ficam de fora; "outros" segue
+  // como faixa própria — somá-lo à preventiva inflaria esse número.
+  const dadosHorasFaina = useMemo(() => {
+    const map = new Map<string, { corretiva: number; preventiva: number; outros: number }>();
     for (const o of ocFiltradas as any[]) {
+      if (!contaComoManutencao(o.tipo_ocorrencia)) continue;
+      const cls = classifyTipo(o.tipo_ocorrencia);
+      if (cls !== "corretiva" && cls !== "preventiva" && cls !== "outros") continue;
       const f = extractFaina(o.tipo_ocorrencia) || "Sem tipo";
-      if (!map.has(f)) map.set(f, { corretiva: 0, preventiva: 0, projeto: 0, outros: 0 });
-      map.get(f)![classifyTipo(o.tipo_ocorrencia)] += 1;
+      if (!map.has(f)) map.set(f, { corretiva: 0, preventiva: 0, outros: 0 });
+      map.get(f)![cls] += Number(o.duracao_horas) || 0;
     }
     return [...map.entries()]
-      .map(([faina, v]) => ({ faina, ...v, total: v.corretiva + v.preventiva + v.projeto + v.outros }))
+      .map(([faina, v]) => {
+        const total = v.corretiva + v.preventiva + v.outros;
+        const r1 = (n: number) => Math.round(n * 10) / 10;
+        return {
+          faina,
+          corretiva:  r1(v.corretiva),
+          preventiva: r1(v.preventiva),
+          outros:     r1(v.outros),
+          total:      r1(total),
+          pctCorretiva:  total > 0 ? Math.round(v.corretiva  / total * 100) : 0,
+          pctPreventiva: total > 0 ? Math.round(v.preventiva / total * 100) : 0,
+          pctOutros:     total > 0 ? Math.round(v.outros     / total * 100) : 0,
+        };
+      })
+      .filter(x => x.total > 0)
       .sort((a, b) => b.total - a.total)
       .slice(0, 15);
   }, [ocFiltradas]);
@@ -663,14 +722,23 @@ export default function ManutencaoPage() {
       {/* Gráfico 1 — Horas de manutenção por mês (barras empilhadas) */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Horas de Manutenção por Mês</CardTitle>
+          <div className="flex items-start justify-between gap-4">
+            <CardTitle className="text-base">Horas de Manutenção por Mês</CardTitle>
+            <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+              <span className="text-xs text-muted-foreground">Por lancha</span>
+              <Switch checked={segmentarPorLancha} onCheckedChange={setSegmentarPorLancha} />
+            </label>
+          </div>
         </CardHeader>
         <CardContent>
           {dadosHorasMes.length === 0 ? (
             <p className="text-center text-muted-foreground py-10 text-sm">Sem dados no período</p>
           ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={dadosHorasMes} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+            <ResponsiveContainer width="100%" height={segmentarPorLancha ? 340 : 280}>
+              <BarChart
+                data={segmentarPorLancha ? dadosHorasMesLancha : dadosHorasMes}
+                margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
                 <YAxis tickFormatter={v => `${v}h`} tick={{ fontSize: 10 }} />
@@ -678,10 +746,29 @@ export default function ManutencaoPage() {
                   `${Number(v).toFixed(1)}h`, LABEL_CLASSE[name] ?? name,
                 ]} />
                 <Legend formatter={v => LABEL_CLASSE[v] ?? v} wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="corretiva"  stackId="a" fill={COR_CLASSE.corretiva}  />
-                <Bar dataKey="preventiva" stackId="a" fill={COR_CLASSE.preventiva} />
-                <Bar dataKey="projeto"    stackId="a" fill={COR_CLASSE.projeto}    />
-                <Bar dataKey="outros"     stackId="a" fill={COR_CLASSE.outros}     radius={[3, 3, 0, 0]} />
+                {segmentarPorLancha
+                  // Uma pilha por lancha (stackId = nome), lado a lado no mês.
+                  // A cor identifica a lancha; a opacidade, a classificação.
+                  ? LANCHAS.filter(l => selLanchas.includes(l.cd)).flatMap(l => ([
+                      <Bar key={`${l.nome}_corretiva`}  dataKey={`${l.nome}_corretiva`}
+                           stackId={l.nome} fill={LANCHA_COR[l.cd]}
+                           name={`${l.nome} — Corretiva`} />,
+                      <Bar key={`${l.nome}_preventiva`} dataKey={`${l.nome}_preventiva`}
+                           stackId={l.nome} fill={LANCHA_COR[l.cd]} fillOpacity={0.6}
+                           name={`${l.nome} — Preventiva`} />,
+                      <Bar key={`${l.nome}_projeto`}    dataKey={`${l.nome}_projeto`}
+                           stackId={l.nome} fill={LANCHA_COR[l.cd]} fillOpacity={0.35}
+                           name={`${l.nome} — Projeto`} />,
+                      <Bar key={`${l.nome}_outros`}     dataKey={`${l.nome}_outros`}
+                           stackId={l.nome} fill={LANCHA_COR[l.cd]} fillOpacity={0.18}
+                           name={`${l.nome} — Outros`} radius={[3, 3, 0, 0]} />,
+                    ]))
+                  : ([
+                      <Bar key="corretiva"  dataKey="corretiva"  stackId="a" fill={COR_CLASSE.corretiva}  />,
+                      <Bar key="preventiva" dataKey="preventiva" stackId="a" fill={COR_CLASSE.preventiva} />,
+                      <Bar key="projeto"    dataKey="projeto"    stackId="a" fill={COR_CLASSE.projeto}    />,
+                      <Bar key="outros"     dataKey="outros"     stackId="a" fill={COR_CLASSE.outros} radius={[3, 3, 0, 0]} />,
+                    ])}
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -689,10 +776,10 @@ export default function ManutencaoPage() {
       </Card>
 
       {/* Gráficos 2 + 3 */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Gráfico 2 — Ratio Manut/Op por mês */}
-        <Card className="lg:col-span-3">
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">% Horas em Manutenção sobre Horas Operadas</CardTitle>
           </CardHeader>
@@ -727,29 +814,32 @@ export default function ManutencaoPage() {
           </CardContent>
         </Card>
 
-        {/* Gráfico 3 — h Manutenção / Manobra */}
-        <Card className="lg:col-span-2">
+        {/* Gráfico 3 — Horas de manutenção por 100 manobras */}
+        <Card>
           <CardHeader>
-            <CardTitle className="text-base">Carga de Manutenção por Manobra</CardTitle>
+            <CardTitle className="text-base">Horas de Manutenção por 100 Manobras</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Carga normalizada pelo uso. Exclui projetos de melhoria e treinamentos.
+            </p>
           </CardHeader>
           <CardContent>
-            {dadosManutManobra.length === 0 ? (
+            {dadosCargaManobra.length === 0 ? (
               <p className="text-center text-muted-foreground py-10 text-sm">Sem dados</p>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
-                <ComposedChart data={dadosManutManobra} margin={{ top: 5, right: 30, bottom: 5, left: 0 }}>
+                <LineChart data={dadosCargaManobra} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 9 }} />
-                  <YAxis yAxisId="h"   orientation="left"  tickFormatter={v => `${v}h`} tick={{ fontSize: 10 }} />
-                  <YAxis yAxisId="hpm" orientation="right" tickFormatter={v => `${Number(v).toFixed(1)}h`} tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: any, name: string) => [
-                    `${Number(v).toFixed(1)}h`,
-                    name === "horasManut" ? "Total h Manut" : "h/Manobra",
-                  ]} />
+                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                  <YAxis tickFormatter={v => `${v}h`} tick={{ fontSize: 10 }} />
+                  <Tooltip formatter={(v: any, n: string) => [`${Number(v).toFixed(1)}h / 100 man`, n]} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar  yAxisId="h"   dataKey="horasManut"  name="Total h Manut" fill="#3B82F6" radius={[3, 3, 0, 0]} />
-                  <Line yAxisId="hpm" dataKey="hPorManobra" name="h/Manobra"     stroke="#F97316" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                </ComposedChart>
+                  <Line type="monotone" dataKey="total"      name="Total"
+                        stroke="#1E40AF" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                  <Line type="monotone" dataKey="corretiva"  name="Corretiva"
+                        stroke={COR_CLASSE.corretiva}  strokeWidth={1.5} strokeDasharray="5 3" dot={{ r: 2 }} connectNulls />
+                  <Line type="monotone" dataKey="preventiva" name="Preventiva"
+                        stroke={COR_CLASSE.preventiva} strokeWidth={1.5} strokeDasharray="5 3" dot={{ r: 2 }} connectNulls />
+                </LineChart>
               </ResponsiveContainer>
             )}
           </CardContent>
@@ -759,34 +849,51 @@ export default function ManutencaoPage() {
       {/* Gráficos 4 + 5 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Gráfico 4 — Ocorrências por tipo de faina */}
+        {/* Gráfico 4 — Horas de manutenção por tipo de faina */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Ocorrências por Tipo de Faina</CardTitle>
+            <CardTitle className="text-base">Horas em Manutenção por Tipo de Faina</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Rótulos mostram a participação de cada classificação na faina.
+            </p>
           </CardHeader>
           <CardContent>
-            {dadosFaina.length === 0 ? (
+            {dadosHorasFaina.length === 0 ? (
               <p className="text-center text-muted-foreground py-10 text-sm">Sem dados</p>
             ) : (
-              <ResponsiveContainer width="100%" height={Math.max(220, dadosFaina.length * 30 + 50)}>
+              <ResponsiveContainer width="100%" height={Math.max(220, dadosHorasFaina.length * 32 + 50)}>
                 <BarChart
-                  data={dadosFaina}
+                  data={dadosHorasFaina}
                   layout="vertical"
-                  margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                  margin={{ top: 5, right: 45, bottom: 5, left: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <XAxis type="number" tickFormatter={v => `${v}h`} tick={{ fontSize: 10 }} />
                   <YAxis
                     dataKey="faina" type="category"
                     tick={{ fontSize: 9 }} width={130}
                     tickFormatter={v => v.length > 22 ? v.slice(0, 22) + "…" : v}
                   />
-                  <Tooltip formatter={(v: number, name: string) => [v, LABEL_CLASSE[name] ?? name]} />
+                  <Tooltip
+                    formatter={(v: number, name: string, p: any) => {
+                      const total = p?.payload?.total ?? 0;
+                      const pct = total > 0 ? Math.round(Number(v) / total * 100) : 0;
+                      return [`${Number(v).toFixed(1)}h (${pct}%)`, LABEL_CLASSE[name] ?? name];
+                    }}
+                  />
                   <Legend formatter={v => LABEL_CLASSE[v] ?? v} wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="corretiva"  stackId="a" fill={COR_CLASSE.corretiva}  />
-                  <Bar dataKey="preventiva" stackId="a" fill={COR_CLASSE.preventiva} />
-                  <Bar dataKey="projeto"    stackId="a" fill={COR_CLASSE.projeto}    />
-                  <Bar dataKey="outros"     stackId="a" fill={COR_CLASSE.outros}     />
+                  <Bar dataKey="corretiva"  stackId="a" fill={COR_CLASSE.corretiva}>
+                    <LabelList dataKey="pctCorretiva" position="center" fontSize={9} fill="#fff"
+                               formatter={(v: number) => v >= 15 ? `${v}%` : ""} />
+                  </Bar>
+                  <Bar dataKey="preventiva" stackId="a" fill={COR_CLASSE.preventiva}>
+                    <LabelList dataKey="pctPreventiva" position="center" fontSize={9} fill="#fff"
+                               formatter={(v: number) => v >= 15 ? `${v}%` : ""} />
+                  </Bar>
+                  <Bar dataKey="outros"     stackId="a" fill={COR_CLASSE.outros}>
+                    <LabelList dataKey="total" position="right" fontSize={9} fill="#6B7280"
+                               formatter={(v: number) => `${Number(v).toFixed(0)}h`} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             )}
