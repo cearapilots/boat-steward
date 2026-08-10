@@ -146,6 +146,30 @@ const inputClass =
   "h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
+// Linha de detalhamento por lancha exibida abaixo do número da frota em cada
+// scorecard. As cores vêm de LANCHA_COR para bater com o filtro e os gráficos.
+function LanchaBreakdown({ items, fmt }: {
+  items: Array<{ nome: string; cor: string; valor: number | null }>;
+  fmt: (v: number) => string;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-2 pt-2 border-t border-border space-y-1">
+      {items.map(i => (
+        <div key={i.nome} className="flex items-center justify-between gap-2 text-[11px]">
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: i.cor }} />
+            <span className="text-muted-foreground truncate">{i.nome}</span>
+          </span>
+          <span className="font-mono tabular-nums shrink-0">
+            {i.valor != null ? fmt(i.valor) : "—"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ManutencaoPage() {
@@ -226,30 +250,61 @@ export default function ManutencaoPage() {
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
-    const horasManut   = ocFiltradas
+    // Somatórios da frota e por lancha usam exatamente a mesma fórmula, para
+    // que o detalhamento das lanchas feche com o total exibido acima dele.
+    const somaHoras = (lista: any[]) => lista
       .filter((o: any) => contaComoManutencao(o.tipo_ocorrencia))
       .reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
-    const nOcorrencias = ocFiltradas.length;
 
-    const horasOp = ((indicadores ?? []) as any[]).filter(i => {
-      if (!selLanchas.includes(Number(i.cd_lancha))) return false;
-      const d = (i.dh_leitura ?? "").slice(0, 10);
-      return d >= filterDe && d <= filterAte;
-    }).reduce((s: number, i: any) => s + (Number(i.dc_dif_be) || 0), 0);
+    // Corretiva que tirou a lancha de operação. O recorte "Inoperante" segue o
+    // mesmo critério já usado no gráfico de % Manut/Operada.
+    const contaCorretivas = (lista: any[]) => lista.filter((o: any) =>
+      classifyTipo(o.tipo_ocorrencia) === "corretiva" &&
+      (o.efeito ?? "").trim() === "Inoperante"
+    ).length;
 
-    const nManobras = ((manobras ?? []) as any[]).filter(m => {
-      if (!selLanchas.includes(Number(m.cd_lancha))) return false;
-      const d = (m.dh_manobra ?? "").slice(0, 10);
-      return d >= filterDe && d <= filterAte;
-    }).length;
+    const noPeriodo = (d: string) => d >= filterDe && d <= filterAte;
+
+    const horasOpDe = (cds: number[]) => ((indicadores ?? []) as any[])
+      .filter(i => cds.includes(Number(i.cd_lancha)) && noPeriodo((i.dh_leitura ?? "").slice(0, 10)))
+      .reduce((s: number, i: any) => s + (Number(i.dc_dif_be) || 0), 0);
+
+    const manobrasDe = (cds: number[]) => ((manobras ?? []) as any[])
+      .filter(m => cds.includes(Number(m.cd_lancha)) && noPeriodo((m.dh_manobra ?? "").slice(0, 10)))
+      .length;
+
+    const horasManut  = somaHoras(ocFiltradas);
+    const horasOp     = horasOpDe(selLanchas);
+    const nManobras   = manobrasDe(selLanchas);
+    const corretivas  = contaCorretivas(ocFiltradas);
+
+    // Detalhamento por lancha — só as selecionadas no filtro.
+    const porLancha = LANCHAS.filter(l => selLanchas.includes(l.cd)).map(l => {
+      const ocL       = (ocFiltradas as any[]).filter(o => Number(o.cd_lancha) === l.cd);
+      const horasManutL = somaHoras(ocL);
+      const horasOpL    = horasOpDe([l.cd]);
+      const nManobrasL  = manobrasDe([l.cd]);
+      const corretivasL = contaCorretivas(ocL);
+      return {
+        cd: l.cd,
+        nome: l.nome,
+        cor: LANCHA_COR[l.cd],
+        horasManut:      horasManutL,
+        ratioManutOp:    horasOpL   > 0 ? horasManutL / horasOpL * 100     : null,
+        horasPorManobra: nManobrasL > 0 ? horasManutL / nManobrasL          : null,
+        taxaCorretivas:  nManobrasL > 0 ? corretivasL / nManobrasL * 100    : null,
+        nManobras:       nManobrasL,
+      };
+    });
 
     return {
       horasManut,
       horasOp,
       ratioManutOp:    horasOp > 0 ? (horasManut / horasOp * 100) : null,
-      nOcorrencias,
       horasPorManobra: nManobras > 0 ? horasManut / nManobras : null,
+      taxaCorretivas:  nManobras > 0 ? corretivas / nManobras * 100 : null,
       nManobras,
+      porLancha,
     };
   }, [ocFiltradas, indicadores, manobras, filterDe, filterAte, selLanchas]);
 
@@ -409,12 +464,43 @@ export default function ManutencaoPage() {
     [complianceFlatSorted],
   );
 
-  const KPI_CARDS = [
-    { label: "Total h Manutenção",   value: `${kpis.horasManut.toFixed(1)}h` },
-    { label: "% Manut / Operada",    value: kpis.ratioManutOp !== null ? `${kpis.ratioManutOp.toFixed(1)}%` : "—" },
-    { label: "Nº Ocorrências",       value: kpis.nOcorrencias.toString() },
-    { label: "h Manut / Manobra",    value: kpis.horasPorManobra !== null ? `${kpis.horasPorManobra.toFixed(2)}h` : "—" },
-    { label: "Nº Manobras",          value: kpis.nManobras.toString() },
+  const fmtH    = (v: number) => `${v.toFixed(1)}h`;
+  const fmtPct  = (v: number) => `${v.toFixed(1)}%`;
+  const fmtH2   = (v: number) => `${v.toFixed(2)}h`;
+  const fmtTaxa = (v: number) => v.toFixed(2);
+  const fmtInt  = (v: number) => String(Math.round(v));
+
+  const KPI_CARDS: Array<{
+    label: string;
+    value: string;
+    fmt: (v: number) => string;
+    pick: (l: (typeof kpis.porLancha)[number]) => number | null;
+  }> = [
+    {
+      label: "Total h Manutenção",
+      value: fmtH(kpis.horasManut),
+      fmt: fmtH,   pick: l => l.horasManut,
+    },
+    {
+      label: "% Manut / Operada",
+      value: kpis.ratioManutOp !== null ? fmtPct(kpis.ratioManutOp) : "—",
+      fmt: fmtPct, pick: l => l.ratioManutOp,
+    },
+    {
+      label: "Corretivas / 100 Manobras",
+      value: kpis.taxaCorretivas !== null ? fmtTaxa(kpis.taxaCorretivas) : "—",
+      fmt: fmtTaxa, pick: l => l.taxaCorretivas,
+    },
+    {
+      label: "h Manut / Manobra",
+      value: kpis.horasPorManobra !== null ? fmtH2(kpis.horasPorManobra) : "—",
+      fmt: fmtH2,  pick: l => l.horasPorManobra,
+    },
+    {
+      label: "Nº Manobras",
+      value: String(kpis.nManobras),
+      fmt: fmtInt, pick: l => l.nManobras,
+    },
   ];
 
   return (
@@ -559,12 +645,16 @@ export default function ManutencaoPage() {
       </Card>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {KPI_CARDS.map(({ label, value }) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {KPI_CARDS.map(({ label, value, fmt, pick }) => (
           <Card key={label}>
             <CardContent className="pt-4 pb-3">
               <p className="text-xs text-muted-foreground">{label}</p>
               <p className="text-xl font-bold font-mono tabular-nums mt-0.5">{value}</p>
+              <LanchaBreakdown
+                items={kpis.porLancha.map(l => ({ nome: l.nome, cor: l.cor, valor: pick(l) }))}
+                fmt={fmt}
+              />
             </CardContent>
           </Card>
         ))}
