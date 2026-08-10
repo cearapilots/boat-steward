@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, ComposedChart,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
 
@@ -29,12 +29,29 @@ const LANCHAS = [
   { cd: 117,  nome: "Taíba"    },
 ];
 
-function classifyTipo(tipo: string | null | undefined): "corretiva" | "preventiva" | "projeto" | "outros" {
+// "treinamento" é uma classe própria e NÃO está em selClasses (o filtro de
+// Classificação lista apenas corretiva/preventiva/projeto/outros). Como
+// `ocFiltradas` só aceita classes presentes em selClasses, treinamentos ficam
+// fora de todos os KPIs e gráficos desta página — que é o comportamento
+// desejado: treinar tripulação não é carga de manutenção.
+function classifyTipo(tipo: string | null | undefined): "corretiva" | "preventiva" | "projeto" | "treinamento" | "outros" {
   const t = (tipo ?? "").toLowerCase();
   if (t.includes("projeto") || t.includes("melhoria") || t.includes("modificação")) return "projeto";
+  if (t.includes("treinamento")) return "treinamento";
   if (t.includes("corretiva")) return "corretiva";
-  if (t.includes("preventiva") || t.includes("treinamento")) return "preventiva";
+  if (t.includes("preventiva")) return "preventiva";
   return "outros";
+}
+
+// Horas que contam como CARGA DE MANUTENÇÃO nos KPIs e nos gráficos de taxa.
+// Projeto/melhoria fica de fora por decisão de negócio: é investimento, não
+// manutenção. Treinamento já é excluído antes, na origem (classifyTipo não
+// devolve uma classe presente em selClasses).
+// Atenção: os gráficos descritivos — empilhado de horas/mês e histograma de
+// durações — NÃO usam este filtro, pois existem justamente para mostrar a
+// composição, incluindo a barra roxa de projeto.
+function contaComoManutencao(tipo: string | null | undefined): boolean {
+  return classifyTipo(tipo) !== "projeto";
 }
 
 function extractFaina(tipo: string | null | undefined): string {
@@ -209,7 +226,9 @@ export default function ManutencaoPage() {
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
-    const horasManut   = ocFiltradas.reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
+    const horasManut   = ocFiltradas
+      .filter((o: any) => contaComoManutencao(o.tipo_ocorrencia))
+      .reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0);
     const nOcorrencias = ocFiltradas.length;
 
     const horasOp = ((indicadores ?? []) as any[]).filter(i => {
@@ -224,18 +243,12 @@ export default function ManutencaoPage() {
       return d >= filterDe && d <= filterAte;
     }).length;
 
-    const corretivas = ocFiltradas.filter((o: any) => classifyTipo(o.tipo_ocorrencia) === "corretiva");
-    const mttr = corretivas.length > 0
-      ? corretivas.reduce((s: number, o: any) => s + (Number(o.duracao_horas) || 0), 0) / corretivas.length
-      : null;
-
     return {
       horasManut,
       horasOp,
       ratioManutOp:    horasOp > 0 ? (horasManut / horasOp * 100) : null,
       nOcorrencias,
       horasPorManobra: nManobras > 0 ? horasManut / nManobras : null,
-      mttr,
       nManobras,
     };
   }, [ocFiltradas, indicadores, manobras, filterDe, filterAte, selLanchas]);
@@ -284,6 +297,7 @@ export default function ManutencaoPage() {
         for (const o of ocFiltradas as any[]) {
           if (Number(o.cd_lancha) !== cd || !o.data_inicio) continue;
           if ((o.efeito ?? "").trim() !== "Inoperante") continue;
+          if (!contaComoManutencao(o.tipo_ocorrencia)) continue;
           hManut += horasNoMes(o.data_inicio, o.data_fim, o.duracao_horas, monthStart, monthEnd);
         }
         const hOp = opMap.get(mes)?.get(cd) ?? 0;
@@ -304,6 +318,7 @@ export default function ManutencaoPage() {
       let total = 0;
       for (const o of ocFiltradas as any[]) {
         if (!o.data_inicio) continue;
+        if (!contaComoManutencao(o.tipo_ocorrencia)) continue;
         total += horasNoMes(o.data_inicio, o.data_fim, o.duracao_horas, monthStart, monthEnd);
       }
       if (total > 0) manutMap.set(mes, total);
@@ -356,32 +371,6 @@ export default function ManutencaoPage() {
     });
   }, [ocFiltradas]);
 
-  // ── Gráfico 6: MTBF por faina ─────────────────────────────────────────────
-  const dadosMTBF = useMemo(() => {
-    const corretivas = (ocFiltradas as any[])
-      .filter(o => classifyTipo(o.tipo_ocorrencia) === "corretiva" && o.data_inicio)
-      .sort((a: any, b: any) => a.data_inicio.localeCompare(b.data_inicio));
-
-    const porFaina = new Map<string, Date[]>();
-    for (const o of corretivas) {
-      const f = extractFaina(o.tipo_ocorrencia) || "Sem tipo";
-      if (!porFaina.has(f)) porFaina.set(f, []);
-      porFaina.get(f)!.push(new Date(o.data_inicio));
-    }
-
-    return [...porFaina.entries()]
-      .map(([faina, datas]) => {
-        if (datas.length < 2) return null;
-        const intervalos = datas.slice(1).map((d, i) =>
-          (d.getTime() - datas[i].getTime()) / 86400000
-        );
-        const mtbf = intervalos.reduce((s, v) => s + v, 0) / intervalos.length;
-        return { faina, mtbf: Number(mtbf.toFixed(1)), n: datas.length };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a!.mtbf - b!.mtbf) as Array<{ faina: string; mtbf: number; n: number }>;
-  }, [ocFiltradas]);
-
   // ── Compliance periódicas ─────────────────────────────────────────────────
   const complianceByLancha = useMemo(() => {
     void manutTipos; // cache warming
@@ -420,18 +409,11 @@ export default function ManutencaoPage() {
     [complianceFlatSorted],
   );
 
-  function mtbfColor(mtbf: number): string {
-    if (mtbf < 30) return "#DC2626";
-    if (mtbf < 90) return "#F59E0B";
-    return "#16A34A";
-  }
-
   const KPI_CARDS = [
     { label: "Total h Manutenção",   value: `${kpis.horasManut.toFixed(1)}h` },
     { label: "% Manut / Operada",    value: kpis.ratioManutOp !== null ? `${kpis.ratioManutOp.toFixed(1)}%` : "—" },
     { label: "Nº Ocorrências",       value: kpis.nOcorrencias.toString() },
     { label: "h Manut / Manobra",    value: kpis.horasPorManobra !== null ? `${kpis.horasPorManobra.toFixed(2)}h` : "—" },
-    { label: "MTTR — Corretivas",    value: kpis.mttr !== null ? `${kpis.mttr.toFixed(1)}h` : "—" },
     { label: "Nº Manobras",          value: kpis.nManobras.toString() },
   ];
 
@@ -743,70 +725,6 @@ export default function ManutencaoPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Gráfico 6 — MTBF por Faina */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">MTBF por Faina — Tempo Médio entre Falhas Corretivas</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {dadosMTBF.length === 0 ? (
-            <p className="text-center text-muted-foreground py-10 text-sm">
-              Sem dados suficientes (requer ≥ 2 ocorrências corretivas por faina)
-            </p>
-          ) : (
-            <>
-              <ResponsiveContainer width="100%" height={Math.max(200, dadosMTBF.length * 32 + 50)}>
-                <BarChart
-                  data={dadosMTBF}
-                  layout="vertical"
-                  margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => `${v}d`} />
-                  <YAxis
-                    dataKey="faina" type="category"
-                    tick={{ fontSize: 9 }} width={150}
-                    tickFormatter={v => v.length > 24 ? v.slice(0, 24) + "…" : v}
-                  />
-                  <Tooltip
-                    content={({ payload, label }: any) => {
-                      if (!payload?.length) return null;
-                      const item = dadosMTBF.find(x => x.faina === label);
-                      return (
-                        <div className="bg-background border border-border rounded-md px-3 py-2 text-xs shadow-md">
-                          <p className="font-semibold mb-1">{label}</p>
-                          <p>Em média, falha a cada <strong>{payload[0]?.value} dias</strong></p>
-                          {item && <p className="text-muted-foreground mt-1">{item.n} ocorrências analisadas</p>}
-                        </div>
-                      );
-                    }}
-                  />
-                  <Bar dataKey="mtbf" radius={[0, 3, 3, 0]}>
-                    {dadosMTBF.map((entry, i) => (
-                      <Cell key={i} fill={mtbfColor(entry.mtbf)} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="flex items-center gap-5 mt-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-full inline-block bg-red-600" />
-                  &lt;30d (crítico)
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-full inline-block bg-amber-500" />
-                  30–90d (atenção)
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-full inline-block bg-green-600" />
-                  &gt;90d (bom)
-                </span>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Gráfico 7 — Compliance Manutenções Periódicas */}
       <Card>
