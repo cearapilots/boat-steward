@@ -25,6 +25,7 @@ import {
 import { Upload, ChevronDown, Info } from "lucide-react";
 import { Tooltip as UITooltip, TooltipContent as UITooltipContent, TooltipProvider as UITooltipProvider, TooltipTrigger as UITooltipTrigger } from "@/components/ui/tooltip";
 import SankeyFluxo from "@/components/SankeyFluxo";
+import AnaliseTrimestral from "@/components/AnaliseTrimestral";
  
 // ── Constantes exportadas ─────────────────────────────────────────────────────
 
@@ -769,6 +770,11 @@ export default function CustosPage() {
           />
         </CardContent>
       </Card>
+
+      {/* Análise por lancha-trimestre — cruza custo com dados operacionais
+          (manobras, ocorrências, combustível). Respeita os filtros de ano e
+          lancha da página. */}
+      <AnaliseTrimestral filterAnos={filterAnos} filterLanchas={filterLanchas} />
 
       {/* Modal Upload */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
