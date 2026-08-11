@@ -222,6 +222,19 @@ function LanchaBreakdown({ items, fmt }: {
   );
 }
 
+// Divisória entre blocos de gráficos. Sem ela a página vira uma sequência de
+// 8 cards sem hierarquia, e o leitor não sabe por onde começar.
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="mt-4 pb-1 border-b border-border">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h2>
+      {subtitle && <p className="text-xs text-muted-foreground/80 mt-0.5">{subtitle}</p>}
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ManutencaoPage() {
@@ -874,8 +887,15 @@ export default function ManutencaoPage() {
         </CardContent>
       </Card>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <SectionHeader
+        title="Visão geral"
+        subtitle="Números do período filtrado, com o detalhamento por lancha abaixo de cada um."
+      />
+
+      {/* KPIs — 3 colunas: com o detalhamento por lancha, 5 em linha ficavam
+          estreitos demais para os rótulos. Em 3 colunas as 5 métricas caem
+          naturalmente em 3 + 2, sem grid extra nem célula vazia forçada. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {KPI_CARDS.map(({ label, value, fmt, pick }) => (
           <Card key={label}>
             <CardContent className="pt-4 pb-3">
@@ -889,6 +909,11 @@ export default function ManutencaoPage() {
           </Card>
         ))}
       </div>
+
+      <SectionHeader
+        title="Evolução temporal"
+        subtitle="Como a carga de manutenção se comporta mês a mês."
+      />
 
       {/* Gráfico 1 — Horas de manutenção por mês (barras empilhadas) */}
       <Card>
@@ -1016,10 +1041,9 @@ export default function ManutencaoPage() {
         </CardContent>
       </Card>
 
-      {/* Gráficos 3 + 4 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-        {/* Gráfico 3 — Horas de manutenção por 100 manobras */}
+      {/* Gráfico 3 — Horas de manutenção por 100 manobras (largura total:
+          série de 12+ meses com 3 linhas precisa de espaço horizontal) */}
+      <div>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Horas de Manutenção por 100 Manobras</CardTitle>
@@ -1050,8 +1074,17 @@ export default function ManutencaoPage() {
           </CardContent>
         </Card>
 
+      </div>
+
+      <SectionHeader
+        title="Análise por faina"
+        subtitle="Onde a manutenção se concentra e quanto tempo cada tipo de serviço consome."
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
         {/* Gráfico 4 — Horas de manutenção por tipo de faina */}
-        <Card>
+        <Card className="lg:col-span-7">
           <CardHeader>
             <CardTitle className="text-base">Horas em Manutenção por Tipo de Faina</CardTitle>
             <p className="text-xs text-muted-foreground">
@@ -1101,13 +1134,8 @@ export default function ManutencaoPage() {
           </CardContent>
         </Card>
 
-      </div>
-
-      {/* Gráficos 6 + 5 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
         {/* Gráfico 6 — Dispersão de priorização por faina */}
-        <Card>
+        <Card className="lg:col-span-5">
           <CardHeader>
             <CardTitle className="text-base">Dispersão de Priorização por Faina</CardTitle>
             <p className="text-xs text-muted-foreground">
@@ -1152,6 +1180,13 @@ export default function ManutencaoPage() {
                       }}
                     />
                     <Scatter data={dadosScatter}>
+                      {/* Rótulo direto no ponto: com poucas fainas cabe, e evita
+                          depender só do tooltip para identificar o que é o quê. */}
+                      <LabelList
+                        dataKey="faina" position="top" offset={8}
+                        fontSize={9} fill="#6B7280"
+                        formatter={(v: string) => v.length > 18 ? v.slice(0, 18) + "…" : v}
+                      />
                       {dadosScatter.map((d, i) => (
                         <Cell key={i} fill={corQuadrante(d)} />
                       ))}
@@ -1173,28 +1208,6 @@ export default function ManutencaoPage() {
                 </div>
               </>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Gráfico 5 — Distribuição de durações */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Distribuição de Duração das Manutenções</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={dadosHistograma} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip formatter={(v: number, name: string) => [v, LABEL_CLASSE[name] ?? name]} />
-                <Legend formatter={v => LABEL_CLASSE[v] ?? v} wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="corretiva"  stackId="a" fill={COR_CLASSE.corretiva}  />
-                <Bar dataKey="preventiva" stackId="a" fill={COR_CLASSE.preventiva} />
-                <Bar dataKey="projeto"    stackId="a" fill={COR_CLASSE.projeto}    />
-                <Bar dataKey="outros"     stackId="a" fill={COR_CLASSE.outros}     radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
@@ -1292,6 +1305,33 @@ export default function ManutencaoPage() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <SectionHeader
+        title="Distribuição e conformidade"
+        subtitle="Perfil de duração das intervenções e situação das manutenções programadas."
+      />
+
+      {/* Gráfico 5 — Distribuição de durações */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Distribuição de Duração das Manutenções</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={dadosHistograma} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} />
+              <Tooltip formatter={(v: number, name: string) => [v, LABEL_CLASSE[name] ?? name]} />
+              <Legend formatter={v => LABEL_CLASSE[v] ?? v} wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="corretiva"  stackId="a" fill={COR_CLASSE.corretiva}  />
+              <Bar dataKey="preventiva" stackId="a" fill={COR_CLASSE.preventiva} />
+              <Bar dataKey="projeto"    stackId="a" fill={COR_CLASSE.projeto}    />
+              <Bar dataKey="outros"     stackId="a" fill={COR_CLASSE.outros}     radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </CardContent>
       </Card>
 
