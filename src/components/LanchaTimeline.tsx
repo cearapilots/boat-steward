@@ -162,15 +162,35 @@ function buildStatusSegs(
   return resolveOverlaps(segs);
 }
 
-// Porto at time T = porto of the last manobra at or before T.
+// Porto at time T, from two kinds of evidence merged chronologically:
+//   - a faina (crossing) CHANGES the porto: when it ends the lancha is at
+//     `ds_local_dest`. During the crossing it still counts as the origin porto,
+//     since the grey status bar already signals the transit.
+//   - a manobra CONFIRMS the porto at that instant (`ds_porto`).
+//
+// Using manobras alone (previous version) broke whenever a lancha sat at a porto
+// without manoeuvring, because nothing signalled the change. Real case: Fortim
+// crossed to Mucuripe on 18/08 16:39 and stayed until 25/08 with ZERO manobras,
+// so the halo showed Pecem for the whole week. It also lagged on the way back —
+// Flexeiras returned on 25/08 16:56 but the halo only switched at the first
+// Mucuripe manobra, on 26/08.
+//
 // Merge consecutive same-porto anchors into a single segment.
 function buildPortoSegs(
-  cd: number, windowStart: number, windowEnd: number, manobras: any[],
+  cd: number, windowStart: number, windowEnd: number,
+  manobras: any[], fainas: any[],
 ): PortoSeg[] {
-  const all = manobras
-    .filter(m => Number(m.cd_lancha) === cd && m.dh_manobra && m.ds_porto)
-    .map(m => ({ ms: new Date(m.dh_manobra).getTime(), porto: (m.ds_porto as string).trim() }))
-    .sort((a, b) => a.ms - b.ms);
+  const all: { ms: number; porto: string }[] = [];
+
+  for (const m of manobras) {
+    if (Number(m.cd_lancha) !== cd || !m.dh_manobra || !m.ds_porto) continue;
+    all.push({ ms: new Date(m.dh_manobra).getTime(), porto: String(m.ds_porto).trim() });
+  }
+  for (const f of fainas) {
+    if (Number(f.cd_lancha) !== cd || !f.dh_fim || !f.ds_local_dest) continue;
+    all.push({ ms: new Date(f.dh_fim).getTime(), porto: String(f.ds_local_dest).trim() });
+  }
+  all.sort((a, b) => a.ms - b.ms);
 
   if (all.length === 0) return [];
 
@@ -178,7 +198,7 @@ function buildPortoSegs(
   const startPorto  = lastBefore?.porto ?? all[0]?.porto;
   if (!startPorto) return [];
 
-  // Build change-only anchors (skip same-porto consecutive manobras)
+  // Build change-only anchors (skip consecutive events at the same porto)
   const anchors: { ms: number; porto: string }[] = [{ ms: windowStart, porto: startPorto }];
   for (const m of all.filter(m => m.ms > windowStart && m.ms < windowEnd)) {
     if (m.porto !== anchors[anchors.length - 1].porto) anchors.push(m);
@@ -280,7 +300,7 @@ export function LanchaTimeline({ ocorrencias, manobras, fainas }: LanchaTimeline
     const dur = windowDuration;
     return LANCHAS.map(l => {
       const statusSegs = buildStatusSegs(l.cd, windowStart, windowEnd, ocorrencias, fainas);
-      const portoSegs  = buildPortoSegs(l.cd, windowStart, windowEnd, manobras);
+      const portoSegs  = buildPortoSegs(l.cd, windowStart, windowEnd, manobras, fainas);
       const pins       = buildPins(l.cd, windowStart, windowEnd, dur, manobras);
       return { ...l, statusSegs, portoSegs, pins, manobraCount: pins.length };
     });
