@@ -140,14 +140,15 @@ Deno.serve(async (req) => {
       if (nomePeriodicaMapeado) {
         const tipoId = tipoIdByNome.get(nomePeriodicaMapeado);
         if (tipoId) {
-          const { data: existePeriodicaOc } = await supabase
+          const { data: existePeriodicaOcRows } = await supabase
             .from("manutencoes_periodicas")
             .select("id")
             .eq("lancha_id", lancha.id)
             .eq("tipo_id", tipoId)
             .eq("data_realizada", oc.DH_ABERTURA.slice(0, 10))
             .neq("origem", "manual")
-            .maybeSingle();
+            .limit(1);
+          const existePeriodicaOc = existePeriodicaOcRows?.[0] ?? null;
 
           if (!existePeriodicaOc) {
             const { error: errPeriodica } = await supabase
@@ -225,7 +226,7 @@ Deno.serve(async (req) => {
           for (const pos of alvosOleo) {
             // Dedup: verifica qualquer troca de óleo do mesmo ativo no mesmo dia
             // (range para cobrir registros com e sem componente de hora)
-            const { data: existeMutOleo } = await supabase
+            const { data: existeMutOleoRows } = await supabase
               .from("manutencoes")
               .select("id")
               .eq("ativo_id", pos.ativo_id)
@@ -233,7 +234,8 @@ Deno.serve(async (req) => {
               .lt("data_manutencao", nextDay)
               .eq("tipo", "troca_oleo")
               .neq("origem", "manual")
-              .maybeSingle();
+              .limit(1);
+            const existeMutOleo = existeMutOleoRows?.[0] ?? null;
 
             if (existeMutOleo) continue;
 
@@ -274,13 +276,14 @@ Deno.serve(async (req) => {
             });
 
             if (!errMutOleo) {
-              const { data: existeHistOleo } = await supabase
+              const { data: existeHistOleoRows } = await supabase
                 .from("historico")
                 .select("id")
                 .eq("ativo_id", pos.ativo_id)
                 .eq("data_evento", dataOcorrencia)
                 .eq("tipo_evento", "troca_oleo")
-                .maybeSingle();
+                .limit(1);
+              const existeHistOleo = existeHistOleoRows?.[0] ?? null;
 
               if (!existeHistOleo) {
                 await supabase.from("historico").insert({

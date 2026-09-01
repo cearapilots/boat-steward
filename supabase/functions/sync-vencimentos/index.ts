@@ -52,12 +52,13 @@ Deno.serve(async (req) => {
         if (!novaData) continue;
 
         // Buscar registro atual no banco
-        const { data: atual } = await supabase
+        const { data: atualRows } = await supabase
           .from("vencimentos")
           .select("dt_vencimento")
           .eq("cd_lancha", cdLancha)
           .eq("tipo", tipo)
-          .maybeSingle();
+          .limit(1);
+        const atual = atualRows?.[0] ?? null;
 
         if (atual && atual.dt_vencimento !== novaData) {
           // Data mudou → a data antiga foi renovada
