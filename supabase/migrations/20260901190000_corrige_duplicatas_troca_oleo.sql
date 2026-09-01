@@ -9,6 +9,11 @@
 -- clique no botão Atualizar.
 --
 -- O código foi corrigido para .limit(1). Esta migration limpa o que já entrou.
+--
+-- Os casts de data são fixados em UTC de propósito: data_manutencao é
+-- timestamptz, e ::date sozinho depende do fuso da sessão. Num fuso negativo
+-- a linha de meia-noite cairia no dia anterior, viraria outra partição, e
+-- sobrariam duas linhas em vez de uma.
 -- ============================================================================
 
 -- ── PASSO 0 — PREVIEW. Rode isto sozinho antes de aplicar o resto. ──────────
@@ -33,8 +38,8 @@ BEGIN;
 WITH ranked AS (
   SELECT id,
          row_number() OVER (
-           PARTITION BY ativo_id, tipo, data_manutencao::date
-           ORDER BY (data_manutencao::time <> '00:00:00') DESC,
+           PARTITION BY ativo_id, tipo, (data_manutencao AT TIME ZONE 'UTC')::date
+           ORDER BY ((data_manutencao AT TIME ZONE 'UTC')::time <> '00:00:00') DESC,
                     created_at ASC
          ) AS rn
     FROM manutencoes
@@ -53,7 +58,7 @@ DELETE FROM manutencoes m
 -- Idempotente: o WHERE final faz virar no-op quando já está correto.
 UPDATE ativos a
    SET ultima_troca_horimetro = m.horimetro_lancha,
-       ultima_troca_data      = m.data_manutencao::date,
+       ultima_troca_data      = (m.data_manutencao AT TIME ZONE 'UTC')::date,
        updated_at             = now()
   FROM (
         SELECT DISTINCT ON (ativo_id)
@@ -64,7 +69,7 @@ UPDATE ativos a
        ) m
  WHERE a.id = m.ativo_id
    AND (a.ultima_troca_horimetro IS DISTINCT FROM m.horimetro_lancha
-     OR a.ultima_troca_data      IS DISTINCT FROM m.data_manutencao::date);
+     OR a.ultima_troca_data      IS DISTINCT FROM (m.data_manutencao AT TIME ZONE 'UTC')::date);
 
 COMMIT;
 
