@@ -172,14 +172,15 @@ Deno.serve(async (req) => {
         const dhAbastecimento = troca.DH_ABASTECIMENTO;
 
         // ── Deduplicação: verificar se já foi importado ──────────────────────
-        const { data: existeMut } = await supabase
+        const { data: existeMutRows } = await supabase
           .from("manutencoes")
           .select("id")
           .eq("ativo_id", ativoId)
           .eq("data_manutencao", dhAbastecimento)
           .eq("tipo", "troca_oleo")
           .neq("origem", "manual")
-          .maybeSingle();
+          .limit(1);
+        const existeMut = existeMutRows?.[0] ?? null;
 
         if (existeMut) {
           skips.push({
@@ -228,13 +229,14 @@ Deno.serve(async (req) => {
         }
 
         // ── INSERT espelhado em historico ────────────────────────────────────
-        const { data: existeHist } = await supabase
+        const { data: existeHistRows } = await supabase
           .from("historico")
           .select("id")
           .eq("ativo_id", ativoId)
           .eq("data_evento", dhAbastecimento)
           .eq("tipo_evento", "troca_oleo")
-          .maybeSingle();
+          .limit(1);
+        const existeHist = existeHistRows?.[0] ?? null;
 
         if (!existeHist) {
           await supabase.from("historico").insert({
