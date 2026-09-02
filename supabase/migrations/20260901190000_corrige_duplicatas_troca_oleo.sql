@@ -51,6 +51,29 @@ DELETE FROM manutencoes m
  WHERE m.id = r.id
    AND r.rn > 1;
 
+-- ⚠️  ATENÇÃO — O PASSO 2 ABAIXO CAUSOU REGRESSÃO. NÃO REEXECUTAR COMO ESTÁ.
+--
+-- Ele foi escrito "geral e idempotente", re-sincronizando TODOS os ativos a
+-- partir de manutencoes. Isso atropelou três baselines que não vinham de evento
+-- de manutenção:
+--
+--   Gerador 1 (Fortim)  8257  -> NULL   (última troca é import_excel, que grava
+--   Gerador 2 (Taíba)  10165  -> NULL    o valor em horimetro_equipamento e
+--                                        deixa horimetro_lancha nulo)
+--   Motor 8            13187  -> 12899  (baseline não tinha evento correspondente)
+--
+-- Pior: na v_situacao_atual um baseline nulo vira semáforo VERDE, não "—".
+-- Os dois geradores saíram do monitoramento parecendo saudáveis.
+--
+-- Restaurado em 02/09/2026 pela migration 20260902100000.
+--
+-- LIÇÃO: um UPDATE de reparo deve ser restrito às linhas que se quer reparar.
+-- Generalizar não é o mesmo que tornar seguro — aqui foi o oposto.
+--
+-- A versão correta, se algum dia for preciso repetir, tem estas duas guardas:
+--   WHERE ... AND m.horimetro_lancha IS NOT NULL
+--   AND a.id IN (<lista explícita dos ativos afetados>)
+--
 -- ── PASSO 2 — recompor ativos a partir do que sobrou ────────────────────────
 -- Necessário porque o trigger atualizar_ativo_apos_manutencao é AFTER INSERT:
 -- o DELETE acima não dispara nada.
