@@ -3,6 +3,7 @@ import {
   useDespesas, useManobras, useOcorrencias,
   useAbastecimentos, useIndicadoresOp,
 } from "@/hooks/useFleetData";
+import { horasOperadasPorMes } from "@/lib/horasOperadas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, LabelList,
@@ -153,12 +154,14 @@ export default function AnaliseTrimestral({ filterAnos, filterLanchas }: Analise
     }
 
     // ── Horas operadas (só para o tooltip) ───────────────────────────────────
-    for (const i of (indicadores ?? []) as any[]) {
-      const lancha = porCd.get(Number(i.cd_lancha));
-      if (!lancha) continue;
-      const d = (i.dh_leitura ?? "").slice(0, 10);
-      if (!d || !anoOk(d.slice(0, 4))) continue;
-      obter(lancha, trimestreDe(d)).horasOp += Number(i.dc_dif_be) || 0;
+    // Vêm do horímetro, não da soma de dc_dif_be — ver src/lib/horasOperadas.ts.
+    for (const [mes, porLancha] of horasOperadasPorMes((indicadores ?? []) as any[])) {
+      if (!anoOk(mes.slice(0, 4))) continue;
+      for (const [cd, h] of porLancha) {
+        const lancha = porCd.get(cd);
+        if (!lancha) continue;
+        obter(lancha, trimestreDe(`${mes}-01`)).horasOp += h;
+      }
     }
 
     // ── Combustível consumido ────────────────────────────────────────────────

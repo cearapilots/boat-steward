@@ -3,6 +3,7 @@ import {
   useOcorrencias, useManobras, useIndicadoresOp,
   useManutencoesPeriodicas, useManutencoesTipos,
 } from "@/hooks/useFleetData";
+import { horasOperadasEntre, horasOperadasPorMes } from "@/lib/horasOperadas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -332,9 +333,14 @@ export default function ManutencaoPage() {
 
     const noPeriodo = (d: string) => d >= filterDe && d <= filterAte;
 
-    const horasOpDe = (cds: number[]) => ((indicadores ?? []) as any[])
-      .filter(i => cds.includes(Number(i.cd_lancha)) && noPeriodo((i.dh_leitura ?? "").slice(0, 10)))
-      .reduce((s: number, i: any) => s + (Number(i.dc_dif_be) || 0), 0);
+    // Horas vêm do horímetro, não da soma de dc_dif_be — ver src/lib/horasOperadas.ts.
+    // A série entra sem filtro de propósito: a interpolação de borda precisa das
+    // leituras vizinhas ao período.
+    const horasNoPeriodo = horasOperadasEntre(
+      (indicadores ?? []) as any[], filterDe, `${filterAte}T23:59:59`,
+    );
+    const horasOpDe = (cds: number[]) =>
+      cds.reduce((s, cd) => s + (horasNoPeriodo.get(cd) ?? 0), 0);
 
     const manobrasDe = (cds: number[]) => ((manobras ?? []) as any[])
       .filter(m => cds.includes(Number(m.cd_lancha)) && noPeriodo((m.dh_manobra ?? "").slice(0, 10)))
@@ -431,13 +437,9 @@ export default function ManutencaoPage() {
 
     // Horas operadas por mês e lancha (mesmo filtro de data dos demais KPIs)
     const opMap = new Map<string, Map<number, number>>();
-    for (const i of (indicadores ?? []) as any[]) {
-      const d   = (i.dh_leitura ?? "").slice(0, 10);
-      const mes = d.slice(0, 7);
-      if (!mes || d < filterDe || d > filterAte) continue;
-      if (!opMap.has(mes)) opMap.set(mes, new Map());
-      const om = opMap.get(mes)!;
-      om.set(Number(i.cd_lancha), (om.get(Number(i.cd_lancha)) ?? 0) + (Number(i.dc_dif_be) || 0));
+    for (const [mes, porLancha] of horasOperadasPorMes((indicadores ?? []) as any[])) {
+      if (mes < filterDe.slice(0, 7) || mes > filterAte.slice(0, 7)) continue;
+      opMap.set(mes, new Map(porLancha));
     }
 
     const linhas = LANCHAS.filter(l => selLanchas.includes(l.cd)).map(l => {

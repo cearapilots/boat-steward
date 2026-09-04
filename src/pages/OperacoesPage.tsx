@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useManobras, useIndicadoresOp, useFainas, useOcorrencias, useAbastecimentos } from "@/hooks/useFleetData";
+import { horasOperadasPorMes, horasOperadasEntre } from "@/lib/horasOperadas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -259,17 +260,20 @@ export default function OperacoesPage() {
 
   // ── Gráfico 2: Horas de operação por mês ──────────────────────────────────
 
+  // Horas vêm do horímetro, não da soma de dc_dif_be — ver src/lib/horasOperadas.ts.
+  // A série usa `indicadores` sem filtro de propósito: a interpolação de borda
+  // precisa das leituras vizinhas, que o filtro de período recortaria. O filtro de
+  // porto não se aplica a horas — o horímetro não sabe onde as horas foram gastas.
   const horasPorMes = useMemo(() => {
+    const porMes = horasOperadasPorMes((indicadores ?? []) as any[]);
     const map = new Map<string, Record<number, number>>();
-    for (const i of filteredIndicadores as any[]) {
-      const month = (i.dh_leitura ?? "").slice(0, 7);
-      if (!month) continue;
-      const h = Number(i.dc_dif_be);
-      if (!h || isNaN(h) || h <= 0) continue;
-      if (!map.has(month)) map.set(month, {});
-      const e = map.get(month)!;
-      const cd = Number(i.cd_lancha);
-      e[cd] = (e[cd] ?? 0) + h;
+    for (const [month, porLancha] of porMes) {
+      if (filterDe  && month < filterDe.slice(0, 7))  continue;
+      if (filterAte && month > filterAte.slice(0, 7)) continue;
+      const e: Record<number, number> = {};
+      for (const [cd, h] of porLancha)
+        if (selectedLanchas.includes(cd) && h > 0) e[cd] = h;
+      if (Object.keys(e).length) map.set(month, e);
     }
     return [...map.keys()].sort().map(month => {
       const e = map.get(month)!;
@@ -278,7 +282,7 @@ export default function OperacoesPage() {
         pt[LANCHA_NOME[cd]] = e[cd] != null ? Math.round(e[cd] * 10) / 10 : 0;
       return pt;
     });
-  }, [filteredIndicadores, selectedLanchas]);
+  }, [indicadores, selectedLanchas, filterDe, filterAte]);
 
   // ── Gráfico 3: Distribuição (donut) ───────────────────────────────────────
 
@@ -405,15 +409,12 @@ export default function OperacoesPage() {
       e[cd] = (e[cd] ?? 0) + 1;
     }
     const hMap = new Map<string, Record<number, number>>();
-    for (const i of filteredIndicadores as any[]) {
-      const month = (i.dh_leitura ?? "").slice(0, 7);
-      if (!month) continue;
-      const h = Number(i.dc_dif_be);
-      if (!h || isNaN(h) || h <= 0) continue;
-      if (!hMap.has(month)) hMap.set(month, {});
-      const e = hMap.get(month)!;
-      const cd = Number(i.cd_lancha);
-      e[cd] = (e[cd] ?? 0) + h;
+    for (const [month, porLancha] of horasOperadasPorMes((indicadores ?? []) as any[])) {
+      if (filterDe  && month < filterDe.slice(0, 7))  continue;
+      if (filterAte && month > filterAte.slice(0, 7)) continue;
+      const e: Record<number, number> = {};
+      for (const [cd, h] of porLancha) if (h > 0) e[cd] = h;
+      if (Object.keys(e).length) hMap.set(month, e);
     }
     const months = [...new Set([...mMap.keys(), ...hMap.keys()])].sort();
     return months.map(month => {
@@ -425,7 +426,7 @@ export default function OperacoesPage() {
       }
       return pt;
     });
-  }, [filteredManobras, filteredIndicadores, selectedLanchas]);
+  }, [filteredManobras, indicadores, selectedLanchas, filterDe, filterAte]);
 
 
   // ── Deslocamentos ──────────────────────────────────────────────────────────
@@ -470,7 +471,13 @@ export default function OperacoesPage() {
 
   const kpis = useMemo(() => {
     const totalManobras = (filteredManobras as any[]).length;
-    const horasTotais   = (filteredIndicadores as any[]).reduce((s: number, i: any) => s + (Number(i.dc_dif_be) || 0), 0);
+    const horasTotais   = [...horasOperadasEntre(
+      (indicadores ?? []) as any[],
+      filterDe  || "1900-01-01",
+      filterAte ? `${filterAte}T23:59:59` : "2999-12-31",
+    ).entries()]
+      .filter(([cd]) => selectedLanchas.includes(cd))
+      .reduce((s, [, h]) => s + h, 0);
     const periodDays    = filterDe && filterAte
       ? Math.max(1, Math.round((new Date(filterAte).getTime() - new Date(filterDe).getTime()) / 86400000) + 1)
       : 1;
@@ -496,7 +503,7 @@ export default function OperacoesPage() {
       manobrasPorDia: Math.round((totalManobras / periodDays) * 10) / 10,
       fainaMaisLonga: fainaMaisLonga > 0 ? fainaMaisLonga : null,
     };
-  }, [filteredManobras, filteredIndicadores, filteredFainas, manobras, filterDe, filterAte, selectedLanchas]);
+  }, [filteredManobras, indicadores, filteredFainas, manobras, filterDe, filterAte, selectedLanchas]);
 
   // ── Combustível ───────────────────────────────────────────────────────────
 
@@ -536,12 +543,10 @@ export default function OperacoesPage() {
       litMap.get(mes)![cd] = (litMap.get(mes)![cd] ?? 0) + Number(a.dc_litros);
     }
     const hMap = new Map<string, Record<number, number>>();
-    for (const i of filteredIndicadores as any[]) {
-      const mes = (i.dh_leitura ?? "").slice(0, 7);
-      const cd = Number(i.cd_lancha);
-      if (!mes || !i.dc_dif_be) continue;
-      if (!hMap.has(mes)) hMap.set(mes, {});
-      hMap.get(mes)![cd] = (hMap.get(mes)![cd] ?? 0) + Number(i.dc_dif_be);
+    for (const [mes, porLancha] of horasOperadasPorMes((indicadores ?? []) as any[])) {
+      const e: Record<number, number> = {};
+      for (const [cd, h] of porLancha) if (selectedLanchas.includes(cd) && h > 0) e[cd] = h;
+      if (Object.keys(e).length) hMap.set(mes, e);
     }
     const meses = [...new Set([...litMap.keys()])].sort();
     return meses.map(mes => {
@@ -553,7 +558,7 @@ export default function OperacoesPage() {
       }
       return pt;
     });
-  }, [filteredAbastecimentos, filteredIndicadores, selectedLanchas]);
+  }, [filteredAbastecimentos, indicadores, selectedLanchas]);
 
   const dadosLitrosPorManobra = useMemo(() => {
     const litMap = new Map<string, Record<number, number>>();
