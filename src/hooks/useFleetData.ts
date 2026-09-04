@@ -949,7 +949,7 @@ export function useIndicadoresOp() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("indicadores_ativos")
-        .select("cd_ativo_indicador, cd_lancha, ds_lancha, dh_leitura, dc_dif_be, ds_origem, porto")
+        .select("cd_ativo_indicador, cd_lancha, ds_lancha, dh_leitura, dc_horimetro_bb, dc_dif_be, ds_origem, porto")
         .order("dh_leitura", { ascending: false })
         .limit(100000);
       if (error) throw error;
