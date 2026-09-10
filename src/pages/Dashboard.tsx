@@ -1,6 +1,6 @@
 /* Fleet Dashboard - dados do Supabase */
 import { useMemo, useState } from "react";
-import { useSituacaoAtual, SituacaoRow, useManutencoesPeriodicas, ManutencaoPeriodicaStatus, useSyncHorimetros, useOcorrencias, useManobras, useFainas } from "@/hooks/useFleetData";
+import { useSituacaoAtual, SituacaoRow, useManutencoesPeriodicas, ManutencaoPeriodicaStatus, useSyncHorimetros, useOcorrencias, useManobras, useFainas, useLanchas } from "@/hooks/useFleetData";
 import { MaintenanceModal } from "@/components/MaintenanceModal";
 import { PeriodicMaintenanceModal } from "@/components/PeriodicMaintenanceModal";
 import { AtivoDetalhesModal } from "@/components/AtivoDetalhesModal";
@@ -27,6 +27,38 @@ function statusFromSemaforo(s: string): "ok" | "warn" | "danger" {
   return "ok";
 }
 
+// O tipo de periódica do ar-condicionado é identificado pelo nome, que varia na
+// acentuação e no hífen entre as origens ("ar-condicionado", "ar condicionado").
+function isArCondicionado(tipoNome: string): boolean {
+  const n = tipoNome
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/-/g, " ");
+  return n.includes("ar condicionado");
+}
+
+// Tempo decorrido em anos + meses + dias de calendário. Empresta os dias do mês
+// anterior quando o dia do mês atual ainda não alcançou o dia da instalação.
+function tempoDecorrido(iso: string, hoje: Date = new Date()): string {
+  const [ay, am, ad] = iso.slice(0, 10).split("-").map(Number);
+  if (!ay || !am || !ad) return "—";
+  let anos  = hoje.getFullYear() - ay;
+  let meses = hoje.getMonth() + 1 - am;
+  let dias  = hoje.getDate() - ad;
+  if (dias < 0) {
+    meses -= 1;
+    dias += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate();
+  }
+  if (meses < 0) { anos -= 1; meses += 12; }
+  if (anos < 0) return "—";
+  const partes: string[] = [];
+  if (anos)  partes.push(anos + (anos === 1 ? " ano" : " anos"));
+  if (meses) partes.push(meses + (meses === 1 ? " mês" : " meses"));
+  if (dias)  partes.push(dias + (dias === 1 ? " dia" : " dias"));
+  if (partes.length === 0) return "instalado hoje";
+  if (partes.length === 1) return partes[0];
+  return partes.slice(0, -1).join(", ") + " e " + partes[partes.length - 1];
+}
+
 function fmtDate(iso: string | null) {
   return iso
     ? new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
@@ -36,6 +68,7 @@ function fmtDate(iso: string | null) {
 export default function Dashboard() {
   const { data: rows, isLoading, isFetching } = useSituacaoAtual();
   const { data: periodicas } = useManutencoesPeriodicas();
+  const { data: lanchas = [] } = useLanchas();
   const { data: ocorrencias = [] } = useOcorrencias();
   const { data: manobrasData = [] } = useManobras();
   const { data: fainasData = [] } = useFainas();
@@ -89,6 +122,16 @@ export default function Dashboard() {
     });
     return Array.from(map.values());
   }, [rows]);
+
+  // Data de instalação do ar-condicionado por lancha, exibida no tooltip da
+  // linha da periódica. Fica vazio enquanto a coluna não existir no banco.
+  const acInstalacaoByLancha = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of (lanchas ?? []) as Array<{ id?: string; ac_data_instalacao?: string | null }>) {
+      if (l?.id && l?.ac_data_instalacao) m.set(l.id as string, l.ac_data_instalacao as string);
+    }
+    return m;
+  }, [lanchas]);
 
   const periodicasByLancha = useMemo(() => {
     const map = new Map<string, ManutencaoPeriodicaStatus[]>();
@@ -254,6 +297,9 @@ export default function Dashboard() {
                         </div>
                         {(periodicasByLancha.get(b.lanchaId) ?? []).map((it) => {
                           const lvl = periodicStatusLevel(it.status_semaforo);
+                          const acInstalacao = isArCondicionado(it.tipo_nome)
+                            ? acInstalacaoByLancha.get(b.lanchaId) ?? null
+                            : null;
                           const dias = it.dias_restantes;
                           let diasNode: React.ReactNode;
                           if (it.ultima_data == null || dias == null) {
@@ -281,7 +327,17 @@ export default function Dashboard() {
                                   <TooltipTrigger asChild>
                                     <span className="font-medium truncate cursor-help">{abbrevManutencao(it.tipo_nome)}</span>
                                   </TooltipTrigger>
-                                  <TooltipContent>{it.tipo_nome}</TooltipContent>
+                                  <TooltipContent>
+                                    <div>{it.tipo_nome}</div>
+                                    {acInstalacao && (
+                                      <div className="mt-1.5 border-t border-border/50 pt-1.5">
+                                        <div>Instalado em {fmtDateBR(acInstalacao)}</div>
+                                        <div className="text-muted-foreground">
+                                          Em uso há {tempoDecorrido(acInstalacao)}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </TooltipContent>
                                 </Tooltip>
                               </div>
                               <span className="text-center font-mono text-xs">
