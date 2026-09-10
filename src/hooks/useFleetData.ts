@@ -73,9 +73,90 @@ export function periodicaSemaforo(
   return "ok";
 }
 
+export type PeriodicidadeOverride = {
+  lancha_id: string;
+  tipo_id: string;
+  periodicidade_dias: number;
+};
+
+// Exceção de periodicidade por (lancha, tipo). A periodicidade padrão vive em
+// `manutencoes_periodicas_tipos` e vale para toda a frota; esta tabela existe
+// para os casos em que uma lancha tem prazo próprio — hoje, o ar-condicionado
+// da Fortim, mensal por decisão da gestão em 10/09/2026.
+//
+// A consulta é tolerante de propósito: enquanto a migration não tiver rodado,
+// o erro é engolido e o app segue usando a periodicidade global do tipo.
+export function usePeriodicidadeOverrides() {
+  return useQuery({
+    queryKey: ["periodicidade_overrides"],
+    queryFn: async (): Promise<PeriodicidadeOverride[]> => {
+      const { data, error } = await (supabase as any)
+        .from("manutencoes_periodicas_excecoes")
+        .select("lancha_id, tipo_id, periodicidade_dias");
+      if (error) return [];
+      return (data ?? []) as PeriodicidadeOverride[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function periodicidadeKey(lanchaId: string, tipoId: string) {
+  return `${lanchaId}::${tipoId}`;
+}
+
+export function overridesToMap(rows: PeriodicidadeOverride[] | undefined): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const r of rows ?? []) m.set(periodicidadeKey(r.lancha_id, r.tipo_id), r.periodicidade_dias);
+  return m;
+}
+
+// Aritmética em data de calendário (YYYY-MM-DD), sem hora e sem fuso: o
+// vencimento de uma periódica é um dia, não um instante.
+function addDiasISO(iso: string, dias: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+function hojeISO(): string {
+  const n = new Date();
+  const mm = String(n.getMonth() + 1).padStart(2, "0");
+  const dd = String(n.getDate()).padStart(2, "0");
+  return `${n.getFullYear()}-${mm}-${dd}`;
+}
+
+function diffDiasISO(deISO: string, ateISO: string): number {
+  const a = Date.parse(`${deISO}T00:00:00Z`);
+  const b = Date.parse(`${ateISO}T00:00:00Z`);
+  return Math.round((b - a) / 86_400_000);
+}
+
+// Recalcula próxima data e dias restantes quando a lancha tem periodicidade
+// própria. Só age nos pares que têm exceção E cujo valor difere do que a view
+// devolveu — todo o resto passa intacto, com os números da view. Isso mantém o
+// app correto mesmo antes de a view conhecer a exceção, e continua correto
+// depois, porque é recálculo e não ajuste incremental.
+function aplicaPeriodicidadePropria(
+  r: ManutencaoPeriodicaStatus,
+  ovMap: Map<string, number>,
+): ManutencaoPeriodicaStatus {
+  const dias = ovMap.get(periodicidadeKey(r.lancha_id, r.tipo_id));
+  if (dias == null || dias <= 0 || dias === r.periodicidade_dias) return r;
+  if (!r.ultima_data) return { ...r, periodicidade_dias: dias };
+  const proxima = addDiasISO(r.ultima_data, dias);
+  return {
+    ...r,
+    periodicidade_dias: dias,
+    proxima_data: proxima,
+    dias_restantes: diffDiasISO(hojeISO(), proxima),
+  };
+}
+
 export function useManutencoesPeriodicas() {
   const { data: config } = useConfiguracoes();
+  const { data: overrides } = usePeriodicidadeOverrides();
   const amareloDias = configNum(config, "semaforo_amarelo_periodicas_dias", PERIODICAS_AMARELO_DIAS_PADRAO);
+  const ovMap = overridesToMap(overrides);
 
   return useQuery({
     queryKey: ["manutencoes_periodicas"],
@@ -104,13 +185,16 @@ export function useManutencoesPeriodicas() {
     // Recalcula o status a partir do limiar configurado sem refazer a query
     // (roda de novo quando amareloDias muda). dias_restantes vem da view.
     select: (rows: ManutencaoPeriodicaStatus[]) =>
-      rows.map((r) => ({
-        ...r,
-        status_semaforo:
-          r.status_semaforo === "sem_registro"
-            ? "sem_registro"
-            : periodicaSemaforo(r.dias_restantes, amareloDias),
-      })),
+      rows.map((r) => {
+        const base = aplicaPeriodicidadePropria(r, ovMap);
+        return {
+          ...base,
+          status_semaforo:
+            base.status_semaforo === "sem_registro"
+              ? "sem_registro"
+              : periodicaSemaforo(base.dias_restantes, amareloDias),
+        };
+      }),
   });
 }
 
@@ -134,6 +218,18 @@ export function useCalendarioManutencoes(ano: number) {
         .order("data_realizada", { ascending: true });
       if (errReg) throw errReg;
 
+      // Exceções de periodicidade por lancha. O calendário projeta a partir de
+      // `manutencoes_periodicas_tipos` e não passa pela view, então precisa
+      // resolver a exceção por conta própria. Erro aqui não derruba o
+      // calendário: sem exceção, vale a periodicidade global do tipo.
+      const { data: overrides } = await (supabase as any)
+        .from("manutencoes_periodicas_excecoes")
+        .select("lancha_id, tipo_id, periodicidade_dias");
+      const ovMap = new Map<string, number>();
+      for (const o of (overrides ?? []) as PeriodicidadeOverride[]) {
+        ovMap.set(periodicidadeKey(o.lancha_id, o.tipo_id), o.periodicidade_dias);
+      }
+
       const items: CalendarioManutencaoItem[] = [];
 
       type PairRec = {
@@ -148,7 +244,8 @@ export function useCalendarioManutencoes(ano: number) {
         const lancha_nome = r.lancha?.nome ?? "";
         const tipo_id = r.tipo?.id ?? r.tipo_id;
         const tipo_nome = r.tipo?.nome ?? "";
-        const periodicidade_dias = r.tipo?.periodicidade_dias ?? 0;
+        const periodicidade_dias =
+          ovMap.get(periodicidadeKey(lancha_id, tipo_id)) ?? (r.tipo?.periodicidade_dias ?? 0);
         const dataStr: string = r.data_realizada;
 
         if (dataStr.startsWith(String(ano))) {
