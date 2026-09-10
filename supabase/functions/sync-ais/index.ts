@@ -44,7 +44,13 @@ function paraUtc(bruto: string): string | null {
   if (!s) return null;
   // Se um dia passar a vir com fuso, respeita o que veio.
   if (/(?:Z|[+-]\d{2}:?\d{2})$/.test(s)) return s;
-  return `${s}-03:00`;
+  // Corta a fração de segundo. O export histórico do WebPilot vem só até o
+  // segundo, e sem este corte a MESMA leitura entraria duas vezes: uma pelo
+  // backfill ("09:46:32") e outra pelo sync ("09:46:32.953"). Medido nos dois
+  // lados: truncar não funde leitura nenhuma — 2.369 registros continuam
+  // 2.369 chaves distintas, e o histórico de 707 mil linhas idem.
+  const semFracao = s.replace(/\.\d+$/, "");
+  return `${semFracao}-03:00`;
 }
 
 function num(v: unknown): number | null {
