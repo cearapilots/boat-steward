@@ -85,8 +85,7 @@ Deno.serve(async (req) => {
       const efeito = efeitosValidos.includes(oc.DS_EFEITO) ? oc.DS_EFEITO : null;
 
       // ── INSERT OR UPDATE em ocorrencias_webpilot ─────────────────────────
-      // Tenta INSERT primeiro; em conflito (cd_ocorrencia já existe),
-      // atualiza apenas data_fim e duracao_horas — preserva descricao editada manualmente.
+      // Tenta INSERT primeiro; em conflito (cd_ocorrencia já existe), atualiza.
       const { error: errInsert } = await supabase
         .from("ocorrencias_webpilot")
         .insert({
@@ -103,12 +102,27 @@ Deno.serve(async (req) => {
 
       if (errInsert) {
         if (errInsert.code === "23505") {
-          // Registro já existe — atualiza apenas campos que o WebPilot pode mudar
+          // Registro já existe — o WebPilot é a fonte de verdade do conteúdo.
+          //
+          // [MUDADO 11/09/2026] Antes este update preservava `descricao`, para
+          // não atropelar edição feita à mão no FleetIQ. A gestão passou a
+          // reabrir ocorrências no WebPilot para enriquecer o relato — a 7130
+          // saiu de 112 para ~1.400 caracteres — e sem isto o FleetIQ e o
+          // FleetIQ Analytics ficavam com a primeira versão para sempre.
+          //
+          // Conferido antes de inverter, não há edição manual em risco:
+          //  · a única linha com origem 'manual' tem cd_ocorrencia NULO, e este
+          //    update casa por cd_ocorrencia — nunca a alcança;
+          //  · as 826 linhas de 'import_excel' param em 26/04/2026, quatro
+          //    meses fora da janela que o sync varre.
           const { error: errUpdate } = await supabase
             .from("ocorrencias_webpilot")
             .update({
+              data_inicio: oc.DH_ABERTURA,
               data_fim: oc.DH_FECHAMENTO ?? null,
               duracao_horas: oc.NR_HORAS ?? null,
+              tipo_ocorrencia: oc.DS_TIPO_OCORRENCIA,
+              descricao: oc.DS_OCORRENCIA,
               efeito,
             })
             .eq("cd_ocorrencia", cdOcorrencia);
@@ -285,7 +299,17 @@ Deno.serve(async (req) => {
                 .limit(1);
               const existeHistOleo = existeHistOleoRows?.[0] ?? null;
 
-              if (!existeHistOleo) {
+              if (existeHistOleo) {
+                // O texto da ocorrência pode ter sido enriquecido depois da
+                // primeira sincronização. Atualiza o espelho — mas só a linha
+                // que o próprio sync escreveu: `origem = 'manual'` é de alguém
+                // e não se mexe.
+                await supabase
+                  .from("historico")
+                  .update({ descricao: oc.DS_OCORRENCIA })
+                  .eq("id", existeHistOleo.id)
+                  .eq("origem", "webpilot_sync");
+              } else {
                 await supabase.from("historico").insert({
                   tipo_evento: "troca_oleo",
                   ativo_id: pos.ativo_id,
