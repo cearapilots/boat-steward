@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { useAtivos, type SituacaoRow } from "@/hooks/useFleetData";
+import { useAtivos, usePosicoes, type SituacaoRow } from "@/hooks/useFleetData";
 
 type Props = {
   open: boolean;
@@ -30,10 +30,21 @@ function fmtRestante(v: number | null | undefined) {
 
 export function AtivoDetalhesModal({ open, onClose, ativoId, row }: Props) {
   const { data: ativos } = useAtivos();
+  const { data: posicoes } = usePosicoes();
   const ativo = useMemo(
     () => (ativos ?? []).find((a: any) => a.id === ativoId) as any,
     [ativos, ativoId],
   );
+
+  // Instalação vigente do ativo: a linha de `posicoes` ainda sem data_remocao.
+  // `posicoes` já vem ordenada por data_instalacao desc, então a primeira é a
+  // mais recente caso haja mais de uma aberta por inconsistência de cadastro.
+  const instaladoDesde = useMemo(() => {
+    const atual = (posicoes ?? []).find(
+      (p: any) => p.ativo_id === ativoId && p.data_remocao == null,
+    ) as any;
+    return atual?.data_instalacao ?? null;
+  }, [posicoes, ativoId]);
 
   if (!ativoId) return null;
 
@@ -103,7 +114,7 @@ export function AtivoDetalhesModal({ open, onClose, ativoId, row }: Props) {
             <h4 className="text-sm font-semibold mb-2">Posição Atual</h4>
             <DLRow label="Lancha" value={lanchaNome} />
             <DLRow label="Slot" value={posicao ?? "Reserva"} />
-            <DLRow label="Instalado desde" value={fmtDateBR(row?.ultima_atualizacao)} />
+            <DLRow label="Instalado desde" value={fmtDateBR(instaladoDesde)} />
           </section>
         </div>
 
