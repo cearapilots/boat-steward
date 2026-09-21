@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useManutencoes, useOcorrenciasWebpilot } from "@/hooks/useFleetData";
+import { useManutencoes, useOcorrenciasWebpilot, useRemoverOcorrencia, type OcorrenciaWebpilot } from "@/hooks/useFleetData";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, ChevronDown } from "lucide-react";
+import { Pencil, ChevronDown, Trash2 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import { HistoricoDetalheModal } from "@/components/HistoricoDetalheModal";
 
 const PAGE_SIZE = 50;
@@ -111,6 +116,8 @@ function MultiSelect({
 export default function HistoryPage() {
   const { data, isLoading }                          = useManutencoes();
   const { data: ocorrencias, isLoading: loadingOc } = useOcorrenciasWebpilot();
+  const removerOcorrencia = useRemoverOcorrencia();
+  const [ocParaRemover, setOcParaRemover] = useState<OcorrenciaWebpilot | null>(null);
 
   // ── Estado filtros — Ocorrências ──────────────────────────────────────────
   const [ocLanchas,   setOcLanchas]   = useState<string[]>([]);
@@ -486,10 +493,18 @@ export default function HistoryPage() {
                                 <EfeitoBadge efeito={o.efeito} />
                               </TableCell>
                               <TableCell>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver / editar"
-                                  onClick={() => setDetalhe({ mode: "ocorrencia", record: o })}>
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver / editar"
+                                    onClick={() => setDetalhe({ mode: "ocorrencia", record: o })}>
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon"
+                                    className="h-7 w-7 text-muted-foreground hover:text-red-600"
+                                    title="Remover ocorrência"
+                                    onClick={() => setOcParaRemover(o)}>
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
@@ -529,6 +544,47 @@ export default function HistoryPage() {
         mode={detalhe?.mode ?? "historico"}
         record={detalhe?.record ?? null}
       />
+
+      <AlertDialog open={ocParaRemover !== null} onOpenChange={(o) => { if (!o) setOcParaRemover(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover esta ocorrência?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  {ocParaRemover?.tipo_ocorrencia ?? "Ocorrência"}
+                  {ocParaRemover?.lanchas?.nome ? ` — ${ocParaRemover.lanchas.nome}` : ""}
+                  {ocParaRemover?.cd_ocorrencia ? ` (cd ${ocParaRemover.cd_ocorrencia})` : ""}
+                </p>
+                <p>A remoção é permanente e não pode ser desfeita.</p>
+                <p className="text-amber-600">
+                  Se a ocorrência ainda estiver ativa no WebPilot, a sincronização
+                  vai trazê-la de volta — o endpoint devolve cerca de 30 dias. Para
+                  que ela saia de vez, cancele no WebPilot: o sync passou a remover
+                  sozinho as canceladas.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                const alvo = ocParaRemover;
+                if (!alvo) return;
+                removerOcorrencia.mutate(alvo.id, {
+                  onSuccess: () => toast.success("Ocorrência removida."),
+                  onError: (e: unknown) =>
+                    toast.error(`Erro ao remover: ${e instanceof Error ? e.message : "tente novamente"}`),
+                });
+                setOcParaRemover(null);
+              }}>
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
