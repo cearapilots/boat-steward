@@ -487,6 +487,8 @@ export type OcorrenciaWebpilot = {
   tipo_ocorrencia: string | null;
   descricao: string | null;
   efeito: string | null;
+  cd_estado: number | null;
+  ds_estado: string | null;
   lancha_id: string | null;
   lanchas: { nome: string } | null;
 };
@@ -497,11 +499,37 @@ export function useOcorrenciasWebpilot() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("ocorrencias_webpilot")
-        .select("id, cd_ocorrencia, data_inicio, data_fim, duracao_horas, tipo_ocorrencia, descricao, efeito, lancha_id, lanchas(nome)")
+        .select("id, cd_ocorrencia, data_inicio, data_fim, duracao_horas, tipo_ocorrencia, descricao, efeito, cd_estado, ds_estado, lancha_id, lanchas(nome)")
         .order("data_inicio", { ascending: false })
         .limit(1000);
       if (error) throw error;
       return (data ?? []) as OcorrenciaWebpilot[];
+    },
+  });
+}
+
+/**
+ * Remove uma ocorrência do FleetIQ.
+ *
+ * ⚠️ Só é definitivo para ocorrência que o WebPilot não vá mandar de novo. O
+ * endpoint devolve ~30 dias, e o sync reinsere o que receber: apagar aqui uma
+ * ocorrência recente e NÃO cancelada no WebPilot faz ela voltar na próxima
+ * execução. Para cancelamento, o caminho é cancelar no WebPilot — o sync passou
+ * a remover sozinho quando o estado chega como 133.
+ */
+export function useRemoverOcorrencia() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from("ocorrencias_webpilot")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ocorrencias_webpilot"] });
+      qc.invalidateQueries({ queryKey: ["ocorrencias"] });
     },
   });
 }
