@@ -18,6 +18,8 @@ type WpOcorrencia = {
   DS_TIPO_OCORRENCIA: string;
   DS_OCORRENCIA: string;
   DS_EFEITO: string;
+  CD_ESTADO: number | string | null;
+  DS_ESTADO: string | null;
 };
 
 const MAPEAMENTO_PERIODICAS: Record<string, string> = {
@@ -43,6 +45,7 @@ Deno.serve(async (req) => {
   );
 
   let ocorrenciasImportadas = 0;
+  let canceladasRemovidas = 0;
   let periodicasRegistradas = 0;
   const contagemPorLancha = new Map<string, number>();
 
@@ -84,6 +87,40 @@ Deno.serve(async (req) => {
       const efeitosValidos = ["Inoperante", "Operante", "Operante com Restrições", "Não Altera"];
       const efeito = efeitosValidos.includes(oc.DS_EFEITO) ? oc.DS_EFEITO : null;
 
+      // ── CANCELADA: apaga e segue ─────────────────────────────────────────
+      // [21/09/2026] Ocorrência cancelada no WebPilot passa a chegar com
+      // CD_ESTADO 133. Cancelada significa que o evento não aconteceu, então a
+      // linha sai do banco — mantê-la exigiria filtro em cada consumidor, e
+      // bastaria esquecer um para o número sair errado.
+      //
+      // Foi exatamente para isto que pedimos o campo: se o WebPilot apenas
+      // parasse de mandar a cancelada, o sync não receberia sinal nenhum e a
+      // cópia daqui ficaria para sempre.
+      //
+      // A trava de origem garante que registro lançado à mão nunca é alcançado.
+      const cdEstado =
+        oc.CD_ESTADO === null || oc.CD_ESTADO === undefined ? null : Number(oc.CD_ESTADO);
+
+      if (cdEstado === 133) {
+        const { error: errDel } = await supabase
+          .from("ocorrencias_webpilot")
+          .delete()
+          .eq("cd_ocorrencia", cdOcorrencia)
+          .eq("origem", "webpilot_sync");
+        if (errDel) {
+          console.error(`Erro ao apagar cancelada ${cdOcorrencia}:`, errDel);
+        } else {
+          canceladasRemovidas++;
+        }
+        // O espelho em `historico` das trocas de óleo sai junto, mesma trava.
+        await supabase
+          .from("historico")
+          .delete()
+          .eq("origem", "webpilot_sync")
+          .filter("dados_extras->>cd_ocorrencia", "eq", String(cdOcorrencia));
+        continue;
+      }
+
       // ── INSERT OR UPDATE em ocorrencias_webpilot ─────────────────────────
       // Tenta INSERT primeiro; em conflito (cd_ocorrencia já existe), atualiza.
       const { error: errInsert } = await supabase
@@ -96,6 +133,8 @@ Deno.serve(async (req) => {
           tipo_ocorrencia: oc.DS_TIPO_OCORRENCIA,
           descricao: oc.DS_OCORRENCIA,
           efeito,
+          cd_estado: cdEstado,
+          ds_estado: oc.DS_ESTADO ?? null,
           lancha_id: lancha.id,
           origem: "webpilot_sync",
         });
@@ -124,6 +163,8 @@ Deno.serve(async (req) => {
               tipo_ocorrencia: oc.DS_TIPO_OCORRENCIA,
               descricao: oc.DS_OCORRENCIA,
               efeito,
+              cd_estado: cdEstado,
+              ds_estado: oc.DS_ESTADO ?? null,
             })
             .eq("cd_ocorrencia", cdOcorrencia);
           if (errUpdate) {
@@ -332,11 +373,17 @@ Deno.serve(async (req) => {
     }
 
     // ── 5. Gravar no sync_log ────────────────────────────────────────────────
-    const detalhe = contagemPorLancha.size > 0
+    // O sufixo de canceladas só aparece quando houve alguma: manter a linha
+    // igual nos dias normais preserva a classificação em v_analytics_sync_health,
+    // que identifica esta função pelo texto de `detalhe`.
+    const sufixoCanceladas =
+      canceladasRemovidas > 0 ? ` | Canceladas removidas: ${canceladasRemovidas}` : "";
+
+    const detalhe = (contagemPorLancha.size > 0
       ? [...contagemPorLancha.entries()]
           .map(([nome, qtd]) => `${nome}: ${qtd}`)
           .join(" | ") + ` | Periódicas: ${periodicasRegistradas}`
-      : `Nenhuma ocorrência nova | Periódicas: ${periodicasRegistradas}`;
+      : `Nenhuma ocorrência nova | Periódicas: ${periodicasRegistradas}`) + sufixoCanceladas;
 
     await supabase.from("sync_log").insert({
       status: ocorrenciasImportadas > 0 ? "sucesso" : "parcial",
