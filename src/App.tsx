@@ -20,6 +20,7 @@ import OperacoesPage from "@/pages/OperacoesPage";
 import CustosPage from "@/pages/CustosPage";
 import CustosDetalhesPage from "@/pages/CustosDetalhesPage";
 import ManutencaoPage from "@/pages/ManutencaoPage";
+import AisPage from "@/pages/AisPage";
 
 const queryClient = new QueryClient();
 
@@ -60,6 +61,7 @@ const App = () => (
                       <Route path="/configuracoes" element={<SettingsPage />} />
                       <Route path="/operacoes" element={<OperacoesPage />} />
                       <Route path="/manutencao" element={<ManutencaoPage />} />
+                      <Route path="/ais" element={<AisPage />} />
                       <Route path="/custos" element={<CustosPage />} />
                       <Route path="/custos/detalhes" element={<CustosDetalhesPage />} />
                       <Route path="/provas-mar/registrar" element={<ProvasMarRegistrar />} />
