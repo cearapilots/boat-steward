@@ -1190,3 +1190,128 @@ export function useVencimentosHistorico() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * AIS — posição das lanchas
+ *
+ * Três camadas materializadas no Supabase, atualizadas em cadeia todo dia:
+ * sync 09:40 → classificada 09:45 → cobertura 09:50 → base 10:00 → saídas 10:10
+ * (UTC). Os hooks abaixo só leem.
+ *
+ * ⚠️ A Taíba não aparece em nenhuma delas: não tem MMSI, logo não transmite AIS.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+export type AisStatus = {
+  cd_lancha: number;
+  lancha_nome: string;
+  ultima_posicao: string | null;
+  ultimo_sync: string | null;
+  horas_sem_transmitir: number | null;
+  horas_desde_sync: number | null;
+  posicoes_24h: number;
+  posicoes_7d: number;
+  posicoes_30d: number;
+  media_diaria_30d: number | null;
+};
+
+export type AisDia = {
+  ds_lancha: string;
+  cd_lancha: number;
+  dia: string;
+  n_posicoes: number;
+  horas_base: number;
+  horas_mucuripe: number;
+  horas_pecem: number;
+  horas_fora: number;
+  horas_fora_movimento: number;
+  horas_fora_parada: number;
+  horas_iate_clube: number;
+  horas_nao_resolvidas: number;
+};
+
+export type AisSaida = {
+  ds_lancha: string;
+  cd_lancha: number;
+  nr_saida: number;
+  inicio: string;
+  fim: string | null;
+  dia_inicio: string;
+  hora_inicio: number;
+  noturna: boolean;
+  duracao_h: number | null;
+  horas_movimento: number;
+  horas_parada: number;
+  horas_nao_resolvidas: number;
+  cobertura_pct: number | null;
+  base_origem: string | null;
+  base_destino: string | null;
+  travessia: boolean;
+  afastamento_max_km: number | null;
+  sog_max: number | null;
+  passou_iate_clube: boolean;
+  curta_e_perto: boolean;
+  em_aberto: boolean;
+  n_manobras: number;
+  motivo: string;
+  confianca: string;
+};
+
+/** Saúde da transmissão AIS de cada lancha. O limiar de alerta (6 h) está em
+ *  `configuracoes.ais_horas_sem_transmitir_alerta`. */
+export function useAisStatus() {
+  return useQuery({
+    queryKey: ["ais_status"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_ais_status_transmissao")
+        .select("*");
+      if (error) throw error;
+      return (data ?? []) as AisStatus[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Horas por dia na base, fora (aberta em movimento e parada) e sem AIS.
+ *
+ *  ⚠️ `horas_fora` inclui espera parada fora da cerca — há um ponto de espera no
+ *  Pecém que não está cercado. Para medir OPERAÇÃO use `horas_fora_movimento`. */
+export function useAisBaseDia(de: string, ate: string) {
+  return useQuery({
+    queryKey: ["ais_base_dia", de, ate],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("mv_ais_base_dia")
+        .select("*")
+        .gte("dia", de)
+        .lte("dia", ate)
+        .order("dia");
+      if (error) throw error;
+      return (data ?? []) as AisDia[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Saídas da base já cruzadas com manobras, abastecimentos, ocorrências e
+ *  provas de mar.
+ *
+ *  ⚠️ Para CONTAR saídas, filtre `curta_e_perto = false` — os episódios curtos e
+ *  colados à base são manobra de berço, não saída operacional. */
+export function useAisSaidas(de: string, ate: string) {
+  return useQuery({
+    queryKey: ["ais_saidas", de, ate],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_ais_saida_motivo")
+        .select("*")
+        .gte("dia_inicio", de)
+        .lte("dia_inicio", ate)
+        .order("inicio");
+      if (error) throw error;
+      return (data ?? []) as AisSaida[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
