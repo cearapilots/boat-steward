@@ -1315,3 +1315,158 @@ export function useAisSaidas(de: string, ate: string) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+
+/* ── AIS: fadiga, travessias e fechamento mensal ──────────────────────────── */
+
+export type FadigaPeriodo = {
+  ds_lancha: string;
+  cd_lancha: number;
+  nr_periodo: number;
+  inicio_trabalho: string;
+  fim_trabalho: string;
+  dia_inicio: string;
+  semana_turma: string;
+  duracao_h: number;
+  horas_movimento: number;
+  n_posicoes: number;
+  horas_wocl: number;
+  horas_madrugada: number;
+  densidade_pct: number;
+  excede_12h: boolean;
+  excede_16h: boolean;
+  atravessa_wocl: boolean;
+  grau: "normal" | "atencao" | "critico";
+  delta_min: number;
+};
+
+export type FadigaSemana = {
+  ds_lancha: string;
+  cd_lancha: number;
+  semana_turma: string;
+  periodos_trabalho: number;
+  horas_trabalho: number;
+  horas_movimento: number;
+  horas_madrugada: number;
+  horas_wocl: number;
+  noites_trabalhadas: number;
+  periodos_acima_12h: number;
+  periodos_acima_16h: number;
+  periodos_criticos: number;
+  maior_jornada_h: number;
+  maior_folga_h: number | null;
+  menor_folga_h: number | null;
+  folgas_abaixo_de_6h: number;
+};
+
+export type AisTravessia = {
+  ds_lancha: string;
+  cd_lancha: number;
+  nr_saida: number;
+  inicio: string;
+  fim: string | null;
+  dia_inicio: string;
+  noturna: boolean;
+  sentido: string;
+  duracao_h: number | null;
+  horas_movimento: number;
+  horas_parada: number;
+  cobertura_pct: number | null;
+  sog_medio: number | null;
+  sog_mediano: number | null;
+  sog_max: number | null;
+};
+
+export type AisMes = {
+  ano_mes: string;
+  ds_lancha: string;
+  cd_lancha: number;
+  dias: number;
+  horas_base: number;
+  horas_mucuripe: number;
+  horas_pecem: number;
+  horas_movimento: number;
+  horas_parada: number;
+  horas_nao_resolvidas: number;
+  horas_iate_clube: number;
+  cobertura_pct: number | null;
+  share_pecem_pct: number | null;
+  razao_movimento_base: number | null;
+  saidas: number;
+  saidas_noturnas: number;
+  travessias: number;
+  passagens_iate_clube: number;
+};
+
+/** Períodos de trabalho montados a partir do MOVIMENTO da lancha.
+ *
+ *  ⚠️ PROXY DA LANCHA, NÃO DA PESSOA — não existe tabela de tripulação no banco.
+ *  Os limiares (12 h, 16 h, WOCL 03–05) vêm da MSC.1/Circ.1598 da IMO. */
+export function useFadigaPeriodos(de: string, ate: string) {
+  return useQuery({
+    queryKey: ["fadiga_periodos", de, ate],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("mv_fadiga_periodos")
+        .select("*")
+        .gte("dia_inicio", de)
+        .lte("dia_inicio", ate)
+        .order("inicio_trabalho");
+      if (error) throw error;
+      return (data ?? []) as FadigaPeriodo[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Acumulado por semana de turma (terça a terça, quando a guarnição troca). */
+export function useFadigaSemana(limite = 16) {
+  return useQuery({
+    queryKey: ["fadiga_semana", limite],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_fadiga_semana")
+        .select("*")
+        .order("semana_turma", { ascending: false })
+        .limit(limite);
+      if (error) throw error;
+      return (data ?? []) as FadigaSemana[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Travessias Mucuripe ↔ Pecém com velocidade.
+ *
+ *  ⚠️ Use MEDIANA, não média: há episódios em que o AIS apagou no caminho e a
+ *  duração vai a centenas de horas. */
+export function useAisTravessias() {
+  return useQuery({
+    queryKey: ["ais_travessias"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_ais_travessias")
+        .select("*")
+        .order("inicio", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AisTravessia[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Fechamento mensal por lancha. */
+export function useAisMes() {
+  return useQuery({
+    queryKey: ["ais_mes"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_ais_mes")
+        .select("*")
+        .order("ano_mes");
+      if (error) throw error;
+      return (data ?? []) as AisMes[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
