@@ -2,7 +2,9 @@ import { useState, useMemo } from "react";
 import {
   useAisStatus, useAisBaseDia, useAisSaidas,
   useFadigaPeriodos, useFadigaSemana, useAisTravessias, useAisMes,
+  useAisFalhas, useAisVelocidade, useAisIateClube, useAtividadeManutencao,
   type AisSaida, type FadigaPeriodo, type FadigaSemana, type AisTravessia, type AisMes,
+  type AisFalha, type AisVelocidade, type AisIateClube, type AtividadeManutencao,
 } from "@/hooks/useFleetData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { Info, Radio, RadioTower, Moon, AlertTriangle } from "lucide-react";
+import { Info, Radio, RadioTower, Moon, AlertTriangle, Wrench, SignalZero } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
@@ -38,6 +40,27 @@ const GRAU_COR: Record<string, string> = { normal: "#16A34A", atencao: "#F59E0B"
 const GRAU_ROTULO: Record<string, string> = { normal: "Normal", atencao: "Atenção", critico: "Crítico" };
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+// Só `ais_com_defeito` é problema. As outras duas o documento da gestão já
+// descrevia como corriqueiras — o sinal cai ao navegar para longe.
+const CLASSE_ROTULO: Record<string, string> = {
+  ais_com_defeito:    "AIS com defeito",
+  queda_em_operacao:  "Queda em operação",
+  queda_em_travessia: "Queda em travessia",
+  indeterminado:      "Indeterminado",
+};
+const CLASSE_COR: Record<string, string> = {
+  ais_com_defeito:    "#DC2626",
+  queda_em_operacao:  "#94A3B8",
+  queda_em_travessia: "#94A3B8",
+  indeterminado:      "#CBD5E1",
+};
+
+const CONTEXTO_ROTULO: Record<string, string> = {
+  no_berco:           "No berço",
+  proximo_a_base:     "Próximo à base",
+  travessia_ou_longe: "Travessia ou longe",
+};
 
 /* ── Utilitários ─────────────────────────────────────────────────────────── */
 
@@ -129,6 +152,10 @@ export default function AisPage() {
   const semanas     = useFadigaSemana();
   const travessias  = useAisTravessias();
   const serieMensal = useAisMes();
+  const falhas      = useAisFalhas(de, ate);
+  const velocidade  = useAisVelocidade();
+  const iateClube   = useAisIateClube();
+  const manutencao  = useAtividadeManutencao(de, ate);
 
   const lanchas = useMemo(() => {
     const m = new Map<number, string>();
@@ -252,6 +279,7 @@ export default function AisPage() {
             <TabsTrigger value="operacao">Operação</TabsTrigger>
             <TabsTrigger value="fadiga">Fadiga</TabsTrigger>
             <TabsTrigger value="travessias">Travessias</TabsTrigger>
+            <TabsTrigger value="transmissao">Transmissão</TabsTrigger>
             <TabsTrigger value="mensal">Mensal</TabsTrigger>
           </TabsList>
 
@@ -420,17 +448,24 @@ export default function AisPage() {
           {/* ══ FADIGA ═════════════════════════════════════════════════ */}
           <TabsContent value="fadiga" className="space-y-6 mt-4">
             <AbaFadiga periodos={fadiga.data ?? []} carregando={fadiga.isLoading}
-                       semanas={semanas.data ?? []} lanchas={lanchas} />
+                       semanas={semanas.data ?? []} lanchas={lanchas}
+                       manutencao={manutencao.data ?? []} />
           </TabsContent>
 
           {/* ══ TRAVESSIAS ═════════════════════════════════════════════ */}
           <TabsContent value="travessias" className="space-y-6 mt-4">
-            <AbaTravessias todas={travessias.data ?? []} carregando={travessias.isLoading} de={de} ate={ate} />
+            <AbaTravessias todas={travessias.data ?? []} carregando={travessias.isLoading}
+                           de={de} ate={ate} velocidade={velocidade.data ?? []} mes={mes} />
           </TabsContent>
 
           {/* ══ MENSAL ═════════════════════════════════════════════════ */}
+          <TabsContent value="transmissao" className="space-y-6 mt-4">
+            <AbaTransmissao falhas={falhas.data ?? []} carregando={falhas.isLoading} />
+          </TabsContent>
+
           <TabsContent value="mensal" className="space-y-6 mt-4">
-            <AbaMensal linhas={serieMensal.data ?? []} carregando={serieMensal.isLoading} />
+            <AbaMensal linhas={serieMensal.data ?? []} carregando={serieMensal.isLoading}
+                       iate={iateClube.data ?? []} />
           </TabsContent>
         </Tabs>
 
@@ -445,11 +480,12 @@ export default function AisPage() {
 
 /* ── Aba: Fadiga ─────────────────────────────────────────────────────────── */
 
-function AbaFadiga({ periodos, carregando, semanas, lanchas }: {
+function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
   periodos: FadigaPeriodo[];
   carregando: boolean;
   semanas: FadigaSemana[];
   lanchas: { cd: number; nome: string }[];
+  manutencao: AtividadeManutencao[];
 }) {
   const [soAlerta, setSoAlerta] = useState(true);
   const visiveis = soAlerta ? periodos.filter(p => p.grau !== "normal") : periodos;
@@ -659,14 +695,65 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas }: {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Wrench className="h-4 w-4 text-muted-foreground" />
+            Manutenção no período
+            <Ajuda>
+              A nota de fadiga dizia que só daria para considerar manutenção se fosse registrada
+              com início e término certinho. É: 922 das 924 ocorrências têm janela completa.
+              <strong> Mas a janela descreve o estado da lancha, não a presença da guarnição</strong> —
+              corretiva com lancha inoperante pode ser espera de peça. Por isso estas horas ficam
+              aqui ao lado, e não somadas à jornada acima.
+            </Ajuda>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="max-h-[18rem] overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 bg-background">
+                <TableRow>
+                  <TableHead>Início</TableHead>
+                  <TableHead>Lancha</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead className="text-right">Duração</TableHead>
+                  <TableHead>Efeito</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {manutencao.map(m => (
+                  <TableRow key={m.cd_ocorrencia}>
+                    <TableCell className="whitespace-nowrap tabular-nums">{horaBR(m.data_inicio)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{m.ds_lancha}</TableCell>
+                    <TableCell className="text-muted-foreground">{m.tipo_ocorrencia}</TableCell>
+                    <TableCell className="text-right tabular-nums">{n1(num(m.duracao_h))} h</TableCell>
+                    <TableCell>
+                      <span className="text-xs" style={m.inoperante ? { color: GRAU_COR.critico } : undefined}>
+                        {m.efeito ?? "—"}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {manutencao.length === 0 && (
+                  <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                    Nenhuma manutenção registrada neste mês.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
     </>
   );
 }
 
 /* ── Aba: Travessias ─────────────────────────────────────────────────────── */
 
-function AbaTravessias({ todas, carregando, de, ate }: {
+function AbaTravessias({ todas, carregando, de, ate, velocidade, mes }: {
   todas: AisTravessia[]; carregando: boolean; de: string; ate: string;
+  velocidade: AisVelocidade[]; mes: string;
 }) {
   const porSentido = useMemo(() => {
     const m = new Map<string, AisTravessia[]>();
@@ -719,6 +806,63 @@ function AbaTravessias({ todas, carregando, de, ate }: {
             Nenhuma travessia detectada.</CardContent></Card>
         )}
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">
+            Velocidade de operação
+            <span className="ml-2 text-xs font-normal text-muted-foreground">{rotuloMes(mes)}</span>
+            <Ajuda>
+              A mesma lancha tem três regimes. <strong>Mediana e percentis, nunca média</strong>:
+              o SOG traz picos espúrios isolados — há leitura de 18,9 kn com a lancha amarrada no
+              Pecém, contrariada pelas posições vizinhas. Leituras acima de 40 kn são descartadas
+              como erro de transponder.
+            </Ajuda>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Lancha</TableHead>
+                <TableHead>Contexto</TableHead>
+                <TableHead className="text-right">Posições</TableHead>
+                <TableHead className="text-right">Mediana</TableHead>
+                <TableHead className="text-right">p90</TableHead>
+                <TableHead className="text-right">p99</TableHead>
+                <TableHead className="text-right">Máx</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {velocidade.filter(v => v.ano_mes === mes)
+                .sort((a, b) => a.ds_lancha.localeCompare(b.ds_lancha)
+                             || a.contexto.localeCompare(b.contexto))
+                .map(v => (
+                <TableRow key={`${v.cd_lancha}-${v.contexto}`}>
+                  <TableCell className="whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full" style={{ background: LANCHA_COR[v.cd_lancha] ?? "#94A3B8" }} />
+                      {v.ds_lancha}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {CONTEXTO_ROTULO[v.contexto] ?? v.contexto}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">{v.n_posicoes}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">{n1(num(v.sog_mediano))} kn</TableCell>
+                  <TableCell className="text-right tabular-nums">{n1(num(v.sog_p90))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{n1(num(v.sog_p99))}</TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">{n1(num(v.sog_max))}</TableCell>
+                </TableRow>
+              ))}
+              {velocidade.filter(v => v.ano_mes === mes).length === 0 && (
+                <TableRow><TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                  Sem posições neste mês.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">
@@ -784,7 +928,9 @@ function AbaTravessias({ todas, carregando, de, ate }: {
 
 /* ── Aba: Mensal ─────────────────────────────────────────────────────────── */
 
-function AbaMensal({ linhas, carregando }: { linhas: AisMes[]; carregando: boolean }) {
+function AbaMensal({ linhas, carregando, iate }: {
+  linhas: AisMes[]; carregando: boolean; iate: AisIateClube[];
+}) {
   const lanchas = useMemo(() => {
     const m = new Map<number, string>();
     linhas.forEach(l => m.set(l.cd_lancha, l.ds_lancha));
@@ -890,6 +1036,184 @@ function AbaMensal({ linhas, carregando }: { linhas: AisMes[]; carregando: boole
                 {linhas.length === 0 && (
                   <TableRow><TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">
                     Sem dados.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">
+            Iate Clube
+            <Ajuda>
+              Duas grandezas que é fácil confundir, e a confusão exagera o uso do clube em vinte
+              vezes. <strong>Dentro da cerca</strong> é o tempo no clube — 2,47 h da Flexeiras em
+              agosto/2026. <strong>Movimento das saídas</strong> é o das saídas inteiras que
+              passaram por lá — 59,28 h no mesmo mês. O clube é ponto de transbordo, não estadia.
+            </Ajuda>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="max-h-[20rem] overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 bg-background">
+                <TableRow>
+                  <TableHead>Mês</TableHead>
+                  <TableHead>Lancha</TableHead>
+                  <TableHead className="text-right">Dentro da cerca</TableHead>
+                  <TableHead className="text-right">Saídas que passaram</TableHead>
+                  <TableHead className="text-right">Noturnas</TableHead>
+                  <TableHead className="text-right">Movimento das saídas</TableHead>
+                  <TableHead className="text-right">% no clube</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {iate.map(i => (
+                  <TableRow key={`${i.ano_mes}-${i.cd_lancha}`}>
+                    <TableCell className="whitespace-nowrap tabular-nums">{rotuloMes(i.ano_mes)}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full" style={{ background: LANCHA_COR[i.cd_lancha] ?? "#94A3B8" }} />
+                        {i.ds_lancha}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">
+                      {n2(num(i.horas_dentro_da_cerca))} h
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{i.saidas_que_passaram}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">{i.noturnas}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {i.horas_movimento_das_saidas != null ? `${n1(num(i.horas_movimento_das_saidas))} h` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {i.pct_da_saida_no_clube != null ? `${n1(num(i.pct_da_saida_no_clube))}%` : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {iate.length === 0 && (
+                  <TableRow><TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                    Nenhuma passagem registrada.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+/* ── Aba: Transmissão ────────────────────────────────────────────────────── */
+
+function AbaTransmissao({ falhas, carregando }: { falhas: AisFalha[]; carregando: boolean }) {
+  const defeitos = falhas.filter(f => f.classe === "ais_com_defeito");
+
+  const porClasse = useMemo(() => {
+    const m = new Map<string, { classe: string; n: number; horas: number; alerta: number }>();
+    falhas.forEach(f => {
+      const at = m.get(f.classe) ?? { classe: f.classe, n: 0, horas: 0, alerta: 0 };
+      at.n += 1; at.horas += num(f.duracao_h); at.alerta += f.acima_do_alerta ? 1 : 0;
+      m.set(f.classe, at);
+    });
+    return [...m.values()].sort((a, b) => b.n - a.n);
+  }, [falhas]);
+
+  if (carregando) {
+    return <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Carregando…</CardContent></Card>;
+  }
+
+  return (
+    <>
+      <Card className="border-sky-500/40 bg-sky-500/5">
+        <CardContent className="flex gap-3 py-4">
+          <SignalZero className="h-4 w-4 shrink-0 text-sky-600 mt-0.5" />
+          <div className="space-y-1 text-sm">
+            <p className="font-medium">Só uma dessas classes é problema.</p>
+            <p className="text-muted-foreground">
+              O sinal cair enquanto a lancha navega para longe, ou durante a travessia entre portos,
+              é esperado — a própria gestão já descrevia isso. O que aponta transponder com defeito é
+              a lancha <strong>atracada antes e depois</strong> do buraco: ela não saiu do lugar e
+              mesmo assim sumiu.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {porClasse.map(c => (
+          <Card key={c.classe}>
+            <CardContent className="pt-5">
+              <Numero
+                rotulo={CLASSE_ROTULO[c.classe] ?? c.classe}
+                valor={String(c.n)}
+                cor={CLASSE_COR[c.classe]}
+                destaque={c.classe === "ais_com_defeito" && c.n > 0}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                {n1(c.horas)} h somadas · {c.alerta} acima de 6 h
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+        {porClasse.length === 0 && (
+          <Card className="sm:col-span-2 lg:col-span-4">
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              Nenhum intervalo sem posição neste mês.
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">
+            AIS com defeito
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              {defeitos.length} no período
+            </span>
+            <Ajuda>
+              Lancha atracada antes e depois do buraco. O limiar de alerta de 6 h está em
+              <code className="mx-1">configuracoes.ais_horas_sem_transmitir_alerta</code> e pode ser
+              mudado sem tocar no código.
+            </Ajuda>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="max-h-[24rem] overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 bg-background">
+                <TableRow>
+                  <TableHead>Sumiu em</TableHead>
+                  <TableHead>Voltou em</TableHead>
+                  <TableHead>Lancha</TableHead>
+                  <TableHead className="text-right">Duração</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {defeitos.map(f => (
+                  <TableRow key={`${f.cd_lancha}-${f.inicio}`}>
+                    <TableCell className="whitespace-nowrap tabular-nums">{horaBR(f.inicio)}</TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
+                      {horaBR(f.fim)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full" style={{ background: LANCHA_COR[f.cd_lancha] ?? "#94A3B8" }} />
+                        {f.ds_lancha}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <span style={f.acima_do_alerta ? { color: GRAU_COR.critico, fontWeight: 500 } : undefined}>
+                        {n1(num(f.duracao_h))} h
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {defeitos.length === 0 && (
+                  <TableRow><TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                    Nenhuma falha de transponder neste mês.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
