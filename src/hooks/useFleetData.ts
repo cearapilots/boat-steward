@@ -1470,3 +1470,141 @@ export function useAisMes() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+
+/* ── AIS: transmissão, velocidade, Iate Clube e manutenção ────────────────── */
+
+export type AisFalha = {
+  ds_lancha: string;
+  cd_lancha: number;
+  inicio: string;
+  fim: string;
+  dia: string;
+  duracao_h: number;
+  base_antes: boolean;
+  base_depois: boolean | null;
+  dentro_de_faina: boolean;
+  classe: "queda_em_travessia" | "queda_em_operacao" | "ais_com_defeito" | "indeterminado";
+  acima_do_alerta: boolean;
+};
+
+export type AisVelocidade = {
+  ano_mes: string;
+  ds_lancha: string;
+  cd_lancha: number;
+  contexto: "no_berco" | "proximo_a_base" | "travessia_ou_longe";
+  n_posicoes: number;
+  sog_mediano: number;
+  sog_p90: number;
+  sog_p99: number;
+  sog_max: number;
+};
+
+export type AisIateClube = {
+  ano_mes: string;
+  ds_lancha: string;
+  cd_lancha: number;
+  horas_dentro_da_cerca: number;
+  saidas_que_passaram: number;
+  noturnas: number;
+  horas_movimento_das_saidas: number | null;
+  pct_da_saida_no_clube: number | null;
+};
+
+export type AtividadeManutencao = {
+  ds_lancha: string;
+  cd_lancha: number;
+  cd_ocorrencia: number;
+  tipo_ocorrencia: string;
+  efeito: string | null;
+  data_inicio: string;
+  data_fim: string;
+  dia_inicio: string;
+  semana_turma: string;
+  duracao_h: number;
+  preventiva: boolean;
+  inoperante: boolean;
+};
+
+/** Intervalos sem posição AIS, já classificados.
+ *
+ *  ⚠️ Só `ais_com_defeito` merece alerta: é a lancha atracada antes e depois que
+ *  mesmo assim sumiu. `queda_em_operacao` e `queda_em_travessia` são esperadas —
+ *  o próprio documento da gestão diz que o sinal cai ao navegar para longe. */
+export function useAisFalhas(de: string, ate: string) {
+  return useQuery({
+    queryKey: ["ais_falhas", de, ate],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("mv_ais_falhas_transmissao")
+        .select("*")
+        .gte("dia", de)
+        .lte("dia", ate)
+        .order("inicio", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AisFalha[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Perfil de velocidade por mês, lancha e contexto.
+ *
+ *  ⚠️ Use mediana e percentis. O SOG tem picos espúrios — há leitura de 18,9 kn
+ *  com a lancha amarrada. */
+export function useAisVelocidade() {
+  return useQuery({
+    queryKey: ["ais_velocidade"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("mv_ais_velocidade")
+        .select("*")
+        .order("ano_mes", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AisVelocidade[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Uso do Iate Clube.
+ *
+ *  ⚠️ Duas grandezas distintas: `horas_dentro_da_cerca` é o tempo no clube;
+ *  `horas_movimento_das_saidas` é o movimento das saídas inteiras que passaram
+ *  por lá. Em agosto/2026 foram 2,47 h contra 59,28 h — vinte vezes. */
+export function useAisIateClube() {
+  return useQuery({
+    queryKey: ["ais_iate_clube"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_ais_iate_clube")
+        .select("*")
+        .order("ano_mes", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AisIateClube[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Janelas de manutenção com início e fim.
+ *
+ *  ⚠️ Descrevem o estado da LANCHA, não a presença da tripulação: corretiva com
+ *  lancha inoperante pode ser espera de peça. Por isso não entram na soma de
+ *  jornada — ficam ao lado, para leitura. */
+export function useAtividadeManutencao(de: string, ate: string) {
+  return useQuery({
+    queryKey: ["atividade_manutencao", de, ate],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_atividade_manutencao")
+        .select("*")
+        .gte("dia_inicio", de)
+        .lte("dia_inicio", ate)
+        .order("data_inicio", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AtividadeManutencao[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
