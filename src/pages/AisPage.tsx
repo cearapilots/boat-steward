@@ -2,9 +2,9 @@ import { useState, useMemo } from "react";
 import {
   useAisStatus, useAisBaseDia, useAisSaidas,
   useFadigaPeriodos, useFadigaSemana, useAisTravessias, useAisMes,
-  useAisFalhas, useAisVelocidade, useAisIateClube, useAtividadeManutencao,
+  useAisFalhas, useAisVelocidade, useAisIateClube,
   type AisSaida, type FadigaPeriodo, type FadigaSemana, type AisTravessia, type AisMes,
-  type AisFalha, type AisVelocidade, type AisIateClube, type AtividadeManutencao,
+  type AisFalha, type AisVelocidade, type AisIateClube,
 } from "@/hooks/useFleetData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { Info, Radio, RadioTower, Moon, AlertTriangle, Wrench, SignalZero } from "lucide-react";
+import { Info, Radio, RadioTower, Moon, AlertTriangle, SignalZero } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
@@ -155,7 +155,6 @@ export default function AisPage() {
   const falhas      = useAisFalhas(de, ate);
   const velocidade  = useAisVelocidade();
   const iateClube   = useAisIateClube();
-  const manutencao  = useAtividadeManutencao(de, ate);
 
   const lanchas = useMemo(() => {
     const m = new Map<number, string>();
@@ -448,8 +447,7 @@ export default function AisPage() {
           {/* ══ FADIGA ═════════════════════════════════════════════════ */}
           <TabsContent value="fadiga" className="space-y-6 mt-4">
             <AbaFadiga periodos={fadiga.data ?? []} carregando={fadiga.isLoading}
-                       semanas={semanas.data ?? []} lanchas={lanchas}
-                       manutencao={manutencao.data ?? []} />
+                       semanas={semanas.data ?? []} lanchas={lanchas} />
           </TabsContent>
 
           {/* ══ TRAVESSIAS ═════════════════════════════════════════════ */}
@@ -470,8 +468,9 @@ export default function AisPage() {
         </Tabs>
 
         <p className="text-xs text-muted-foreground">
-          Os dados AIS vêm do WebPilot uma vez por dia. A Taíba não tem MMSI e não aparece em
-          nenhum número desta tela.
+          Os dados AIS vêm do WebPilot uma vez por dia. A Taíba não tem MMSI: não aparece em
+          nenhum número baseado em posição. Na aba de Fadiga ela aparece, e apenas ali, porque o
+          registro de manobra entra como fallback quando não há AIS.
         </p>
       </div>
     </TooltipProvider>
@@ -480,18 +479,29 @@ export default function AisPage() {
 
 /* ── Aba: Fadiga ─────────────────────────────────────────────────────────── */
 
-function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
+function AbaFadiga({ periodos, carregando, semanas, lanchas }: {
   periodos: FadigaPeriodo[];
   carregando: boolean;
   semanas: FadigaSemana[];
   lanchas: { cd: number; nome: string }[];
-  manutencao: AtividadeManutencao[];
 }) {
   const [soAlerta, setSoAlerta] = useState(true);
   const visiveis = soAlerta ? periodos.filter(p => p.grau !== "normal") : periodos;
-  const delta = periodos.length ? num(periodos[0].delta_min) : 60;
+  const delta       = periodos.length ? num(periodos[0].delta_min) : 45;
+  const deltaManobra = periodos.length ? num(periodos[0].delta_manobra_min) : 60;
 
-  const porLancha = lanchas.map(l => {
+  // A Taiba nao tem MMSI: nao aparece em `lanchas`, que vem do AIS. Desde o
+  // fallback por manobra ela TEM periodos de fadiga, entao a lista desta aba
+  // precisa sair dos proprios periodos, senao a lancha some do painel.
+  const daAba = useMemo(() => {
+    const m = new Map<number, string>();
+    lanchas.forEach(l => m.set(l.cd, l.nome));
+    periodos.forEach(p => { if (!m.has(p.cd_lancha)) m.set(p.cd_lancha, p.ds_lancha); });
+    return [...m.entries()].map(([cd, nome]) => ({ cd, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [lanchas, periodos]);
+
+  const porLancha = daAba.map(l => {
     const g = periodos.filter(p => p.cd_lancha === l.cd);
     const dur = g.map(p => num(p.duracao_h));
     return {
@@ -502,6 +512,7 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
       criticos: g.filter(p => p.grau === "critico").length,
       noites: g.filter(p => num(p.horas_madrugada) > 0).length,
       movimento: g.reduce((s, p) => s + num(p.horas_movimento), 0),
+      porManobra: g.filter(p => p.fonte !== "ais").length,
     };
   });
 
@@ -518,9 +529,12 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
             <p className="font-medium">Isto mede a lancha, não a pessoa.</p>
             <p className="text-muted-foreground">
               Não existe registro de tripulação no sistema, então “a Fortim trabalhou 14 h” não diz
-              quem estava a bordo. A semana é ancorada na terça, quando a guarnição troca, mas a
-              troca em si não é registrada. Os limiares vêm da MSC.1/Circ.1598 da IMO, que também
-              adverte: ferramentas de fadiga apontam ponto quente, não decidem escala.
+              quem estava a bordo. A semana vai de terça 08:00 a terça 08:00, o horário da rendição,
+              mas a troca em si não é registrada. Os limiares vêm da MSC.1/Circ.1598 da IMO, que
+              também adverte: ferramentas de fadiga apontam ponto quente, não decidem escala.
+              Períodos marcados como <strong>por manobra</strong> vêm do registro de manobra, não do
+              AIS: a jornada ali é estimada em {deltaManobra} min antes e depois do embarque do
+              prático, e não há movimento observado para medir.
             </p>
           </div>
         </CardContent>
@@ -553,6 +567,10 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
                 {l.noites} períodos entraram na madrugada · {n1(l.movimento)} h de movimento no mês
+                {l.porManobra > 0 && (
+                  <> · <strong className="text-foreground">{l.porManobra}</strong> por manobra,
+                    sem AIS</>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -564,9 +582,11 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-base">
               Semana da turma
-              <Ajuda>De terça a terça, que é quando a guarnição troca. A coluna de maior folga é
-                proposital: o §20.3 da IMO diz que descanso fragmentado não se soma — “six 1-hour
-                naps do not have the same benefit as one 6-hour period of sleep”.</Ajuda>
+              <Ajuda>De terça 08:00 a terça 08:00, o horário da rendição — não à meia-noite,
+                senão a madrugada de terça cairia na semana da turma que ainda nem chegou. A coluna
+                de maior folga é proposital: o §20.3 da IMO diz que descanso fragmentado não se
+                soma — “six 1-hour naps do not have the same benefit as one 6-hour period of
+                sleep”. “s/ AIS” conta os períodos que só existem pelo registro de manobra.</Ajuda>
             </CardTitle>
             <span className="text-xs text-muted-foreground">últimas semanas, todas as lanchas</span>
           </div>
@@ -597,7 +617,14 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
                         {s.ds_lancha}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{s.periodos_trabalho}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {s.periodos_trabalho}
+                      {num(s.periodos_por_manobra) > 0 && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          ({s.periodos_por_manobra} s/ AIS)
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{n1(num(s.horas_trabalho))} h</TableCell>
                     <TableCell className="text-right tabular-nums">{n1(num(s.horas_madrugada))} h</TableCell>
                     <TableCell className="text-right tabular-nums">{s.noites_trabalhadas}</TableCell>
@@ -631,9 +658,12 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-base">
               Períodos de trabalho
-              <Ajuda>Um período é uma sequência de movimento, esticada em {delta} min antes e
-                depois para cobrir preparação e encerramento. Esse valor é provisório — a gestão
-                ainda vai definir o número real.</Ajuda>
+              <Ajuda>Um período é uma sequência de movimento do AIS, esticada em {delta} min
+                antes e depois para cobrir preparação e encerramento. Quando o AIS está fora do ar,
+                entra o registro de manobra no lugar, com {deltaManobra} min de cada lado — mais
+                largo porque a lancha se desloca para buscar o prático antes e volta depois de
+                deixá-lo. A coluna <strong>Fonte</strong> diz qual dos dois sustenta cada linha.
+                Ordenado do mais recente para o mais antigo.</Ajuda>
             </CardTitle>
             <button onClick={() => setSoAlerta(v => !v)}
                     className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
@@ -652,6 +682,7 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
                   <TableHead className="text-right">Movimento</TableHead>
                   <TableHead className="text-right">Densidade</TableHead>
                   <TableHead className="text-right">Madrugada</TableHead>
+                  <TableHead>Fonte</TableHead>
                   <TableHead>Grau</TableHead>
                 </TableRow>
               </TableHeader>
@@ -668,7 +699,7 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
                     <TableCell className="text-right tabular-nums font-medium">{n1(num(p.duracao_h))} h</TableCell>
                     <TableCell className="text-right tabular-nums">{n1(num(p.horas_movimento))} h</TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {num(p.densidade_pct)}%
+                      {p.fonte === "manobra" ? "—" : `${num(p.densidade_pct)}%`}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {num(p.horas_madrugada) > 0 ? (
@@ -676,6 +707,16 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
                           <Moon className="h-3 w-3 text-muted-foreground" />{n1(num(p.horas_madrugada))} h
                         </span>
                       ) : "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {p.fonte === "ais" ? (
+                        <span className="text-xs text-muted-foreground">AIS</span>
+                      ) : (
+                        <Badge variant="outline" className="gap-1 text-[10px] font-normal">
+                          <Radio className="h-2.5 w-2.5" />
+                          {p.fonte === "manobra" ? "por manobra" : "AIS + manobra"}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5 text-xs">
@@ -686,7 +727,7 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
                   </TableRow>
                 ))}
                 {visiveis.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableRow><TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                     {soAlerta ? "Nenhum período de atenção ou crítico neste mês." : "Sem períodos neste mês."}
                   </TableCell></TableRow>
                 )}
@@ -696,55 +737,6 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Wrench className="h-4 w-4 text-muted-foreground" />
-            Manutenção no período
-            <Ajuda>
-              A nota de fadiga dizia que só daria para considerar manutenção se fosse registrada
-              com início e término certinho. É: 922 das 924 ocorrências têm janela completa.
-              <strong> Mas a janela descreve o estado da lancha, não a presença da guarnição</strong> —
-              corretiva com lancha inoperante pode ser espera de peça. Por isso estas horas ficam
-              aqui ao lado, e não somadas à jornada acima.
-            </Ajuda>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="max-h-[18rem] overflow-auto">
-            <Table containerClassName="overflow-visible">
-              <TableHeader className="sticky top-0 z-20 bg-background [&_tr]:border-0 shadow-[inset_0_-1px_0_hsl(var(--border))]">
-                <TableRow>
-                  <TableHead>Início</TableHead>
-                  <TableHead>Lancha</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Duração</TableHead>
-                  <TableHead>Efeito</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {manutencao.map(m => (
-                  <TableRow key={m.cd_ocorrencia}>
-                    <TableCell className="whitespace-nowrap tabular-nums">{horaBR(m.data_inicio)}</TableCell>
-                    <TableCell className="whitespace-nowrap">{m.ds_lancha}</TableCell>
-                    <TableCell className="text-muted-foreground">{m.tipo_ocorrencia}</TableCell>
-                    <TableCell className="text-right tabular-nums">{n1(num(m.duracao_h))} h</TableCell>
-                    <TableCell>
-                      <span className="text-xs" style={m.inoperante ? { color: GRAU_COR.critico } : undefined}>
-                        {m.efeito ?? "—"}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {manutencao.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                    Nenhuma manutenção registrada neste mês.</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
     </>
   );
 }
