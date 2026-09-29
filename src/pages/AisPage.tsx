@@ -420,8 +420,8 @@ export default function AisPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="max-h-[28rem] overflow-auto">
-                    <Table>
-                      <TableHeader className="sticky top-0 bg-background">
+                    <Table containerClassName="overflow-visible">
+                      <TableHeader className="sticky top-0 z-20 bg-background [&_tr]:border-0 shadow-[inset_0_-1px_0_hsl(var(--border))]">
                         <TableRow>
                           <TableHead>Início</TableHead>
                           <TableHead>Lancha</TableHead>
@@ -573,8 +573,8 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[22rem] overflow-auto">
-            <Table>
-              <TableHeader className="sticky top-0 bg-background">
+            <Table containerClassName="overflow-visible">
+              <TableHeader className="sticky top-0 z-20 bg-background [&_tr]:border-0 shadow-[inset_0_-1px_0_hsl(var(--border))]">
                 <TableRow>
                   <TableHead>Semana</TableHead>
                   <TableHead>Lancha</TableHead>
@@ -643,8 +643,8 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[24rem] overflow-auto">
-            <Table>
-              <TableHeader className="sticky top-0 bg-background">
+            <Table containerClassName="overflow-visible">
+              <TableHeader className="sticky top-0 z-20 bg-background [&_tr]:border-0 shadow-[inset_0_-1px_0_hsl(var(--border))]">
                 <TableRow>
                   <TableHead>Início</TableHead>
                   <TableHead>Lancha</TableHead>
@@ -712,8 +712,8 @@ function AbaFadiga({ periodos, carregando, semanas, lanchas, manutencao }: {
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[18rem] overflow-auto">
-            <Table>
-              <TableHeader className="sticky top-0 bg-background">
+            <Table containerClassName="overflow-visible">
+              <TableHeader className="sticky top-0 z-20 bg-background [&_tr]:border-0 shadow-[inset_0_-1px_0_hsl(var(--border))]">
                 <TableRow>
                   <TableHead>Início</TableHead>
                   <TableHead>Lancha</TableHead>
@@ -821,8 +821,8 @@ function AbaTravessias({ todas, carregando, de, ate, velocidade, mes }: {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
+          <Table containerClassName="max-h-[26rem]">
+            <TableHeader className="sticky top-0 z-20 bg-background [&_tr]:border-0 shadow-[inset_0_-1px_0_hsl(var(--border))]">
               <TableRow>
                 <TableHead>Lancha</TableHead>
                 <TableHead>Contexto</TableHead>
@@ -873,8 +873,8 @@ function AbaTravessias({ todas, carregando, de, ate, velocidade, mes }: {
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[26rem] overflow-auto">
-            <Table>
-              <TableHeader className="sticky top-0 bg-background">
+            <Table containerClassName="overflow-visible">
+              <TableHeader className="sticky top-0 z-20 bg-background [&_tr]:border-0 shadow-[inset_0_-1px_0_hsl(var(--border))]">
                 <TableRow>
                   <TableHead>Saída</TableHead>
                   <TableHead>Lancha</TableHead>
@@ -944,7 +944,9 @@ function AbaMensal({ linhas, carregando, iate }: {
       at[`mov_${l.cd_lancha}`] = num(l.horas_movimento);
       m.set(l.ano_mes, at);
     });
-    return [...m.values()].sort((a, b) => a.ano_mes.localeCompare(b.ano_mes));
+    // String() porque o Record e' `string | number` — em tempo de execucao
+    // `ano_mes` e' sempre "YYYY-MM", mas o tipo do mapa nao sabe disso.
+    return [...m.values()].sort((a, b) => String(a.ano_mes).localeCompare(String(b.ano_mes)));
   }, [linhas]);
 
   if (carregando) {
@@ -987,8 +989,8 @@ function AbaMensal({ linhas, carregando, iate }: {
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[28rem] overflow-auto">
-            <Table>
-              <TableHeader className="sticky top-0 bg-background">
+            <Table containerClassName="overflow-visible">
+              <TableHeader className="sticky top-0 z-20 bg-background [&_tr]:border-0 shadow-[inset_0_-1px_0_hsl(var(--border))]">
                 <TableRow>
                   <TableHead>Mês</TableHead>
                   <TableHead>Lancha</TableHead>
@@ -1057,8 +1059,8 @@ function AbaMensal({ linhas, carregando, iate }: {
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[20rem] overflow-auto">
-            <Table>
-              <TableHeader className="sticky top-0 bg-background">
+            <Table containerClassName="overflow-visible">
+              <TableHeader className="sticky top-0 z-20 bg-background [&_tr]:border-0 shadow-[inset_0_-1px_0_hsl(var(--border))]">
                 <TableRow>
                   <TableHead>Mês</TableHead>
                   <TableHead>Lancha</TableHead>
@@ -1182,8 +1184,8 @@ function AbaTransmissao({ falhas, carregando }: { falhas: AisFalha[]; carregando
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[24rem] overflow-auto">
-            <Table>
-              <TableHeader className="sticky top-0 bg-background">
+            <Table containerClassName="overflow-visible">
+              <TableHeader className="sticky top-0 z-20 bg-background [&_tr]:border-0 shadow-[inset_0_-1px_0_hsl(var(--border))]">
                 <TableRow>
                   <TableHead>Sumiu em</TableHead>
                   <TableHead>Voltou em</TableHead>
