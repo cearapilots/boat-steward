@@ -1338,6 +1338,12 @@ export type FadigaPeriodo = {
   atravessa_wocl: boolean;
   grau: "normal" | "atencao" | "critico";
   delta_min: number;
+  // v3 (29/09/2026): de onde veio o periodo. "manobra" = o AIS estava cego e
+  // quem provou a atividade foi o registro de manobra — nesses, horas_movimento
+  // e densidade_pct sao 0 por construcao, nao por falta de esforco.
+  n_manobras_sem_ais: number;
+  fonte: "ais" | "manobra" | "ais+manobra";
+  delta_manobra_min: number;
 };
 
 export type FadigaSemana = {
@@ -1357,6 +1363,8 @@ export type FadigaSemana = {
   maior_folga_h: number | null;
   menor_folga_h: number | null;
   folgas_abaixo_de_6h: number;
+  // quantos periodos da semana so existem pelo fallback de AIS cego
+  periodos_por_manobra: number;
 };
 
 export type AisTravessia = {
@@ -1411,7 +1419,7 @@ export function useFadigaPeriodos(de: string, ate: string) {
         .select("*")
         .gte("dia_inicio", de)
         .lte("dia_inicio", ate)
-        .order("inicio_trabalho");
+        .order("inicio_trabalho", { ascending: false });
       if (error) throw error;
       return (data ?? []) as FadigaPeriodo[];
     },
