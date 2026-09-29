@@ -2,13 +2,22 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-auto">
-      <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
-    </div>
-  ),
-);
+// `containerClassName` estiliza o DIV que embrulha a tabela, não a tabela.
+// Existe por causa do cabeçalho fixo: `position: sticky` gruda no ancestral
+// que rola, e esse div é `overflow-auto`, ou seja, ele mesmo é um. Se quem
+// rola for um div de FORA, o cabeçalho gruda no wrapper errado e some junto
+// com as linhas. As duas saídas, ambas por aqui:
+//   containerClassName="overflow-visible"  → deixa o pai de fora ser o que rola
+//   containerClassName="max-h-[24rem]"     → faz o próprio wrapper ser o que rola
+// Sem a prop nada muda: o padrão continua sendo `relative w-full overflow-auto`.
+const Table = React.forwardRef<
+  HTMLTableElement,
+  React.HTMLAttributes<HTMLTableElement> & { containerClassName?: string }
+>(({ className, containerClassName, ...props }, ref) => (
+  <div className={cn("relative w-full overflow-auto", containerClassName)}>
+    <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
+  </div>
+));
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
