@@ -130,7 +130,17 @@ Deno.serve(async (req) => {
             porto_base,
             porto,
           },
-          { onConflict: "cd_ativo_indicador", ignoreDuplicates: true },
+          // SOBRESCREVE no conflito. Mudou em 30/09/2026.
+          //
+          // Antes era `ignoreDuplicates: true`, e foi o que produziu o falso
+          // alarme de 28/09: o WebPilot corrigiu a leitura de 21/09 do gerador
+          // da Flexeiras de 7.518 para 7.505, a nossa copia ficou velha, e o
+          // briefing reportou "o horimetro recuou 10 h" — um recuo que nunca
+          // existiu. Ver Apendice C.7 e C.8 do Context Pack.
+          //
+          // A protecao contra sobrescrita destrutiva esta no trigger
+          // `nao_apaga_com_nulo` da tabela — migration 20260930120000.
+          { onConflict: "cd_ativo_indicador", ignoreDuplicates: false },
         );
 
       if (!error) registrosInseridos++;

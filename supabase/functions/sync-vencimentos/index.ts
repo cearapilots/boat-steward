@@ -18,6 +18,13 @@ const TIPOS: Array<{ campo: string; tipo: string; label: string }> = [
   { campo: "DT_VENCTO_SISTEMA_COMBATE_INCENDIO", tipo: "combate_incendio", label: "Combate a Incêndio" },
   { campo: "DT_VENCTO_SEGURO",                 tipo: "seguro",           label: "Seguro" },
   { campo: "DT_VENCTO_SEGURO_DPEM",            tipo: "seguro_dpem",      label: "Seguro DPEM" },
+  // [29/09/2026] Oitavo tipo. O endpoint sempre devolveu este campo e nos nunca
+  // o importamos — as tres lanchas vencem em 10/04/2033. Enquanto ele nao
+  // existisse em `vencimentos`, nenhum detector poderia avisar sobre ele:
+  // detector nao dispara por linha ausente. Achado ao apurar por que faltava o
+  // Combate a Incendio da Fortim (aquele o WebPilot devolve nulo — lacuna de
+  // cadastro na origem, nao defeito nosso).
+  { campo: "DT_VENCTO_LICENCA_ESTACAO",        tipo: "licenca_estacao",  label: "Licença de Estação" },
 ];
 
 const LANCHAS_VALIDAS = [121, 1003, 117]; // Flexeiras, Fortim, Taíba

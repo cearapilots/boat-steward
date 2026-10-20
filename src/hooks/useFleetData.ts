@@ -100,6 +100,18 @@ export function usePeriodicidadeOverrides() {
   });
 }
 
+// Soma meses de calendário a uma data "AAAA-MM-DD", com a mesma regra do
+// Postgres para fim de mês: 31/08 + 6 meses = 28/02 (ou 29/02), nunca 03/03 como
+// faria o `Date` do JavaScript sozinho. É o que mantém o calendário e a view
+// `v_manutencoes_periodicas_status` no mesmo dia.
+export function somaMeses(data: string, meses: number): string {
+  const [a, m, d] = data.split("-").map(Number);
+  const alvo = new Date(Date.UTC(a, m - 1 + meses, 1));
+  const ultimoDia = new Date(Date.UTC(alvo.getUTCFullYear(), alvo.getUTCMonth() + 1, 0)).getUTCDate();
+  alvo.setUTCDate(Math.min(d, ultimoDia));
+  return alvo.toISOString().slice(0, 10);
+}
+
 export function periodicidadeKey(lanchaId: string, tipoId: string) {
   return `${lanchaId}::${tipoId}`;
 }
@@ -214,7 +226,7 @@ export function useCalendarioManutencoes(ano: number) {
     queryFn: async (): Promise<CalendarioManutencaoItem[]> => {
       const { data: registros, error: errReg } = await (supabase as any)
         .from("manutencoes_periodicas")
-        .select("lancha_id, tipo_id, data_realizada, lancha:lanchas(id,nome), tipo:manutencoes_periodicas_tipos(id,nome,periodicidade_dias)")
+        .select("lancha_id, tipo_id, data_realizada, lancha:lanchas(id,nome), tipo:manutencoes_periodicas_tipos(id,nome,periodicidade_dias,periodicidade_meses)")
         .order("data_realizada", { ascending: true });
       if (errReg) throw errReg;
 
@@ -235,6 +247,9 @@ export function useCalendarioManutencoes(ano: number) {
       type PairRec = {
         data: string; lancha_id: string; lancha_nome: string;
         tipo_id: string; tipo_nome: string; periodicidade: number;
+        // Preenchido só quando o tipo é em meses E não há exceção por lancha
+        // (a exceção é sempre em dias e vence). Mesma precedência da view.
+        meses: number | null;
       };
       // Collect every completion per (lancha, tipo) pair in ascending date order
       const pairCompletions = new Map<string, PairRec[]>();
@@ -244,8 +259,9 @@ export function useCalendarioManutencoes(ano: number) {
         const lancha_nome = r.lancha?.nome ?? "";
         const tipo_id = r.tipo?.id ?? r.tipo_id;
         const tipo_nome = r.tipo?.nome ?? "";
-        const periodicidade_dias =
-          ovMap.get(periodicidadeKey(lancha_id, tipo_id)) ?? (r.tipo?.periodicidade_dias ?? 0);
+        const excecao = ovMap.get(periodicidadeKey(lancha_id, tipo_id));
+        const periodicidade_dias = excecao ?? (r.tipo?.periodicidade_dias ?? 0);
+        const meses: number | null = excecao == null ? (r.tipo?.periodicidade_meses ?? null) : null;
         const dataStr: string = r.data_realizada;
 
         if (dataStr.startsWith(String(ano))) {
@@ -254,7 +270,7 @@ export function useCalendarioManutencoes(ano: number) {
 
         const key = `${lancha_id}::${tipo_id}`;
         if (!pairCompletions.has(key)) pairCompletions.set(key, []);
-        pairCompletions.get(key)!.push({ data: dataStr, lancha_id, lancha_nome, tipo_id, tipo_nome, periodicidade: periodicidade_dias });
+        pairCompletions.get(key)!.push({ data: dataStr, lancha_id, lancha_nome, tipo_id, tipo_nome, periodicidade: periodicidade_dias, meses });
       }
 
       // Project prevista dates from EACH completion, stopping when the next actual completion
@@ -272,9 +288,18 @@ export function useCalendarioManutencoes(ano: number) {
           const nextCompletionDate = completions[i + 1]?.data ?? null;
 
           let cur = new Date(c.data + "T00:00:00");
+          let ciclo = 0;
           while (true) {
-            cur = new Date(cur.getTime() + c.periodicidade * 24 * 60 * 60 * 1000);
-            const curStr = cur.toISOString().slice(0, 10);
+            ciclo++;
+            let curStr: string;
+            if (c.meses) {
+              // Sempre a partir da data original: 31/08 + 6 = 28/02, + 12 = 31/08.
+              // Encadear de 28/02 daria 28/08, escorregando a cada volta.
+              curStr = somaMeses(c.data, ciclo * c.meses);
+            } else {
+              cur = new Date(cur.getTime() + c.periodicidade * 24 * 60 * 60 * 1000);
+              curStr = cur.toISOString().slice(0, 10);
+            }
 
             // Past end of target year
             if (curStr > anoEnd) break;
@@ -880,6 +905,9 @@ export type ManutencaoTipo = {
   id: string;
   nome: string;
   periodicidade_dias: number;
+  // Quando preenchida, vale no lugar de periodicidade_dias: o vencimento cai no
+  // mesmo dia do mês, N meses depois. Hoje só o Treinamento (6 meses, 20/10/2026).
+  periodicidade_meses: number | null;
 };
 
 export function useManutencoesTipos() {
@@ -888,7 +916,7 @@ export function useManutencoesTipos() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("manutencoes_periodicas_tipos")
-        .select("id, nome, periodicidade_dias")
+        .select("id, nome, periodicidade_dias, periodicidade_meses")
         .order("nome");
       if (error) throw error;
       return (data ?? []) as ManutencaoTipo[];
@@ -899,10 +927,23 @@ export function useManutencoesTipos() {
 export function useSavePeriodicidadeTipo() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { id: string; periodicidade_dias: number }) => {
+    mutationFn: async (
+      payload: { id: string } & (
+        | { periodicidade_dias: number }
+        | { periodicidade_meses: number }
+      ),
+    ) => {
+      // Tipo em meses grava os meses e, junto, a aproximação em dias para quem
+      // ainda lê em dias. O que vale é o mês — ver a migration 20261020110000.
+      const patch = "periodicidade_meses" in payload
+        ? {
+            periodicidade_meses: payload.periodicidade_meses,
+            periodicidade_dias: Math.round(payload.periodicidade_meses * 30.4375),
+          }
+        : { periodicidade_dias: payload.periodicidade_dias };
       const { error } = await (supabase as any)
         .from("manutencoes_periodicas_tipos")
-        .update({ periodicidade_dias: payload.periodicidade_dias })
+        .update(patch)
         .eq("id", payload.id);
       if (error) throw error;
     },

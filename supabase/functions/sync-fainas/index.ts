@@ -42,7 +42,24 @@ Deno.serve(async (req) => {
     if (!Array.isArray(fainas))
       throw new Error("Resposta do WebPilot inválida (não é uma lista)");
 
-    // 2. Montar registros e inserir com ON CONFLICT DO NOTHING
+    // 2. Montar registros
+    //
+    // ⚠️ DURACAO SEM FIM VEM ZERADA DA ORIGEM, e zero e um valor valido de
+    //    duracao: entra em media e mediana sem avisar. Ja custou uma conclusao
+    //    — a faina 512 tem DH_FIM nulo com NR_MINUTOS 0, e inclui-la puxava a
+    //    mediana de travessia de 102 para 99 minutos. Nulo deixa o registro
+    //    fora do calculo naturalmente, que e o comportamento correto.
+    //
+    //    Tratamos aqui em vez de pedir a origem: e regra nossa de leitura, nao
+    //    defeito deles. Travessia entre portos leva ~2 h; zero ou negativo nao
+    //    e duracao curta, e ausencia de medida.
+    const duracao = (f: WpFaina) => {
+      const semFim = !f.DH_FIM;
+      const nr = semFim || Number(f.NR_MINUTOS) <= 0 ? null : Number(f.NR_MINUTOS);
+      const dc = semFim || Number(f.DC_HORAS) <= 0 ? null : Number(f.DC_HORAS);
+      return { nr_minutos: nr, dc_horas: dc };
+    };
+
     const records = fainas.map((f) => ({
       cd_faina_lancha: Number(f.CD_FAINA_LANCHA),
       cd_lancha: Number(f.CD_LANCHA),
@@ -51,13 +68,22 @@ Deno.serve(async (req) => {
       ds_local_dest: f.DS_LOCAL_DEST ?? null,
       dh_inicio: f.DH_INICIO,
       dh_fim: f.DH_FIM ?? null,
-      nr_minutos: f.NR_MINUTOS ?? null,
-      dc_horas: f.DC_HORAS ?? null,
+      ...duracao(f),
     }));
 
+    // ⚠️ SOBRESCREVE no conflito — mudou em 30/09/2026.
+    //
+    // Antes era `ignoreDuplicates: true`, e o efeito era o defeito sistemico do
+    // Apendice C.8: a faina entrava enquanto ainda estava em curso, sem DH_FIM,
+    // e quando a origem a completava a correcao nunca chegava aqui. Foi o que
+    // aconteceu com a faina 524 — o endpoint tinha DH_FIM 12:47 e 107 min, e o
+    // nosso banco guardava nulo com zeros, por 15 dias.
+    //
+    // O WebPilot e o sistema de registro das fainas. Se ele mudar um campo,
+    // refletir e o certo — inclusive se um dia despreencher um.
     const { error } = await supabase
       .from("fainas_deslocamentos")
-      .upsert(records, { onConflict: "cd_faina_lancha", ignoreDuplicates: true });
+      .upsert(records, { onConflict: "cd_faina_lancha", ignoreDuplicates: false });
 
     if (error) throw new Error(`Erro ao inserir fainas: ${error.message}`);
 

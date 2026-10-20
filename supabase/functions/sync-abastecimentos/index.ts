@@ -61,10 +61,20 @@ Deno.serve(async (req) => {
       })
       .filter(r => r.cd_abastecimento && r.dh_abastecimento);
 
-    // 3. Upsert — ignoreDuplicates garante idempotência
+    // 3. Upsert — SOBRESCREVE no conflito. Mudou em 30/09/2026.
+    //
+    // Antes era `ignoreDuplicates: true`, e o efeito era o defeito do Apendice
+    // C.8: uma vez inserida, a linha nunca mais era atualizada, entao correcao
+    // feita no WebPilot nao chegava aqui. Custou o caso de 16/09/2026 — o
+    // lancamento de 40 L a R$ 22,45 da Vibra foi corrigido na origem para 770 L
+    // a R$ 5,67 e o detector 10 seguia disparando com o valor velho.
+    //
+    // A protecao contra o outro lado (origem parar de mandar um campo e a
+    // sobrescrita apagar dado bom) NAO esta aqui: esta no trigger
+    // `nao_apaga_com_nulo` da tabela. Ver a migration 20260930120000.
     const { error } = await supabase
       .from("abastecimentos_combustivel")
-      .upsert(records, { onConflict: "cd_abastecimento", ignoreDuplicates: true });
+      .upsert(records, { onConflict: "cd_abastecimento", ignoreDuplicates: false });
 
     if (error) throw error;
 

@@ -34,6 +34,10 @@ const MAPEAMENTO_PERIODICAS: Record<string, string> = {
   "Treinamento dos tripulantes": "Treinamento dos tripulantes",
 };
 
+// Tipos que nao dizem nada sobre o servico. So neles a regra de TEXTO do
+// ar-condicionado pode decidir — ver o comentario no ponto de uso.
+const TIPOS_GENERICOS = new Set(["", "Outros"]);
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS });
@@ -186,8 +190,25 @@ Deno.serve(async (req) => {
       if (!nomePeriodicaMapeado) {
         const desc = oc.DS_OCORRENCIA.toLowerCase();
         if (desc.includes("regulag") && desc.includes("válvula")) {
+          // Frase especifica o bastante para valer mesmo com tipo especifico:
+          // pegou corretamente a 6576, regulagem lancada como "Motor (Preventiva)".
           nomePeriodicaMapeado = "Regulagem de válvulas dos motores";
-        } else if (desc.includes("ar condicionado") || desc.includes("ar-condicionado")) {
+        } else if (
+          TIPOS_GENERICOS.has((oc.DS_TIPO_OCORRENCIA ?? "").trim()) &&
+          (desc.includes("ar condicionado") || desc.includes("ar-condicionado"))
+        ) {
+          // ⚠️ SO PARA TIPO GENERICO — mudou em 20/10/2026.
+          //
+          // "ar condicionado" aparece em quase todo problema eletrico, porque o
+          // A/C e a maior carga do barco. Sem essa trava, a regra transformou
+          // QUATRO servicos eletricos em limpeza de ar-condicionado e reiniciou
+          // a periodica: 7008 e a de 14/08 (Multiplus desarmando o A/C), 7130
+          // (inversor nao segura o A/C) e 7249 (fuga de corrente no 220 V da
+          // Flexeiras, 30/09 — empurrou o vencimento de 15/11 para 29/11).
+          //
+          // Os quatro estavam CORRETOS no WebPilot, como "Manutencao eletrica
+          // (Corretiva)". O erro era so nosso. Em toda a serie, esta regra nunca
+          // produziu um acerto — so esses quatro falsos.
           nomePeriodicaMapeado = "Limpeza/manutenção ar-condicionado";
         }
       }

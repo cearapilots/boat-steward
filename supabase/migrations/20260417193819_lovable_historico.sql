@@ -1,0 +1,11 @@
+-- Marcador de historico. VAZIO DE PROPOSITO.
+--
+-- A versao 20260417193819 consta na tabela de historico do Supabase desde a criacao do
+-- projeto pelo Lovable, mas nunca teve arquivo neste repositorio. Sem um
+-- arquivo local de mesmo nome, `supabase db push` se recusa a rodar com
+-- "Remote migration versions not found in local migrations directory".
+--
+-- O conteudo real dessa migration esta na versao irma, tres segundos depois
+-- (2026041...). Este arquivo existe so para o CLI reconhecer a versao.
+-- Nao adicione SQL aqui.
+SELECT 1;

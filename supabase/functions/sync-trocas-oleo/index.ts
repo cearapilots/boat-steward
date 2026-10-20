@@ -172,11 +172,33 @@ Deno.serve(async (req) => {
         const dhAbastecimento = troca.DH_ABASTECIMENTO;
 
         // ── Deduplicação: verificar se já foi importado ──────────────────────
+        //
+        // ⚠️ POR INTERVALO DO DIA, NÃO POR IGUALDADE EXATA.
+        //
+        // `sync-ocorrencias` também grava troca de óleo em `manutencoes`, mas com
+        // `data_manutencao` na MEIA-NOITE (só a data), enquanto aqui se grava o
+        // timestamp cheio do abastecimento. Com `.eq()` as duas nunca se enxergam
+        // e a mesma troca entra duas vezes.
+        //
+        // Aconteceu ao menos três vezes: Gerador 3 da Flexeiras em 26/08 (extra
+        // criada em 03/09) e Motores 4 e 5 em 16/09 (extras criadas em 22/09).
+        // Não altera o cálculo de horas restantes, que usa a mais recente — mas
+        // polui a série e foi reportado pelo briefing de 29/09/2026.
+        //
+        // O intervalo do dia é a mesma estratégia que `sync-ocorrencias` já usa,
+        // e o comentário de lá diz o porquê: "cobrir registros com e sem
+        // componente de hora".
+        const diaTroca = dhAbastecimento.slice(0, 10);
+        const diaSeguinteDate = new Date(diaTroca + "T00:00:00");
+        diaSeguinteDate.setDate(diaSeguinteDate.getDate() + 1);
+        const diaSeguinte = diaSeguinteDate.toISOString().slice(0, 10);
+
         const { data: existeMutRows } = await supabase
           .from("manutencoes")
           .select("id")
           .eq("ativo_id", ativoId)
-          .eq("data_manutencao", dhAbastecimento)
+          .gte("data_manutencao", diaTroca)
+          .lt("data_manutencao", diaSeguinte)
           .eq("tipo", "troca_oleo")
           .neq("origem", "manual")
           .limit(1);
@@ -217,12 +239,17 @@ Deno.serve(async (req) => {
         });
 
         if (errMut) {
+          // 23505 = a trava `ux_manutencoes_troca_oleo_dia` recusou: a mesma troca
+          // ja foi gravada no mesmo dia, quase sempre pela `sync-ocorrencias`
+          // rodando em paralelo (o botao Atualizar dispara as duas juntas). Nao e
+          // erro — e a trava fazendo o trabalho dela. Ver a migration
+          // 20261020100000.
           skips.push({
             cd_abastecimento: troca.CD_ABASTECIMENTO,
             lancha: lancha.nome,
             equipamento: troca.DS_EQUIPAMENTO,
             data: troca.DH_ABASTECIMENTO,
-            motivo: "erro_insert",
+            motivo: errMut.code === "23505" ? "duplicata" : "erro_insert",
             detalhe: errMut.message,
           });
           continue;

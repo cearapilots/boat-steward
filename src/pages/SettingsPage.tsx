@@ -92,7 +92,8 @@ export default function SettingsPage() {
     setPeriodicidades((prev) => {
       const next = { ...prev };
       for (const t of tiposData) {
-        next[t.id] = String(t.periodicidade_dias);
+        // Tipo em meses mostra e edita meses — o campo de dias não vale para ele.
+        next[t.id] = String(t.periodicidade_meses ?? t.periodicidade_dias);
       }
       return next;
     });
@@ -138,14 +139,17 @@ export default function SettingsPage() {
   }
 
   function handleSavePeriodId(tipoId: string) {
-    const dias = Number(periodicidades[tipoId]);
-    if (isNaN(dias) || dias <= 0) {
+    const valor = Number(periodicidades[tipoId]);
+    if (isNaN(valor) || valor <= 0 || !Number.isInteger(valor)) {
       toast.error("Periodicidade inválida");
       return;
     }
+    const emMeses = (tiposData ?? []).find((t) => t.id === tipoId)?.periodicidade_meses != null;
     setSavingPeriodTipoId(tipoId);
     savePeriodid.mutate(
-      { id: tipoId, periodicidade_dias: dias },
+      emMeses
+        ? { id: tipoId, periodicidade_meses: valor }
+        : { id: tipoId, periodicidade_dias: valor },
       {
         onSuccess: () => {
           toast.success("Periodicidade salva");
@@ -292,7 +296,9 @@ export default function SettingsPage() {
                     setPeriodicidades((prev) => ({ ...prev, [t.id]: e.target.value }))
                   }
                 />
-                <span className="text-xs text-muted-foreground w-8">dias</span>
+                <span className="text-xs text-muted-foreground w-10">
+                  {t.periodicidade_meses != null ? "meses" : "dias"}
+                </span>
                 <Button
                   size="sm"
                   variant="outline"
