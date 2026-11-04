@@ -1,6 +1,6 @@
 /* Fleet Dashboard - dados do Supabase */
 import { useMemo, useState } from "react";
-import { useSituacaoAtual, SituacaoRow, useManutencoesPeriodicas, ManutencaoPeriodicaStatus, useSyncHorimetros, useOcorrencias, useManobras, useFainas, useLanchas } from "@/hooks/useFleetData";
+import { useSituacaoAtual, SituacaoRow, useManutencoesPeriodicas, ManutencaoPeriodicaStatus, useSyncHorimetros, useOcorrencias, useManobras, useFainas, useLanchas, useHorimetroParado, HorimetroParado } from "@/hooks/useFleetData";
 import { MaintenanceModal } from "@/components/MaintenanceModal";
 import { PeriodicMaintenanceModal } from "@/components/PeriodicMaintenanceModal";
 import { AtivoDetalhesModal } from "@/components/AtivoDetalhesModal";
@@ -65,6 +65,14 @@ function fmtDate(iso: string | null) {
     : "—";
 }
 
+// Dias de calendário entre a data local de `iso` e hoje.
+function diasDesde(iso: string, hoje: Date = new Date()): number {
+  const d = new Date(iso);
+  const dia = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const hj = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()).getTime();
+  return Math.round((hj - dia) / 86_400_000);
+}
+
 export default function Dashboard() {
   const { data: rows, isLoading, isFetching } = useSituacaoAtual();
   const { data: periodicas } = useManutencoesPeriodicas();
@@ -72,6 +80,7 @@ export default function Dashboard() {
   const { data: ocorrencias = [] } = useOcorrencias();
   const { data: manobrasData = [] } = useManobras();
   const { data: fainasData = [] } = useFainas();
+  const { data: parados = [] } = useHorimetroParado();
   const syncMutation = useSyncHorimetros();
   const [modal, setModal] = useState<{ open: boolean; row: SituacaoRow | null }>({ open: false, row: null });
   const [periodicModal, setPeriodicModal] = useState<{ open: boolean; row: ManutencaoPeriodicaStatus | null }>({ open: false, row: null });
@@ -133,6 +142,37 @@ export default function Dashboard() {
     return m;
   }, [lanchas]);
 
+  // Data da última leitura de horímetro de cada lancha. O horímetro só chega com
+  // abastecimento ou faina de deslocamento, e as horas restantes contam a partir
+  // dela. `ultima_atualizacao` é a hora do sync: em 03/11 o cartão da Flexeiras
+  // dizia "Atualizado" no dia com uma leitura de 29/10.
+  const leituraByLancha = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of parados) {
+      if (p.fonte !== "horimetro_casco" || !p.ultima_leitura) continue;
+      const atual = m.get(p.lancha_id);
+      if (!atual || p.ultima_leitura > atual) m.set(p.lancha_id, p.ultima_leitura);
+    }
+    return m;
+  }, [parados]);
+
+  // Ativo com horímetro congelado: as horas restantes de v_situacao_atual nunca
+  // mudam (o Gerador 2 da Taíba mostrava "146h" desde maio), então a troca de
+  // óleo passa a ser lida pelo calendário — dias desde a troca contra a mediana
+  // do próprio ativo. Amarelo a 30 dias, o mesmo limiar do detector 7 do briefing.
+  const calendarioByAtivo = useMemo(() => {
+    const m = new Map<string, { dias: number; nivel: "ok" | "warn" | "danger"; p: HorimetroParado }>();
+    for (const p of parados) {
+      if (!p.horimetro_congelado || p.mediana_dias_entre_trocas == null || p.dias_desde_troca == null) continue;
+      const dias = Number(p.mediana_dias_entre_trocas) - Number(p.dias_desde_troca);
+      m.set(p.ativo_id, { dias, nivel: dias <= 0 ? "danger" : dias <= 30 ? "warn" : "ok", p });
+    }
+    return m;
+  }, [parados]);
+
+  const statusTroca = (eq: SituacaoRow) =>
+    calendarioByAtivo.get(eq.ativo_id)?.nivel ?? statusFromSemaforo(eq.status_semaforo);
+
   const periodicasByLancha = useMemo(() => {
     const map = new Map<string, ManutencaoPeriodicaStatus[]>();
     const isHidden = (nome: string) => /treinamento\s+(dos?\s+)?tripulantes?/i.test(nome ?? "");
@@ -185,7 +225,7 @@ export default function Dashboard() {
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {grouped.map((b) => {
             const worst = b.itens.reduce<"ok" | "warn" | "danger">((w, i) => {
-              const s = statusFromSemaforo(i.status_semaforo);
+              const s = statusTroca(i);
               if (s === "danger") return "danger";
               if (s === "warn" && w !== "danger") return "warn";
               return w;
@@ -203,6 +243,9 @@ export default function Dashboard() {
               : worst === "warn"  || worstPeriodic === "warn"  ? "warn"
               : "ok";
 
+            const leitura = leituraByLancha.get(b.lanchaId) ?? null;
+            const diasLeitura = leitura ? diasDesde(leitura) : null;
+
             return (
               <Card key={b.lanchaId} className={cn("border-t-4 shadow-sm hover:shadow-md transition-shadow", BORDER_BY_STATUS[worstOverall])}>
                 <CardHeader className="pb-3">
@@ -210,9 +253,19 @@ export default function Dashboard() {
                     <CardTitle className="text-lg">{b.nome}</CardTitle>
                     <StatusIndicator status={worstOverall} showLabel />
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <div
+                    className="flex items-center gap-1 text-xs text-muted-foreground"
+                    title={leitura ? "O horímetro chega com abastecimento ou faina de deslocamento. As horas restantes de troca de óleo contam a partir desta leitura." : undefined}
+                  >
                     <Clock className="h-3 w-3" />
-                    Atualizado: {fmtDate(b.ultima)}
+                    {leitura ? (
+                      <>
+                        Horímetro lido em {fmtDate(leitura)}
+                        {diasLeitura != null && diasLeitura > 0 && ` · há ${diasLeitura} ${diasLeitura === 1 ? "dia" : "dias"}`}
+                      </>
+                    ) : (
+                      <>Atualizado: {fmtDate(b.ultima)}</>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -237,7 +290,8 @@ export default function Dashboard() {
                       <span></span>
                     </div>
                     {b.itens.map((eq) => {
-                      const status = statusFromSemaforo(eq.status_semaforo);
+                      const status = statusTroca(eq);
+                      const cal = calendarioByAtivo.get(eq.ativo_id);
                       const slot = eq.posicao ?? "—";
                       const horasEq = eq.horas_equipamento_calculadas == null ? null : Number(eq.horas_equipamento_calculadas);
                       const restantes = eq.horas_restantes_troca == null ? null : Number(eq.horas_restantes_troca);
@@ -263,14 +317,37 @@ export default function Dashboard() {
                             <span className="text-muted-foreground text-xs">{slot}</span>
                           </div>
                           <span className="text-center font-mono text-xs">{(horasEq ?? 0).toLocaleString("pt-BR")}h</span>
-                          <span className={cn(
-                            "text-center font-mono text-xs font-semibold",
-                            status === "danger" && "text-status-danger",
-                            status === "warn" && "text-status-warn",
-                            status === "ok" && "text-status-ok",
-                          )}>
-                            {fmtRestante(restantes)}
-                          </span>
+                          {cal ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className={cn(
+                                  "text-center font-mono text-xs font-semibold cursor-help underline decoration-dotted",
+                                  status === "danger" && "text-status-danger",
+                                  status === "warn" && "text-status-warn",
+                                  status === "ok" && "text-status-ok",
+                                )}>
+                                  {cal.dias >= 0 ? `${cal.dias}d` : `${Math.abs(cal.dias)}d atrás`}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <div>
+                                  Horímetro parado em {Number(cal.p.horimetro_atual ?? 0).toLocaleString("pt-BR")}h desde {fmtDate(cal.p.parado_desde)} ({cal.p.leituras_no_mesmo_valor} leituras iguais).
+                                </div>
+                                <div className="mt-1.5 text-muted-foreground">
+                                  Vale o calendário: {cal.p.dias_desde_troca} dias desde a troca de {fmtDateBR(cal.p.ultima_troca_data)}, contra a mediana de {cal.p.mediana_dias_entre_trocas} dias deste equipamento.
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className={cn(
+                              "text-center font-mono text-xs font-semibold",
+                              status === "danger" && "text-status-danger",
+                              status === "warn" && "text-status-warn",
+                              status === "ok" && "text-status-ok",
+                            )}>
+                              {fmtRestante(restantes)}
+                            </span>
+                          )}
                           <span className="text-center font-mono text-xs text-muted-foreground">
                             {fmtRestante(restantesOh)}
                           </span>

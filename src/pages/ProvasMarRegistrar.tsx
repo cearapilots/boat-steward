@@ -51,6 +51,11 @@ export default function ProvasMarRegistrar() {
     }
 
     const toNum = (v: string) => (v !== "" ? Number(v) : null);
+    // RPM, peso, ODM e horímetro vêm na casa dos milhares, e no padrão brasileiro
+    // se digita "13.726". O campo numérico do navegador lê isso como 13,726 —
+    // gravou quatro provas com horímetro ou peso mil vezes menor entre julho e
+    // outubro/2026. Nesses campos, ponto seguido de três dígitos é milhar.
+    const toMilhar = (v: string) => toNum(/^\d{1,3}(\.\d{3})+$/.test(v) ? v.replace(/\./g, "") : v);
 
     createProvaMar.mutate(
       {
@@ -58,12 +63,12 @@ export default function ProvasMarRegistrar() {
         data: form.data,
         descricao: form.descricao,
         velocidade: toNum(form.velocidade),
-        rpm: toNum(form.rpm),
+        rpm: toMilhar(form.rpm),
         consumo_lts_hora: toNum(form.consumo),
-        peso_kg: toNum(form.peso),
-        qtd_odm_lts: toNum(form.qtd_odm),
+        peso_kg: toMilhar(form.peso),
+        qtd_odm_lts: toMilhar(form.qtd_odm),
         mestre: form.mestre || null,
-        horimetro: toNum(form.horimetro),
+        horimetro: toMilhar(form.horimetro),
         porto: form.porto || null,
         vento_de_popa: form.vento_popa,
         mar_calmo: form.mar_calmo,
