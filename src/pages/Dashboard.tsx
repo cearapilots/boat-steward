@@ -1,6 +1,6 @@
 /* Fleet Dashboard - dados do Supabase */
 import { useMemo, useState } from "react";
-import { useSituacaoAtual, SituacaoRow, useManutencoesPeriodicas, ManutencaoPeriodicaStatus, useSyncHorimetros, useOcorrencias, useManobras, useFainas, useLanchas, useHorimetroParado, HorimetroParado } from "@/hooks/useFleetData";
+import { useSituacaoAtual, SituacaoRow, useManutencoesPeriodicas, ManutencaoPeriodicaStatus, useSyncHorimetros, useOcorrencias, useManobras, useFainas, useLanchas, useHorimetroParado } from "@/hooks/useFleetData";
 import { MaintenanceModal } from "@/components/MaintenanceModal";
 import { PeriodicMaintenanceModal } from "@/components/PeriodicMaintenanceModal";
 import { AtivoDetalhesModal } from "@/components/AtivoDetalhesModal";
@@ -156,23 +156,6 @@ export default function Dashboard() {
     return m;
   }, [parados]);
 
-  // Ativo com horímetro congelado: as horas restantes de v_situacao_atual nunca
-  // mudam (o Gerador 2 da Taíba mostrava "146h" desde maio), então a troca de
-  // óleo passa a ser lida pelo calendário — dias desde a troca contra a mediana
-  // do próprio ativo. Amarelo a 30 dias, o mesmo limiar do detector 7 do briefing.
-  const calendarioByAtivo = useMemo(() => {
-    const m = new Map<string, { dias: number; nivel: "ok" | "warn" | "danger"; p: HorimetroParado }>();
-    for (const p of parados) {
-      if (!p.horimetro_congelado || p.mediana_dias_entre_trocas == null || p.dias_desde_troca == null) continue;
-      const dias = Number(p.mediana_dias_entre_trocas) - Number(p.dias_desde_troca);
-      m.set(p.ativo_id, { dias, nivel: dias <= 0 ? "danger" : dias <= 30 ? "warn" : "ok", p });
-    }
-    return m;
-  }, [parados]);
-
-  const statusTroca = (eq: SituacaoRow) =>
-    calendarioByAtivo.get(eq.ativo_id)?.nivel ?? statusFromSemaforo(eq.status_semaforo);
-
   const periodicasByLancha = useMemo(() => {
     const map = new Map<string, ManutencaoPeriodicaStatus[]>();
     const isHidden = (nome: string) => /treinamento\s+(dos?\s+)?tripulantes?/i.test(nome ?? "");
@@ -225,7 +208,7 @@ export default function Dashboard() {
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {grouped.map((b) => {
             const worst = b.itens.reduce<"ok" | "warn" | "danger">((w, i) => {
-              const s = statusTroca(i);
+              const s = statusFromSemaforo(i.status_semaforo);
               if (s === "danger") return "danger";
               if (s === "warn" && w !== "danger") return "warn";
               return w;
@@ -290,8 +273,7 @@ export default function Dashboard() {
                       <span></span>
                     </div>
                     {b.itens.map((eq) => {
-                      const status = statusTroca(eq);
-                      const cal = calendarioByAtivo.get(eq.ativo_id);
+                      const status = statusFromSemaforo(eq.status_semaforo);
                       const slot = eq.posicao ?? "—";
                       const horasEq = eq.horas_equipamento_calculadas == null ? null : Number(eq.horas_equipamento_calculadas);
                       const restantes = eq.horas_restantes_troca == null ? null : Number(eq.horas_restantes_troca);
@@ -317,37 +299,14 @@ export default function Dashboard() {
                             <span className="text-muted-foreground text-xs">{slot}</span>
                           </div>
                           <span className="text-center font-mono text-xs">{(horasEq ?? 0).toLocaleString("pt-BR")}h</span>
-                          {cal ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className={cn(
-                                  "text-center font-mono text-xs font-semibold cursor-help underline decoration-dotted",
-                                  status === "danger" && "text-status-danger",
-                                  status === "warn" && "text-status-warn",
-                                  status === "ok" && "text-status-ok",
-                                )}>
-                                  {cal.dias >= 0 ? `${cal.dias}d` : `${Math.abs(cal.dias)}d atrás`}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs">
-                                <div>
-                                  Horímetro parado em {Number(cal.p.horimetro_atual ?? 0).toLocaleString("pt-BR")}h desde {fmtDate(cal.p.parado_desde)} ({cal.p.leituras_no_mesmo_valor} leituras iguais).
-                                </div>
-                                <div className="mt-1.5 text-muted-foreground">
-                                  Vale o calendário: {cal.p.dias_desde_troca} dias desde a troca de {fmtDateBR(cal.p.ultima_troca_data)}, contra a mediana de {cal.p.mediana_dias_entre_trocas} dias deste equipamento.
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            <span className={cn(
-                              "text-center font-mono text-xs font-semibold",
-                              status === "danger" && "text-status-danger",
-                              status === "warn" && "text-status-warn",
-                              status === "ok" && "text-status-ok",
-                            )}>
-                              {fmtRestante(restantes)}
-                            </span>
-                          )}
+                          <span className={cn(
+                            "text-center font-mono text-xs font-semibold",
+                            status === "danger" && "text-status-danger",
+                            status === "warn" && "text-status-warn",
+                            status === "ok" && "text-status-ok",
+                          )}>
+                            {fmtRestante(restantes)}
+                          </span>
                           <span className="text-center font-mono text-xs text-muted-foreground">
                             {fmtRestante(restantesOh)}
                           </span>

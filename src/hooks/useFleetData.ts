@@ -39,20 +39,12 @@ export function useSituacaoAtual() {
 }
 
 // Uma linha por ativo, com a última leitura do horímetro que o alimenta (casco
-// ou gerador) e, quando esse horímetro parou de andar, o calendário que passa a
-// valer na troca de óleo. Ver as migrations 20260929140000 e 20261104100000.
+// ou gerador). O Dashboard usa só a data da leitura, no cartão da lancha. Ver as
+// migrations 20260929140000 e 20261104100000.
 export type HorimetroParado = {
-  ativo_id: string;
   lancha_id: string;
   fonte: "horimetro_casco" | "horimetro_gerador";
-  horimetro_atual: number | null;
   ultima_leitura: string | null;
-  parado_desde: string | null;
-  leituras_no_mesmo_valor: number | null;
-  ultima_troca_data: string | null;
-  dias_desde_troca: number | null;
-  mediana_dias_entre_trocas: number | null;
-  horimetro_congelado: boolean | null;
 };
 
 export function useHorimetroParado() {
@@ -61,7 +53,7 @@ export function useHorimetroParado() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("v_horimetro_parado")
-        .select("ativo_id, lancha_id, fonte, horimetro_atual, ultima_leitura, parado_desde, leituras_no_mesmo_valor, ultima_troca_data, dias_desde_troca, mediana_dias_entre_trocas, horimetro_congelado");
+        .select("lancha_id, fonte, ultima_leitura");
       if (error) throw error;
       return (data ?? []) as HorimetroParado[];
     },
