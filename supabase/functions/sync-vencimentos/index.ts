@@ -29,6 +29,13 @@ const TIPOS: Array<{ campo: string; tipo: string; label: string }> = [
 
 const LANCHAS_VALIDAS = [121, 1003, 117]; // Flexeiras, Fortim, Taíba
 
+// "AAAA-MM-DD" + n dias, em UTC.
+function somaDias(data: string, dias: number): string {
+  const d = new Date(data + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -44,6 +51,13 @@ Deno.serve(async (req) => {
     if (!Array.isArray(dados)) throw new Error("Resposta inválida");
 
     const hoje = new Date().toISOString().slice(0, 10);
+    // Renovação feita ANTES de vencer também é renovação. Até 05/11/2026 só se
+    // registrava quando a data antiga já tinha passado, e a agulha da Fortim —
+    // vencia em 07/11, renovada na semana — sumiu do calendário de 2026 sem o
+    // verde de "feito". Antecipada conta se a data antiga vencia em até 90 dias
+    // e a nova a empurrou ao menos 30 dias para a frente: mudança em data
+    // distante, ou de poucos dias, é correção de cadastro, não renovação.
+    const limiteAntecipada = somaDias(hoje, 90);
     let atualizados = 0;
     let historico   = 0;
     const detalhes: string[] = [];
@@ -68,9 +82,12 @@ Deno.serve(async (req) => {
         const atual = atualRows?.[0] ?? null;
 
         if (atual && atual.dt_vencimento !== novaData) {
-          // Data mudou → a data antiga foi renovada
-          // Se a data antiga já passou → era um vencimento que foi tratado
-          if (atual.dt_vencimento < hoje) {
+          // Data mudou → a data antiga foi renovada: já vencida, ou renovada
+          // perto de vencer (ver `limiteAntecipada` acima)
+          const jaVencida  = atual.dt_vencimento < hoje;
+          const antecipada = atual.dt_vencimento <= limiteAntecipada
+            && novaData >= somaDias(atual.dt_vencimento, 30);
+          if (jaVencida || antecipada) {
             const { error: errHist } = await supabase.from("vencimentos_historico").insert({
               cd_lancha:    cdLancha,
               ds_lancha:    dsLancha,
